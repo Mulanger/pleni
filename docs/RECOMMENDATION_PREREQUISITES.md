@@ -47,11 +47,11 @@ Verified against the repo on 2026-08-02, not assumed.
 | Pipeline | C0–C11 complete, 138 tests green | Content production is fine. Nothing here blocks the recommender. |
 | Orchestration | C12 and C13 not started | No unattended supply. Freshness cannot be promised. |
 | Inventory | 16 published clips, one debate (`HD10540`) | Far too thin for pool-based ranking. See `Q-5`. |
-| Migrations | `001` … `004` exist. `003` and `004` are **written but not yet applied** to the live project | Apply with `python scripts/apply_migrations.py`. |
+| Migrations | `001` … `005`, all **applied** to the live project and recorded in the ledger | `python scripts/apply_migrations.py` is the runner. |
 | Migration runner | ~~hardcoded path~~ → `src/publish/migrations.py` does ordered discovery plus a `schema_migrations` ledger with checksums | `P0-3` **closed**. Applying twice is a no-op; an edited-after-apply migration fails loudly. |
 | RPC privilege | ~~`publish_clip_batch` executable by `PUBLIC`~~ → revoked by migration 002, applied live | `P0-1`, `P0-2` **closed**. |
-| **Default table grants** | **`anon` holds `INSERT` on `public.clips`, `jobs`, `engagement_events` and `SELECT` on every protected table.** Probed live 2026-08-02: `POST /rest/v1/clips` answers `42501 new row violates row-level security policy`, not `permission denied` | Supabase's default `grant all on tables to anon, authenticated` was never revoked. Not exploitable today — RLS has no INSERT policy — but RLS is the *only* thing stopping it. Migration `004` fixes it. See `P0-7`. |
-| Auth | Clerk wired in `web/src/clerk.tsx`; dev instance `leading-seasnail-33.clerk.accounts.dev` registered in Supabase third-party auth. JWKS live, RS256, issuer matches | Sign-in works. The **token has never been exercised against a table only a signed-in user may reach** — migration 003 adds `public.auth_probe()` for exactly that. |
+| Default table grants | ~~`anon` held `INSERT` on `public.clips`, `jobs`, `engagement_events`~~ → revoked by migration `004`, including the default for future tables | `P0-7` **closed**. `POST /rest/v1/clips` now answers `permission denied for table clips`. New tables in `public` are unreachable until explicitly granted. |
+| Auth | **Clerk → Supabase verified end to end 2026-08-02.** A signed-in call returns `sub=user_3HN2v8f…`, `role=authenticated`, `pg_role=authenticated`; the same call as `anon` is denied | `A-3`, `A-4` **closed**. `auth.jwt()->>'sub'` resolves the Clerk subject and `auth.uid()` is `null`, confirming the `A-7` design. Token lifetime is **60 s** — see `A-8`. |
 | Frontend data layer | `web/src/supabase.ts` uses raw `fetch` with the publishable key. No `@supabase/supabase-js` | Deliberate: `supabaseRest(path, {accessToken})` is a 20-line equivalent. Revisit at `A-6` only if the SDK earns its bundle cost. |
 | Frontend state | `liked`, `saved`, `following`, `followedParties`, `consent` are all `useState` in `App.tsx` | Nothing survives reload. Nothing reaches the server. |
 | Consent UI | Defaults are now all `false`, still in-memory | Half of `C-5`. Enforces nothing; the server does not know about it. |
@@ -293,7 +293,7 @@ used — it requires sharing the Supabase JWT secret with a third party.
       impossible, Clerk supports a proxy instead — but that is a fallback, not the plan.) The
       development instance works on any origin, so `A-3` … `A-14` can be built against it in
       parallel; only production launch is blocked. Start this today.
-- [ ] **A-3 — Activate the Supabase integration in the Clerk dashboard** so session tokens carry
+- [x] **A-3 · DONE 2026-08-02 (verified live, see PROGRESS.md) — Activate the Supabase integration in the Clerk dashboard** so session tokens carry
       `"role": "authenticated"`. Supabase's PostgREST rejects tokens without it. If configuring
       by hand instead, add the `role` claim via custom session token customization.
 - [x] **A-4 · DONE 2026-08-02 — Register Clerk as a third-party auth provider in Supabase** (Authentication →
@@ -325,13 +325,14 @@ used — it requires sharing the Supabase JWT secret with a third party.
       `user_2abc…`. Every private table keys on `clerk_user_id text`, and RLS compares
       `(select auth.jwt()->>'sub')`. There is no `auth.users` table to reference and no
       `auth.uid()` UUID. Getting this wrong means rewriting the whole private schema later.
-- [ ] **A-8 — Token lifetime and refresh.** Clerk session tokens are short-lived. Decide the
+- [ ] **A-8 · MEASURED 2026-08-02: 60 s — Token lifetime and refresh.** Clerk session tokens
+      live exactly 60 seconds (`exp - iat`, verified live). Decide the
       behaviour when a token expires mid-scroll: silent refresh then retry once, then fall back
       to `Senaste` rather than showing an error. Never lose queued telemetry on a 401.
 - [ ] **A-9 — Signed-out path must stay fully functional.** `Senaste` uses the publishable key
       and RLS-limited public reads, exactly as today. No sign-in wall. This is decision 3 in the
       launch plan and a GDPR "freely given" argument, not just a nicety.
-- [ ] **A-10 — Swedish localization and mobile-only presentation** for all Clerk UI. The app
+- [x] **A-10 · PARTIAL 2026-08-02 — Swedish localization and mobile-only presentation** for all Clerk UI. The app
       gates at ≥700px; the auth screens must not break that contract.
 
 ### 6.3 Server-side verification

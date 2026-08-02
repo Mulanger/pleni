@@ -241,6 +241,36 @@ def test_auth_probe_is_authenticated_only(sql: Any) -> None:
     assert row["security_definer"] in (False, "false"), "auth_probe must stay SECURITY INVOKER"
 
 
+def test_auth_probe_body_actually_executes(sql: Any) -> None:
+    """Regression for the bug in migration 003, fixed by 005.
+
+    The function body used `pg_catalog.current_user::text`. `current_user` is a
+    reserved keyword, not a schema-qualified function, so Postgres parsed
+    `pg_catalog` as a table and every call raised
+    `42P01 missing FROM-clause entry for table "pg_catalog"`.
+
+    PostgREST maps 42P01 to HTTP 404, so the failure was indistinguishable from
+    "the function does not exist" — and `has_function_privilege` still returned
+    true, because the grant was fine. Checking the grant was not enough; the
+    body has to run.
+    """
+
+    rows = sql("select public.auth_probe() as probe;")
+
+    assert rows, "auth_probe() returned no row"
+    probe = rows[0]["probe"]
+    if isinstance(probe, str):
+        import json
+
+        probe = json.loads(probe)
+    # Called without a JWT, so the claims are empty — but the role columns must
+    # still resolve, which is precisely what was broken.
+    assert "pg_role" in probe
+    assert probe["pg_role"]
+    assert "claim_keys" in probe
+    assert "server_time" in probe
+
+
 def test_clerk_is_the_only_configured_third_party_auth_issuer(sql: Any) -> None:
     """A-4. Guards against a second issuer being added in the dashboard without
     a corresponding entry in `supabase/config.toml`."""

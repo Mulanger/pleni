@@ -719,3 +719,75 @@ correctly refused. The other half needs a signed-in session.
 - New tables in `public` are now unreachable by default. After `create table public.foo`,
   add an explicit `grant select on public.foo to anon` if the browser should read it.
   Silence is denial, deliberately.
+
+## A-3 / A-4 — Clerk → Supabase link VERIFIED end to end — DONE 2026-08-02
+
+The integration had been configured in two dashboards since the previous session and never
+exercised. It is now proven, with evidence, against project `nlooigmwuqqhhnontlgp` and Clerk
+development instance `leading-seasnail-33.clerk.accounts.dev`.
+
+**The signed-in call — `POST /rest/v1/rpc/auth_probe`, HTTP 200:**
+
+```json
+{
+  "sub":             "user_3HN2v8fTvekjonu4R3jzk8Sk6iY",
+  "role":            "authenticated",
+  "iss":             "https://leading-seasnail-33.clerk.accounts.dev",
+  "azp":             "http://127.0.0.1:5199",
+  "pg_role":         "authenticated",
+  "auth_jwt_sub":    "user_3HN2v8fTvekjonu4R3jzk8Sk6iY",
+  "auth_uid":        null,
+  "claim_keys": ["azp","exp","fva","iat","iss","nbf","role","sid","sts","sub","v"]
+}
+```
+
+`sub` matches `window.Clerk.user.id` exactly. **The identical call with the publishable key
+returns `401 42501 permission denied for function auth_probe`** — that contrast is the proof,
+not the 200 on its own.
+
+What each line establishes:
+
+- PostgREST verified an RS256 signature against the Clerk JWKS. A forged token with the right
+  `iss` and `kid` but a bad signature returns `PGRST301 None of the keys was able to decode
+  the JWT`, so the verification is real and not a shape check.
+- `pg_role = authenticated` — Postgres switched roles on the strength of the `role` claim that
+  Clerk's Supabase integration adds. Without it the caller would land on `anon` and be denied.
+- **`auth.jwt()->>'sub'` equals the Clerk subject.** This is the A-7 mechanism every private
+  table's RLS will use, confirmed working rather than assumed.
+- **`auth.uid()` is `null`.** Clerk subjects are strings, not UUIDs. Any future policy reaching
+  for `auth.uid()` silently matches nothing — which is exactly why A-7 mandates
+  `clerk_user_id text` and `(select auth.jwt()->>'sub')`.
+
+**Bug found and fixed forward (migration 005):**
+`auth_probe()` as shipped in 003 used `pg_catalog.current_user::text`. `current_user` is a
+reserved keyword, not a schema-qualified function, so Postgres parsed `pg_catalog` as a table
+and every call raised `42P01 missing FROM-clause entry for table "pg_catalog"`. PostgREST maps
+42P01 to **HTTP 404**, so the failure was indistinguishable from "the function does not exist"
+— the one diagnosis that was wrong, and the one the UI confidently reported.
+
+Two things worth carrying forward from that:
+- A PostgREST 404 can come from *inside* a function body. `PGRST202` in the response body means
+  routing; a bare Postgres SQLSTATE means the function ran and failed.
+- `has_function_privilege` returned true throughout. Checking the grant was not enough. The new
+  `test_auth_probe_body_actually_executes` calls `select public.auth_probe()` so the body runs.
+
+003 was already applied and in the ledger, so it was fixed forward rather than edited — editing
+it would have changed its checksum and `apply_pending_migrations()` would have refused to run.
+That is the ledger behaving as designed, on its first real opportunity to.
+
+**Tests:** `python -m pytest tests/live/test_db_privileges.py -m live` — **53 passed**.
+`python tasks.py test lint typecheck` — 160 passed, 55 deselected. `tsc --noEmit` green.
+
+**Observations:**
+- **A-8:** Clerk session tokens live **60 seconds** (`exp - iat`). Short. The refresh-then-retry
+  behaviour A-8 asks for is not optional polish — a viewer who scrolls for two minutes will hit
+  an expired token, and queued telemetry must survive that 401.
+- `azp` is the origin the token was minted for (`http://127.0.0.1:5199` here). A-11's in-function
+  verification should check it against an allow-list; Supabase itself does not.
+- The `aud` claim is absent from Clerk's default session token.
+
+**Next agent should know:**
+- The verification is repeatable: Profil → Diagnostik → "Testa Clerk → Supabase" while signed in.
+  It now prints the token summary and the raw response on failure, not just a Swedish label.
+- Clerk development instances accept `+clerk_test` addresses with the fixed code `424242`, so
+  this can be re-run without a real identity.

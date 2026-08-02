@@ -1055,7 +1055,16 @@ function AuthDiagnostics() {
         setStatus({
           state: "rejected",
           status: 0,
-          detail: error instanceof Error ? error.message : String(error)
+          detail: error instanceof Error ? error.message : String(error),
+          token: {
+            sub: null,
+            role: null,
+            iss: null,
+            azp: null,
+            expiresInS: null,
+            claimKeys: [],
+            url: "(request never left the browser)"
+          }
         })
       )
       .finally(() => setRunning(false));
@@ -1075,7 +1084,14 @@ function AuthDiagnostics() {
       {status?.state === "ok" && (
         <pre className="diagnostic-output">{JSON.stringify(status.claims, null, 2)}</pre>
       )}
-      {status?.state === "rejected" && <pre className="diagnostic-output">{status.detail}</pre>}
+      {/* Always show the raw response and the token summary on failure. Which
+          of `iss`, `role` or the URL is wrong produces very different fixes,
+          and a one-line Swedish label cannot carry that. */}
+      {(status?.state === "rejected" || status?.state === "probe-missing") && (
+        <pre className="diagnostic-output">
+          {JSON.stringify({ token: status.token, response: status.detail }, null, 2)}
+        </pre>
+      )}
     </Group>
   );
 }
@@ -1090,7 +1106,7 @@ function describeLinkStatus(status: ClerkSupabaseLinkStatus | null, running: boo
     case "ok":
       return `OK — Postgres ser sub=${status.claims.sub ?? "?"} som roll ${status.claims.pg_role}.`;
     case "probe-missing":
-      return "auth_probe() saknas — migration 003 är inte applicerad.";
+      return "404 från Supabase — se svaret nedan.";
     case "signed-out":
       return "Ingen aktiv session.";
     case "unconfigured":

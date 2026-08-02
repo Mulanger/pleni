@@ -117,9 +117,48 @@ export interface AuthProbeClaims {
 export type ClerkSupabaseLinkStatus =
   | { state: "unconfigured" }
   | { state: "signed-out" }
-  | { state: "ok"; claims: AuthProbeClaims }
-  | { state: "probe-missing" }
-  | { state: "rejected"; status: number; detail: string };
+  | { state: "ok"; claims: AuthProbeClaims; token: TokenSummary }
+  | { state: "probe-missing"; detail: string; token: TokenSummary }
+  | { state: "rejected"; status: number; detail: string; token: TokenSummary };
+
+/**
+ * Non-secret summary of the session token, for diagnostics.
+ *
+ * Deliberately never includes the token itself. The claims are what matter when
+ * something goes wrong — a missing `role` claim and a wrong `iss` produce very
+ * different failures, and guessing between them wastes a round trip through a
+ * human.
+ */
+export interface TokenSummary {
+  sub: string | null;
+  role: string | null;
+  iss: string | null;
+  azp: string | null;
+  expiresInS: number | null;
+  claimKeys: string[];
+  url: string;
+}
+
+function summarizeToken(token: string, url: string): TokenSummary {
+  try {
+    const [, payload] = token.split(".");
+    const json = JSON.parse(
+      atob(payload.replace(/-/g, "+").replace(/_/g, "/"))
+    ) as Record<string, unknown>;
+    const exp = typeof json.exp === "number" ? json.exp : null;
+    return {
+      sub: (json.sub as string) ?? null,
+      role: (json.role as string) ?? null,
+      iss: (json.iss as string) ?? null,
+      azp: (json.azp as string) ?? null,
+      expiresInS: exp === null ? null : Math.round(exp - Date.now() / 1000),
+      claimKeys: Object.keys(json).sort(),
+      url
+    };
+  } catch {
+    return { sub: null, role: null, iss: null, azp: null, expiresInS: null, claimKeys: [], url };
+  }
+}
 
 /**
  * Diagnostic: does Supabase actually accept this Clerk session token, and does
@@ -149,23 +188,23 @@ export async function checkClerkSupabaseLink(
     return { state: "signed-out" };
   }
 
-  const response = await supabaseRest("rpc/auth_probe", {
-    accessToken: token,
-    method: "POST"
-  });
+  const path = "rpc/auth_probe";
+  const summary = summarizeToken(token, `${SUPABASE_URL}/rest/v1/${path}`);
+  const response = await supabaseRest(path, { accessToken: token, method: "POST" });
 
   if (response.ok) {
-    return { state: "ok", claims: (await response.json()) as AuthProbeClaims };
-  }
-  if (response.status === 404) {
-    return { state: "probe-missing" };
+    return {
+      state: "ok",
+      claims: (await response.json()) as AuthProbeClaims,
+      token: summary
+    };
   }
 
-  return {
-    state: "rejected",
-    status: response.status,
-    detail: (await response.text()).slice(0, 300)
-  };
+  const detail = (await response.text()).slice(0, 300);
+  if (response.status === 404) {
+    return { state: "probe-missing", detail, token: summary };
+  }
+  return { state: "rejected", status: response.status, detail, token: summary };
 }
 
 /**
