@@ -534,17 +534,59 @@ training data, so they must change *before* telemetry is switched on, not after.
 
 ---
 
-## 11. Block F0 — Privacy, legal and product contract · **GATE**
+## 11. Block F0 — Privacy, legal and product contract
 
-Long lead time. Start now, in parallel with P0 and P1. Party preferences and inferred political
-interests are special-category data under GDPR Article 9, which changes what is legal, not just
-what is polite.
+> ### Who wrote this block, and what is actually binding
+>
+> **Revised 2026-08-02 at the project owner's direction.**
+>
+> This document is the project's own work product — an earlier agent session wrote it,
+> including the original "engage Swedish privacy counsel" gate. That was a
+> *recommendation*, not an external requirement, and it had no business blocking
+> engineering. It is demoted below.
+>
+> Two things are worth keeping straight, because only one of them is negotiable:
+>
+> **Binding regardless of anyone's opinion.** Inferring a person's political interests
+> from what they watch produces special-category data under GDPR Article 9. That is
+> the regulation. It applies to this project whether or not a lawyer ever reads it,
+> and it is why the private schema, the consent ledger and the retention jobs exist
+> at all. Removing them does not remove the obligation; it just removes the evidence
+> that it was met.
+>
+> **Advice, and the owner's call.** Whether to pay a professional to review the
+> analysis. The owner has decided not to engage counsel. That is a normal decision
+> for a project this size, it is recorded in `F0-2`, and nothing else in this block
+> waits on it.
+>
+> **What that changes in practice:** every remaining item here is work that can be
+> done in-repo — a data-flow inventory is engineering, a DPIA is a structured
+> document, a privacy notice is writing. They are drafted in `docs/privacy/` and
+> approved by the owner. What no longer exists is an item that can only be closed by
+> hiring someone.
+>
+> **What still gates what:** these documents gate *collecting real viewer data from
+> real users* — Block C and Block T. They do not gate C12, C13, the F1 schema, or
+> anything that touches only public parliamentary video. The build order already puts
+> the data collection late.
+
+Party preferences and inferred political interests are special-category data under
+GDPR Article 9, which changes what is legal, not just what is polite.
 
 - [ ] **F0-1 · GATE — DPIA**, including an explicit Article 22 conclusion. The design meets IMY
       criterion 1 (evaluation/profiling of internet users) and criterion 4 (special-category
       data); two criteria trigger the requirement. Complete it *before* collection begins.
-- [ ] **F0-2 · GATE — Swedish privacy counsel review.** Article 6 basis and Article 9(2)(a)
-      explicit-consent analysis; whether prior consultation or a DPO is required.
+      Drafted in-repo against IMY's published criteria; approved by the project owner.
+- [x] **F0-2 · DECIDED 2026-08-02 — No external counsel review.** The project owner has
+      decided not to engage Swedish privacy counsel, and accepts the residual risk of
+      proceeding on an in-house Article 6 / Article 9(2)(a) analysis.
+      *This is a recorded risk acceptance, not a completed review.* The consequences,
+      stated plainly so the decision is an informed one: nobody with professional
+      liability has checked the lawful-basis analysis; if IMY ever asks, the answer is
+      "we assessed it ourselves"; and the questions of whether prior consultation or a
+      DPO is required are unanswered rather than answered "no".
+      Revisit if the service takes payment, carries advertising, grows past a few
+      thousand users, or processes data about minors.
 - [ ] **F0-3 · GATE — Article 13 privacy notice**, in plain Swedish, stating explicitly that
       viewing activity will be used to infer political interests. "Personalisera mitt flöde" on
       its own is not specific enough to be valid consent.
@@ -555,7 +597,9 @@ what is polite.
       plus international-transfer assessment.
 - [ ] **F0-6 · GATE — Retention decisions.** Approve or replace the provisional periods: raw
       events 90 days, served items 13 months, derived interest state rolling 180 days, consent
-      evidence per counsel. Address deletion from backups and from learned-model lineage.
+      evidence for as long as the account exists plus 12 months. Approved by the project
+      owner, not by counsel (`F0-2`). Address deletion from backups and from learned-model
+      lineage.
 - [ ] **F0-7 · GATE — Minors policy.** Recommended V1: no political profile inferred or persisted
       under 18; non-profiled feed instead. Under 13, verified parental authorization is generally
       required in Sweden when relying on consent. Decide the age-assurance mechanism and collect
@@ -625,7 +669,8 @@ All of the following, with evidence:
 1. `P0-1` … `P0-4` done; a committed test fails if a privileged function becomes publicly
    executable.
 2. `P1` complete: content arrives unattended, freshness SLO measured, `Q-1` inventory threshold met.
-3. `F0-1`, `F0-2`, `F0-3`, `F0-6`, `F0-7` signed off by product and privacy owners.
+3. `F0-1`, `F0-3`, `F0-6`, `F0-7` drafted in `docs/privacy/` and signed off by the project
+   owner. `F0-2` is a recorded decision not to engage counsel, not a review.
 4. Clerk live end to end: `A-2` domain, `A-3`/`A-4` integration, `A-11` verification tests,
    `A-14` deletion cascade.
 5. Consent: default-off, versioned, server-enforced, withdrawable, exportable, deletable — all
