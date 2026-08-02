@@ -29,7 +29,27 @@ from src.stages._io import read_json_object, read_model, read_model_list, write_
 from src.stages.render import PRIMARY_RENDITION_LABEL
 
 THUMBNAIL_LABEL = "thumb"
-MIGRATION_PATH = Path(__file__).resolve().parents[2] / "migrations" / "001_publish_schema.up.sql"
+MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
+
+
+def discover_migrations(migrations_dir: Path | None = None) -> list[Path]:
+    """Return every forward migration in lexicographic (numbered) order.
+
+    Migrations are named ``NNN_description.up.sql``; the zero-padded prefix makes
+    a plain sort the apply order. Down migrations are excluded.
+
+    Replaces an earlier hardcoded path to ``001_publish_schema.up.sql``, which
+    silently ignored every later migration.
+    """
+
+    directory = migrations_dir or MIGRATIONS_DIR
+    if not directory.is_dir():
+        raise ArtifactError(f"Migrations directory not found: {directory}")
+
+    migrations = sorted(path for path in directory.glob("*.up.sql") if path.is_file())
+    if not migrations:
+        raise ArtifactError(f"No *.up.sql migrations found in {directory}")
+    return migrations
 
 
 class BunnyUploader(Protocol):
@@ -142,7 +162,8 @@ def _publish_remote(
     apply_migrations: bool,
 ) -> list[Path]:
     if apply_migrations:
-        publisher.apply_migration_file(MIGRATION_PATH)
+        for migration_path in discover_migrations():
+            publisher.apply_migration_file(migration_path)
 
     source_payload = read_json_object(paths.source_json, "C1 source artifact")
     source = Source.model_validate(source_payload.get("source"))
