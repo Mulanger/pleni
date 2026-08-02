@@ -377,3 +377,25 @@ This file is the source of truth for chunk status and handoff notes.
 - Start C12. Use `python -m src.stages.publish --dokid <dokid> --work-dir <root> --backend remote --apply-migrations` for remote publish after C10 artifacts exist.
 - Required remote env vars are `RIKET_BUNNY_API_KEY`, `RIKET_SUPABASE_PROJECT_REF`, `RIKET_SUPABASE_ACCESS_TOKEN`, and `RIKET_SUPABASE_SECRET_KEY`. The publishable key is for public readback/local viewers, not server writes.
 - C11 assumes `10_render/<clip_id>_540x960.mp4` and `10_render/<clip_id>.webp`; it does not assume a VTT file exists.
+
+## Frontend feed redesign - DONE 2026-08-02
+
+**Built:** `web/src/App.tsx`, `web/src/styles.css`
+**Tests:** `node .\node_modules\typescript\bin\tsc --noEmit -p tsconfig.json` green, `node .\node_modules\vite\bin\vite.js build` green, `python tasks.py test lint typecheck` green.
+**Contracts touched:** none.
+
+**Decisions made:**
+- Reworked the feed toward a darker full-bleed video surface with compact white overlays, so metadata and controls consume less of the 9:16 frame.
+- Default follow state is now empty for people and parties; the first visible feed follow button loads as `Följ`, not `Följer`.
+- Kept `muted=false` on load and verified the mute control initially exposes `Stäng av ljud`.
+- Added an overlay transport cluster with play/pause plus 10-second rewind/forward. The scrubber remains edge-pinned and draggable.
+
+**Observations (not fixed, out of scope):**
+- Browser autoplay policy can still block unmuted playback until a user gesture. In that case the video remains unmuted but paused with the play control visible.
+- The existing Python `audioop` deprecation warning still appears during acceptance tests; this predates the frontend change.
+
+**Blocked / needs a decision:**
+- none
+
+**Next agent should know:**
+- Local Vite QA ran at `http://127.0.0.1:5199/` using Chrome mobile viewports 393x852, 360x640, and 320x568.

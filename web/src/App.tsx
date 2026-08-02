@@ -6,10 +6,13 @@ import {
   ChevronRight,
   Clock3,
   Download,
+  FastForward,
   Heart,
   Home,
   MessageCircle,
+  Pause,
   Play,
+  Rewind,
   Search,
   Share2,
   ShieldCheck,
@@ -40,16 +43,11 @@ function App() {
   const [liked, setLiked] = useState<BooleanMap>({ [SAMPLE_CLIPS[1]?.id ?? ""]: true });
   const [saved, setSaved] = useState<BooleanMap>({});
   const [muted, setMuted] = useState(false);
-  const [following, setFollowing] = useState<BooleanMap>({
-    "gunnar-strommer": true,
-    "mathias-tegner": true,
-    "magdalena-andersson": true,
-    "nooshi-dadgostar": true
-  });
+  const [following, setFollowing] = useState<BooleanMap>({});
   const [followedParties, setFollowedParties] = useState<Record<PartyCode, boolean>>({
-    S: true,
-    M: true,
-    V: true,
+    S: false,
+    M: false,
+    V: false,
     SD: false,
     C: false,
     KD: false,
@@ -214,14 +212,25 @@ function FeedScreen({
   const [paused, setPaused] = useState<BooleanMap>({});
   const [currentTimes, setCurrentTimes] = useState<NumberMap>({});
   const [durations, setDurations] = useState<NumberMap>({});
+  const [controlClipId, setControlClipId] = useState<string | null>(null);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
+  const controlsTimer = useRef<number | null>(null);
 
   useEffect(() => {
     setActiveId(clips[0]?.id ?? "");
     setPaused({});
     setCurrentTimes({});
     setDurations({});
+    setControlClipId(null);
   }, [clips]);
+
+  useEffect(() => {
+    return () => {
+      if (controlsTimer.current !== null) {
+        window.clearTimeout(controlsTimer.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -263,6 +272,23 @@ function FeedScreen({
     });
   }, [muted]);
 
+  useEffect(() => {
+    setControlClipId(null);
+  }, [activeId]);
+
+  const revealControls = (clipId: string, sticky = false) => {
+    setControlClipId(clipId);
+    if (controlsTimer.current !== null) {
+      window.clearTimeout(controlsTimer.current);
+      controlsTimer.current = null;
+    }
+    if (!sticky) {
+      controlsTimer.current = window.setTimeout(() => {
+        setControlClipId((current) => (current === clipId ? null : current));
+      }, 1400);
+    }
+  };
+
   const toggleClipPlayback = (clipId: string) => {
     const video = videoRefs.current[clipId];
     if (!video || clipId !== activeId) {
@@ -272,10 +298,18 @@ function FeedScreen({
       video.muted = muted;
       video
         .play()
-        .then(() => setPaused((state) => ({ ...state, [clipId]: false })))
-        .catch(() => setPaused((state) => ({ ...state, [clipId]: true })));
+        .then(() => {
+          setPaused((state) => ({ ...state, [clipId]: false }));
+          revealControls(clipId);
+        })
+        .catch(() => {
+          setPaused((state) => ({ ...state, [clipId]: true }));
+          revealControls(clipId, true);
+        });
     } else {
       video.pause();
+      setPaused((state) => ({ ...state, [clipId]: true }));
+      revealControls(clipId, true);
     }
   };
 
@@ -289,6 +323,13 @@ function FeedScreen({
     const nextTime = Math.min(Math.max(seconds, 0), duration);
     video.currentTime = nextTime;
     setCurrentTimes((state) => ({ ...state, [clipId]: nextTime }));
+  };
+
+  const skipClip = (clipId: string, deltaSeconds: number) => {
+    const video = videoRefs.current[clipId];
+    const currentTime = video?.currentTime ?? currentTimes[clipId] ?? 0;
+    seekClip(clipId, currentTime + deltaSeconds);
+    revealControls(clipId);
   };
 
   return (
@@ -310,6 +351,8 @@ function FeedScreen({
           const isLiked = !!liked[clip.id];
           const isSaved = !!saved[clip.id];
           const isFollowing = !!following[person.id];
+          const isPaused = paused[clip.id] ?? false;
+          const showTransport = activeId === clip.id && (isPaused || controlClipId === clip.id);
           return (
             <article
               className="feed-item"
@@ -342,17 +385,13 @@ function FeedScreen({
                 onPlay={() => setPaused((state) => ({ ...state, [clip.id]: false }))}
                 onPause={() => setPaused((state) => ({ ...state, [clip.id]: true }))}
               />
-              {activeId === clip.id && (paused[clip.id] ?? false) && (
-                <button
-                  className="center-play"
-                  aria-label="Spela"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    toggleClipPlayback(clip.id);
-                  }}
-                >
-                  <Play size={22} fill="currentColor" />
-                </button>
+              {showTransport && (
+                <TransportControls
+                  paused={isPaused}
+                  onToggle={() => toggleClipPlayback(clip.id)}
+                  onSkipBack={() => skipClip(clip.id, -10)}
+                  onSkipForward={() => skipClip(clip.id, 10)}
+                />
               )}
               <button
                 className="mute-button"
@@ -375,17 +414,47 @@ function FeedScreen({
                 clip={clip}
                 person={person}
                 following={isFollowing}
+                onOpenPerson={() => onOpenPerson(person.id)}
+                onToggleFollow={() => onToggleFollow(person.id)}
+              />
+              <ProgressRow
                 currentTime={currentTimes[clip.id] ?? 0}
                 duration={durations[clip.id] ?? clip.durationS}
                 onSeek={(seconds) => seekClip(clip.id, seconds)}
-                onOpenPerson={() => onOpenPerson(person.id)}
-                onToggleFollow={() => onToggleFollow(person.id)}
               />
             </article>
           );
         })}
       </div>
     </section>
+  );
+}
+
+function TransportControls({
+  paused,
+  onToggle,
+  onSkipBack,
+  onSkipForward
+}: {
+  paused: boolean;
+  onToggle: () => void;
+  onSkipBack: () => void;
+  onSkipForward: () => void;
+}) {
+  return (
+    <div className="transport-controls" onClick={(event) => event.stopPropagation()} aria-label="Videokontroller">
+      <button className="transport-skip" onClick={onSkipBack} aria-label="Spola tillbaka 10 sekunder">
+        <Rewind size={21} fill="currentColor" />
+        <span>10</span>
+      </button>
+      <button className="transport-main" onClick={onToggle} aria-label={paused ? "Spela" : "Pausa"}>
+        {paused ? <Play size={25} fill="currentColor" /> : <Pause size={25} fill="currentColor" />}
+      </button>
+      <button className="transport-skip" onClick={onSkipForward} aria-label="Spola fram 10 sekunder">
+        <FastForward size={21} fill="currentColor" />
+        <span>10</span>
+      </button>
+    </div>
   );
 }
 
@@ -445,18 +514,12 @@ function ClipMeta({
   clip,
   person,
   following,
-  currentTime,
-  duration,
-  onSeek,
   onOpenPerson,
   onToggleFollow
 }: {
   clip: ClipItem;
   person: PersonProfile;
   following: boolean;
-  currentTime: number;
-  duration: number;
-  onSeek: (seconds: number) => void;
   onOpenPerson: () => void;
   onToggleFollow: () => void;
 }) {
@@ -479,6 +542,7 @@ function ClipMeta({
         </button>
         <button
           className={following ? "follow-button following" : "follow-button"}
+          aria-pressed={following}
           onClick={(event) => {
             event.stopPropagation();
             onToggleFollow();
@@ -497,10 +561,9 @@ function ClipMeta({
         {clip.sourceTitle} · {formatDate(clip.debateDate)}
       </div>
       <a className="source-link" href={clip.sourceUrl} target="_blank" rel="noreferrer">
-        Se hela debatten på riksdagen.se
+        Hela debatten
         <ArrowUpRight size={13} />
       </a>
-      <ProgressRow currentTime={currentTime} duration={duration} onSeek={onSeek} />
     </div>
   );
 }
