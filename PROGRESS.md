@@ -536,3 +536,91 @@ against the real pins before committing.
 - The full prerequisite checklist for the recommender is `docs/RECOMMENDATION_PREREQUISITES.md`.
   This session closed P0-2, P0-3 (partially - the ledger table exists but nothing writes to it
   yet), P0-4 (file-level only, not a live privilege test), P0-6, and started A-3/A-6.
+
+## P0 completion + Block O foundations + F1 plan — DONE 2026-08-02
+
+**Built:** `migrations/003_auth_probe.{up,down}.sql`,
+`migrations/004_revoke_default_table_grants.{up,down}.sql`, `src/publish/migrations.py`,
+`scripts/apply_migrations.py`, `.github/workflows/ci.yml`, `supabase/config.toml`,
+`.env.example`, `docs/adr/005-serving-boundary-and-runtime.md`,
+`docs/adr/006-clerk-sole-identity-provider.md`,
+`docs/adr/007-private-schema-and-consent-model.md`,
+`docs/adr/008-recommendation-metadata-outside-contracts.md`,
+`tests/live/test_db_privileges.py`, `tests/unit/test_migration_ledger.py`,
+plus edits to `src/stages/publish.py`, `src/publish/supabase.py`, `docs/BUILD_PLAN.md`,
+`docs/RECOMMENDATION_PREREQUISITES.md`, `web/src/{App.tsx,supabase.ts,types.ts,data.ts,styles.css,vite-env.d.ts}`.
+Deleted the diverged root `BUILD_PLAN.md`.
+
+**Tests:** `python tasks.py test lint typecheck` green on Windows against the real pins —
+**160 passed, 54 deselected**, 1 pre-existing `audioop` warning; ruff clean; mypy strict clean
+on 67 files. `tsc --noEmit` green; `vite build` green. The 54 deselected are 52 new `live`
+DB-privilege tests plus the 2 pre-existing `slow` tests.
+**Contracts touched:** none.
+
+**Live finding — P0-7 confirmed, not yet fixed:**
+Probed project `nlooigmwuqqhhnontlgp` from outside with only the publishable key that already
+ships in the browser bundle:
+
+- `GET /rest/v1/clip_features|engagement_events|jobs|pipeline_runs` → **200 `[]`**
+  (authorized; RLS filtered every row)
+- `POST /rest/v1/clips` → **`42501 new row violates row-level security policy`**
+- `GET /rest/v1/schema_migrations` → **`42501 permission denied`**
+
+The difference between those last two messages is the whole finding. `permission denied` means
+no grant. `violates row-level security policy` means the grant *is* there and the statement
+reached the policy check. So `anon` holds `INSERT` on `public.clips`, `jobs` and
+`engagement_events`, and `SELECT` on every protected table — because Supabase ships
+`alter default privileges in schema public grant all on tables to anon, authenticated` and
+migration 001 never revoked it. Nothing is exploitable today; RLS has no INSERT policy. But RLS
+is the only thing stopping it, and `engagement_events` is where F2 viewer telemetry lands.
+Migration `004` revokes the existing grants and the default for future tables.
+
+**Decisions made:**
+- `public.auth_probe()` (migration 003) is the missing half of the Clerk verification. It is
+  `SECURITY INVOKER`, returns only the caller's own verified claims, and is granted to
+  `authenticated` while revoked from `anon`. The grant is the proof: `anon` gets
+  `permission denied`, a signed-in caller gets their Clerk `sub` back from SQL. That single
+  round trip demonstrates RS256 verification against the Clerk JWKS, the `role: authenticated`
+  claim being honoured, and A-7's `clerk_user_id text` key being readable in SQL.
+- Migration application moved out of the publish stage into
+  `scripts/apply_migrations.py`. Migration 003 has nothing to do with publishing clips, and
+  coupling schema changes to a media pipeline run was the reason the hardcoded path went
+  unnoticed for so long.
+- The `schema_migrations` ledger now actually gets written. It existed as a table after 002 but
+  nothing inserted into it, so "apply the migrations" still meant "re-run every file". Checksums
+  hash bytes, not decoded text, so a line-ending change is caught as the edit it is.
+- `discover_migrations` moved to `src/publish/migrations.py` and is re-exported from
+  `src/stages/publish.py`, so the existing test imports still work. Stages depend on libs, not
+  the other way round.
+- CI (`O-1`) installs the full pinned tree including the torch stack whisperx pulls in. A slimmer
+  install would be faster and would mean CI is not testing what production runs.
+- Deleted the root `BUILD_PLAN.md`. It had genuinely diverged — it still documented `make` where
+  `docs/BUILD_PLAN.md` documents `tasks.py`. `AGENTS.md` points at the `docs/` copy.
+
+**Observations (not fixed, out of scope):**
+- `riksdagen-clip-pipeline-architecture.md` at the root is still byte-identical to
+  `docs/ARCHITECTURE.md`. Harmless today because they cannot disagree, but it is a second copy
+  and will eventually drift the same way `BUILD_PLAN.md` did.
+- The CI workflow has never run. GitHub Actions cannot be exercised from here, so the first push
+  needs watching — the torch install on a cold pip cache is the likely failure.
+- `web/.env.local` is dead since `envDir` moved to the repo root. The live file is `.env.local`
+  at the root.
+
+**Blocked / needs a decision:**
+- **Migrations 003 and 004 are not applied.** Needs `RIKET_SUPABASE_PROJECT_REF` and
+  `RIKET_SUPABASE_ACCESS_TOKEN` in a root `.env` (see `.env.example`), then
+  `python scripts/apply_migrations.py`.
+- **The Clerk → Supabase token link is still unverified.** It needs migration 003 applied *and*
+  a signed-in session. Nobody is signed in on the live site; the check cannot be completed
+  without an account, which is the account holder's action to take.
+- Production launch still needs a domain (`A-2`). Unchanged.
+
+**Next agent should know:**
+- The verification is one button once 003 is applied: Profil tab → Diagnostik →
+  "Testa Clerk → Supabase" while signed in. It calls `rpc/auth_probe` and prints the claims.
+  Record the `sub`, `role`, `iss` and `pg_role` values here when it first returns `ok`.
+- `python -m pytest tests/live/test_db_privileges.py -m live` is the P0-4/P0-7 acceptance. It
+  will fail until migration 004 is applied — that failure is the finding, not a broken test.
+- F1 is scoped in `docs/BUILD_PLAN.md` with an explicit file scope and an explicit
+  must-not-touch list. Read it before starting; ADR 007 explains why the schema may be built
+  while F0 is still open, and what may not be done until F0 closes.

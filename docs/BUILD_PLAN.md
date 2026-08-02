@@ -333,6 +333,184 @@ This chunk is entirely deterministic given `08_track` + `02_scenes`. Test it lik
 
 ---
 
+# Recommendation chunks (P0, F0–F6)
+
+These build the feed, not the media pipeline. They are numbered separately on
+purpose: they consume C11 output and must never change a pipeline contract
+(ADR 008). Architecture is `docs/RECOMMENDATION_LAUNCH_PLAN.md`; the gating
+checklist with stable item IDs (`P0-3`, `A-7`, `C-2`, …) is
+`docs/RECOMMENDATION_PREREQUISITES.md`. Cite those IDs in commits and handoffs.
+
+Rule 2 applies here exactly as it does to C0–C13: **the file scope below is the
+contract.** If a chunk needs a file that is not listed, that is a plan change,
+not a judgement call.
+
+---
+
+## P0 — Database security & migration hardening — DONE
+
+**Depends on:** C11. **Size:** small. **Status:** closed 2026-08-02, except
+`P0-8` and `P0-9`.
+
+**Objective.** Close the live privilege hole and make migrations trustworthy
+before anything else adds tables to this database.
+
+**Scope:** `migrations/00{2,3}_*.sql`, `src/publish/migrations.py`,
+`src/stages/publish.py` (migration path only), `scripts/apply_migrations.py`,
+`tests/unit/test_publish_migrations.py`, `tests/unit/test_migration_ledger.py`,
+`tests/live/test_db_privileges.py`
+
+**Built:** revoked the default `PUBLIC` execute grant on `publish_clip_batch`
+and on every `SECURITY DEFINER` function in `public`; pinned their
+`search_path`; dropped `discovered` from `sources_public_read`; replaced the
+hardcoded `MIGRATION_PATH` with ordered discovery plus a `schema_migrations`
+ledger that detects an edited-after-apply migration; added the privilege and
+RLS matrix tests.
+
+**Still open:** `P0-8` (reconcile live `clips` rows and Bunny objects against
+known pipeline runs) and `P0-9` (key inventory and the rotate-or-not decision).
+
+---
+
+## F0 — Privacy, legal & product contract
+
+**Depends on:** P0. Runs in parallel with P1. **Size:** large, mostly not code.
+
+**Objective.** Produce the decisions that the F1 table shapes encode. Party
+preferences and inferred political interests are GDPR Article 9
+special-category data; this is what makes collection lawful, not polite.
+
+**Scope:** `docs/privacy/` (new), `docs/RECOMMENDATION_PREREQUISITES.md`
+(status updates only)
+
+**Build:** DPIA including an explicit Article 22 conclusion (`F0-1`); Swedish
+privacy counsel review of the Article 6 basis and Article 9(2)(a) analysis
+(`F0-2`); Article 13 notice in plain Swedish stating that viewing activity is
+used to infer political interests (`F0-3`); data-flow inventory covering Clerk,
+Supabase and Bunny **including CDN access logs** (`F0-4`); processor agreements
+and transfer assessment (`F0-5`); retention decisions (`F0-6`); minors policy
+(`F0-7`); ePrivacy/cookie classification (`F0-8`); DSA classification (`F0-9`);
+advertising firewall (`F0-10`); security controls (`F0-11`); deletion/export
+runbook (`F0-12`); party-balance policy (`F0-13`); takedown path (`F0-14`).
+
+**Acceptance:** product and privacy owners sign off; every field planned in F1
+and F2 has a written purpose and retention rule; the non-profiled experience
+stays fully functional.
+
+**This gates consent collection from real users, not F1 engineering.** The F1
+schema may be built in parallel — see the note in ADR 007.
+
+---
+
+## F1 — Identity, consent & the private schema
+
+**Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.
+**Size:** large. Split into F1a and F1b if a session runs long.
+
+**Objective.** A signed-in viewer has a durable subject, a provable consent
+record, and server-enforced control over what is collected about them. Nothing
+personal is persisted before consent exists.
+
+**Scope — may create or modify:**
+
+```
+migrations/004_private_schema.{up,down}.sql
+migrations/005_consent_ledger.{up,down}.sql
+supabase/functions/_shared/{jwt.ts,consent.ts,cors.ts,db.ts}
+supabase/functions/consent/index.ts
+supabase/functions/clerk-webhook/index.ts
+supabase/config.toml
+web/src/{consent.ts,account.ts}
+web/src/App.tsx           (consent UI + account screens only)
+web/src/types.ts          (consent + preference DTOs)
+tests/live/test_private_rls.py
+tests/unit/test_consent_state.py
+supabase/functions/**/*_test.ts
+docs/DEPENDENCIES.md
+tasks.py                  (Deno targets, O-4)
+```
+
+**Scope — must not touch:** `src/contracts.py`, any `src/stages/*`, any
+`src/{asr,camera,candidates,features,media,render,scoring,segment,vision}/*`,
+`migrations/001_publish_schema.*`, `tests/fixtures/golden/*`.
+
+**Build.**
+
+*Schema (`C-1`, `C-2`, `C-3`, `C-8`, `A-7`).* `private` schema with `usage`
+revoked from `anon` and `authenticated` and absent from the PostgREST exposed
+list. `private.consent_records` — append-only, subject `clerk_user_id text`,
+purpose, granted/withdrawn, Article 6 basis, Article 9 condition, notice
+version, UI source, timestamps; a withdrawal is a new row, never an update.
+`private.consent_notice_versions` so a 2027 audit can reconstruct the 2026 text.
+`private.viewer_preferences` — subject, entity type/id, signed weight, source
+`explicit`/`follow`/`inferred`, created/updated/decayed.
+`private.data_subject_requests` for the export/reset/delete workflow.
+
+*Verification (`A-11`, `A-12`).* Edge Functions deploy with `verify_jwt = false`
+and verify inside the handler: fetch and **cache** the Clerk JWKS, then check
+signature, `iss`, `exp`, `nbf` and `azp` against the allowed origins. The
+subject comes from the verified `sub` and nothing else — a `user_id` in a
+request body is ignored, always.
+
+*Enforcement (`C-4`, `C-5`, `C-6`, `C-7`).* One `consent.ts` helper both
+endpoints call. Four independent purposes: personalization, analytics, email,
+model-training reuse. Absent means denied. Withdrawal takes effect on the next
+request, cancels in-flight personalized calls and purges the client outbox for
+that purpose. The UI switch displays server state; it is not the mechanism.
+
+*Lifecycle (`A-14`, `A-15`).* `clerk-webhook` handles `user.deleted` with Svix
+signature verification — an unauthenticated delete endpoint is a
+denial-of-service on your own users' data. Deletion cascades across consent
+records, preferences, inferred state and cached slates. In-app deletion reaches
+the same code path.
+
+*Rights (`C-10`).* Export, access, preference edit, recommendation reset and
+deletion are real workflows. Placeholder buttons do not count — the Profil tab
+currently has three of them.
+
+*Client (`C-9`).* `liked` / `saved` / `following` / `followedParties` move out
+of React state and onto the server, keyed on `politicians.id` and never on a
+display-name slug (`Q-2`).
+
+**Tests.** RLS matrix for every private table across anon / authenticated-as-A /
+authenticated-as-B / service_role (`C-11`), in the same harness as
+`tests/live/test_db_privileges.py`. JWT verification: wrong signing key, expired
+token, unknown issuer and wrong `azp` each return 401 and write nothing.
+Subject spoofing: posting another user's ID has no effect. Deletion: create
+user, generate rows, delete in Clerk, assert every private row is gone.
+Withdrawal flips the next request to non-profiled. A full anonymous session
+creates zero private rows.
+
+**Acceptance.** Default-off consent with proof of grant; immediate withdrawal;
+export/reset/deletion complete end to end; private-schema RLS proven by the
+matrix; `Senaste` still fully works signed out.
+
+**Do not build in F1:** telemetry tables (`private.feed_requests`,
+`feed_items`, `playback_events`) — those are F2. Any ranking — that is F3 and it
+is gated.
+
+---
+
+## F2 — Exposure & playback telemetry
+
+**Depends on:** F1. **Size:** large. See `RECOMMENDATION_LAUNCH_PLAN.md` §F2 and
+prerequisite Block T. Frontend gates `FE-1` … `FE-4` must land **before**
+collection starts, or the first data is already corrupt.
+
+## F3 — Deterministic `För dig`
+
+**Depends on:** F2 **and** P1 continuous supply. **Gated** — see the exit
+criteria in `RECOMMENDATION_PREREQUISITES.md` §13. Do not start.
+
+## F4 — Frontend integration & controlled launch
+## F5 — Content understanding & exploration
+## F6 — Learned ranking
+
+Scoped in `docs/RECOMMENDATION_LAUNCH_PLAN.md`. Expand into full chunk entries
+here before implementation, as rule 2 requires.
+
+---
+
 ## Phase 2 backlog (not chunked yet)
 
 Deliberately deferred. Do not pull these forward.

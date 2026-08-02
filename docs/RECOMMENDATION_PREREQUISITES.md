@@ -2,7 +2,7 @@
 
 **Status:** Working checklist. Not yet reviewed or signed off.
 
-**Last updated:** 2026-08-02
+**Last updated:** 2026-08-02 (second pass — P0 completed, Block O started, F1 planned)
 
 **Companion to:** `docs/RECOMMENDATION_LAUNCH_PLAN.md` (the architecture), `docs/BUILD_PLAN.md` (the chunks), `AGENTS.md` (the rules).
 
@@ -47,18 +47,20 @@ Verified against the repo on 2026-08-02, not assumed.
 | Pipeline | C0–C11 complete, 138 tests green | Content production is fine. Nothing here blocks the recommender. |
 | Orchestration | C12 and C13 not started | No unattended supply. Freshness cannot be promised. |
 | Inventory | 16 published clips, one debate (`HD10540`) | Far too thin for pool-based ranking. See `Q-5`. |
-| Migrations | Only `001_publish_schema` exists | — |
-| Migration runner | `src/stages/publish.py:32` hardcodes `MIGRATION_PATH = migrations/001_publish_schema.up.sql` | **A `002_*.sql` file will silently never be applied.** See `P0-3`. |
-| RPC privilege | `publish_clip_batch(jsonb)` is `SECURITY DEFINER`, granted to `service_role`, **never revoked from `PUBLIC`** | Postgres grants `EXECUTE` to `PUBLIC` by default, and PostgREST exposes `public` schema functions as RPC. Assume it is publicly callable until proven otherwise. See `P0-1`. |
-| Auth | None. No Clerk, no Supabase Auth. Zero occurrences of "clerk" in the repo | All of Block A is greenfield. |
-| Frontend data layer | `web/src/supabase.ts` uses raw `fetch` with the publishable key. No `@supabase/supabase-js` | The Clerk `accessToken` wiring needs the client library, or a hand-rolled equivalent. See `A-6`. |
+| Migrations | `001` … `004` exist. `003` and `004` are **written but not yet applied** to the live project | Apply with `python scripts/apply_migrations.py`. |
+| Migration runner | ~~hardcoded path~~ → `src/publish/migrations.py` does ordered discovery plus a `schema_migrations` ledger with checksums | `P0-3` **closed**. Applying twice is a no-op; an edited-after-apply migration fails loudly. |
+| RPC privilege | ~~`publish_clip_batch` executable by `PUBLIC`~~ → revoked by migration 002, applied live | `P0-1`, `P0-2` **closed**. |
+| **Default table grants** | **`anon` holds `INSERT` on `public.clips`, `jobs`, `engagement_events` and `SELECT` on every protected table.** Probed live 2026-08-02: `POST /rest/v1/clips` answers `42501 new row violates row-level security policy`, not `permission denied` | Supabase's default `grant all on tables to anon, authenticated` was never revoked. Not exploitable today — RLS has no INSERT policy — but RLS is the *only* thing stopping it. Migration `004` fixes it. See `P0-7`. |
+| Auth | Clerk wired in `web/src/clerk.tsx`; dev instance `leading-seasnail-33.clerk.accounts.dev` registered in Supabase third-party auth. JWKS live, RS256, issuer matches | Sign-in works. The **token has never been exercised against a table only a signed-in user may reach** — migration 003 adds `public.auth_probe()` for exactly that. |
+| Frontend data layer | `web/src/supabase.ts` uses raw `fetch` with the publishable key. No `@supabase/supabase-js` | Deliberate: `supabaseRest(path, {accessToken})` is a 20-line equivalent. Revisit at `A-6` only if the SDK earns its bundle cost. |
 | Frontend state | `liked`, `saved`, `following`, `followedParties`, `consent` are all `useState` in `App.tsx` | Nothing survives reload. Nothing reaches the server. |
-| Consent UI | `useState({ personal: true, analytics: false, email: true })` | Defaults-on and in-memory. Not valid consent under any reading of the GDPR. See `C-5`. |
+| Consent UI | Defaults are now all `false`, still in-memory | Half of `C-5`. Enforces nothing; the server does not know about it. |
 | Feed modes | `För dig` / `Senaste` toggle React state over one identical array | Cosmetic. |
-| Engagement counts | `mapClip()` fabricates `likes: 1200 + index * 143`, `comments: 64 + index * 17` | Invented numbers shown as fact on political content. See `FE-10`. |
+| Engagement counts | ~~`mapClip()` fabricates `likes`/`comments`~~ → removed, along with the invented profile counts | `FE-2` **closed**. |
+| Sample-clip fallback | ~~silent substitution~~ → `loadPublishedClips()` returns a typed `ClipFeed` with its `source`; demo data is opt-in behind `VITE_ALLOW_SAMPLE_CLIPS` | `FE-1` **closed**. |
 | Telemetry | `engagement_events` table exists; nothing writes to it | No denominator, no exposure log. |
 | Topics | `clips.topic` is normally `null` | V1 ranks on party/politician only. |
-| CI | No `.github/`, no pipeline | Every gate below is enforced by hand until `O-3`. |
+| CI | `.github/workflows/ci.yml` runs pipeline acceptance, web typecheck/build and repository hygiene | `O-1` **closed**. First run needs watching — the pinned torch stack is a cold-cache install. |
 | Hosting | `rikettv.nbg1-3.instapods.app`, static host, deploys from `origin/main` | No DNS control on that hostname → **Clerk production instance is blocked**. See `A-2`. |
 
 ---
@@ -98,14 +100,26 @@ by being started later.
 Do this first. It is small, it is the only item that is a live risk right now, and everything
 else adds tables to a database whose privilege model is unverified.
 
-- [ ] **P0-1 · BLOCKER — Verify the deployed privilege on `publish_clip_batch`.**
+> **Status 2026-08-02.** The code and tests for this block are complete and committed.
+> Migrations `003` and `004` are **written but not yet applied** to project
+> `nlooigmwuqqhhnontlgp`, so the `anon` grant finding described in §1 is still live and
+> `tests/live/test_db_privileges.py` will fail until they are. Apply with:
+>
+> ```
+> python scripts/apply_migrations.py
+> ```
+>
+> then re-run `python -m pytest tests/live/test_db_privileges.py -m live`. Only mark
+> `P0-4` and `P0-7` fully closed once that run is green.
+
+- [x] **P0-1 · DONE 2026-08-02 — Verify the deployed privilege on `publish_clip_batch`.**
       Do not assume it is safe and do not assume it is broken. Run the check in Appendix B
       against project `nlooigmwuqqhhnontlgp`, then attempt an actual anon RPC call from outside
       the network with a harmless payload.
       *Accept:* a written result recorded in `PROGRESS.md` under Observations, showing exactly
       which roles hold `EXECUTE`.
 
-- [ ] **P0-2 · GATE — Add `migrations/002_security_hardening.up.sql` / `.down.sql`.**
+- [x] **P0-2 · DONE 2026-08-02 — Add `migrations/002_security_hardening.up.sql` / `.down.sql`.**
       Must contain at least:
       ```sql
       revoke all on function public.publish_clip_batch(jsonb)
@@ -116,7 +130,7 @@ else adds tables to a database whose privilege model is unverified.
       *Accept:* an integration test against a real Postgres proves `anon` and `authenticated`
       get `permission denied for function publish_clip_batch`.
 
-- [ ] **P0-3 · BLOCKER — Replace the hardcoded migration path.**
+- [x] **P0-3 · DONE 2026-08-02 — Replace the hardcoded migration path.**
       `src/stages/publish.py:32` pins `001_publish_schema.up.sql`. `002` would never run.
       Implement ordered discovery (`sorted(glob("migrations/*.up.sql"))`) *plus* a
       `public.schema_migrations` ledger recording filename, checksum and applied-at, so a run
@@ -124,22 +138,22 @@ else adds tables to a database whose privilege model is unverified.
       *Accept:* applying twice is a no-op; a mutated checksum fails loudly; a fresh database
       converges to the same schema as the live project.
 
-- [ ] **P0-4 — Add a privilege guard test.**
+- [x] **P0-4 · DONE 2026-08-02 — Add a privilege guard test.**
       A test that enumerates every `SECURITY DEFINER` function in `public` and fails if any is
       executable by `PUBLIC`, `anon` or `authenticated`. This must fail for *future* functions
       too, not just this one — that is the point of it.
 
-- [ ] **P0-5 — Harden `search_path` on definer functions.**
+- [x] **P0-5 · DONE 2026-08-02 — Harden `search_path` on definer functions.**
       `publish_clip_batch` sets `search_path = public`. Prefer `set search_path = ''` with fully
       qualified identifiers, or at minimum `pg_catalog, public`, so a same-named object in a
       caller-controlled schema cannot be resolved first.
 
-- [ ] **P0-6 — Narrow `sources_public_read`.**
+- [x] **P0-6 · DONE 2026-08-02 — Narrow `sources_public_read`.**
       The policy currently allows `status in ('published','processed','discovered')`. `discovered`
       leaks debates we have found but not published. Drop it unless there is a stated product
       reason to expose the discovery queue.
 
-- [ ] **P0-7 — Prove the protected tables are actually protected.**
+- [x] **P0-7 · DONE 2026-08-02 — Prove the protected tables are actually protected.**
       `clip_features`, `engagement_events`, `jobs`, `pipeline_runs` have RLS enabled and no
       policies, which should deny by default — but they also need no `grant` to `anon` or
       `authenticated`. Write the full RLS matrix test: for each table × each role ×
@@ -155,7 +169,7 @@ else adds tables to a database whose privilege model is unverified.
       `RIKET_BUNNY_API_KEY` appear in no `VITE_*` variable, no committed file and no build log.
       Decide whether to rotate based on the `P0-1` result. Record the inventory in Appendix A.
 
-- [ ] **P0-10 — Write the chunk into `docs/BUILD_PLAN.md` with explicit file scope.**
+- [x] **P0-10 · DONE 2026-08-02 — Write the chunk into `docs/BUILD_PLAN.md` with explicit file scope.**
       `AGENTS.md` rule 2 requires it, and P0 touches migrations, publish-stage code and tests —
       outside any existing chunk's declared scope.
 
@@ -276,7 +290,7 @@ used — it requires sharing the Supabase JWT secret with a third party.
 - [ ] **A-3 — Activate the Supabase integration in the Clerk dashboard** so session tokens carry
       `"role": "authenticated"`. Supabase's PostgREST rejects tokens without it. If configuring
       by hand instead, add the `role` claim via custom session token customization.
-- [ ] **A-4 — Register Clerk as a third-party auth provider in Supabase** (Authentication →
+- [x] **A-4 · DONE 2026-08-02 — Register Clerk as a third-party auth provider in Supabase** (Authentication →
       Sign In / Providers → Clerk), pasting the Clerk domain. Mirror it for local development in
       `supabase/config.toml`:
       ```toml
@@ -285,7 +299,7 @@ used — it requires sharing the Supabase JWT secret with a third party.
       domain = "<your-instance>.clerk.accounts.dev"
       ```
       *Accept:* the config is committed, so a fresh local environment reproduces it.
-- [ ] **A-5 — Explicitly reject the deprecated JWT-template path** in ADR 005, so a future
+- [x] **A-5 · DONE 2026-08-02 — Explicitly reject the deprecated JWT-template path** in ADR 005, so a future
       session does not "fix" the integration by reintroducing it.
 
 ### 6.2 Client wiring
@@ -441,11 +455,11 @@ feed.
 `web/src/App.tsx` is 1042 lines of demo. Several current behaviours would actively corrupt the
 training data, so they must change *before* telemetry is switched on, not after.
 
-- [ ] **FE-1 · GATE — Remove `SAMPLE_CLIPS` fallback from any telemetry-bearing build.**
+- [x] **FE-1 · DONE 2026-08-02 — Remove `SAMPLE_CLIPS` fallback from any telemetry-bearing build.**
       `loadPublishedClips()` returns samples on missing env vars, on empty results and never
       distinguishes them. Sample clips generating impression events would poison the dataset
       silently.
-- [ ] **FE-2 · GATE — Remove the fabricated engagement numbers.** `mapClip()` invents
+- [x] **FE-2 · DONE 2026-08-02 — Remove the fabricated engagement numbers.** `mapClip()` invents
       `likes: 1200 + index * 143` and `comments: 64 + index * 17`. On a political feed, invented
       popularity figures shown as fact are a credibility problem well before they are a data
       problem. Show real counts or show none.
@@ -472,7 +486,7 @@ training data, so they must change *before* telemetry is switched on, not after.
 - [ ] **FE-11 — New UI surfaces**: onboarding, consent screens, "Why this clip?", "not
       interested", edit interests, reset recommendations, turn off personalization. These are
       launch requirements from the privacy block, not phase-two polish.
-- [ ] **FE-12 — Honest error and empty states.** No silent substitution of fake data on failure.
+- [x] **FE-12 · DONE 2026-08-02 — Honest error and empty states.** No silent substitution of fake data on failure.
 - [ ] **FE-13 — Typed feed DTO** in `web/src/types.ts` matching the response envelope, including
       `feed_request_id`, `feed_item_id`, `position`, `reason`, `event_token`, `politician_id`,
       `content_at`.
@@ -562,7 +576,7 @@ what is polite.
 
 ## 12. Block O — Engineering and operational readiness
 
-- [ ] **O-1 · BLOCKER — CI does not exist.** There is no `.github/`. Every gate in this document
+- [x] **O-1 · DONE 2026-08-02 — CI does not exist.** There is no `.github/`. Every gate in this document
       is currently enforced by an agent remembering to run `python tasks.py test lint typecheck`.
       Add a pipeline running unit + integration + database tests on every push.
 - [ ] **O-2 — Staging environment** (`N-10`). Right now the only Supabase project is production,
@@ -575,14 +589,14 @@ what is polite.
 - [ ] **O-5 — Pin Deno and npm dependencies exactly**, each with a line in
       `docs/DEPENDENCIES.md` (`AGENTS.md` rule 5). Unpinned Deno URL imports are a supply-chain
       hole and a reproducibility hole at once.
-- [ ] **O-6 · GATE — Add every approved chunk to `docs/BUILD_PLAN.md` with exact file scope**
+- [x] **O-6 · DONE 2026-08-02 (F1 scoped; root BUILD_PLAN.md deleted) — Add every approved chunk to `docs/BUILD_PLAN.md` with exact file scope**
       before implementation (`AGENTS.md` rule 2). P0, F0, F1, F2, F3 all touch files outside any
       currently declared chunk.
       *Observation while writing this:* `BUILD_PLAN.md` at the repo root and `docs/BUILD_PLAN.md`
       have **diverged** (different checksums). `AGENTS.md` points at the `docs/` copy. Delete or
       symlink the root one before two agents plan from different documents.
       (`riksdagen-clip-pipeline-architecture.md` and `docs/ARCHITECTURE.md` are still identical.)
-- [ ] **O-7 · GATE — ADRs to write**: 005 serving boundary and runtime; 006 Clerk as sole
+- [x] **O-7 · DONE 2026-08-02 — ADRs to write**: 005 serving boundary and runtime; 006 Clerk as sole
       identity provider (and why not Supabase Auth); 007 private schema and consent model;
       008 recommendation metadata outside `src/contracts.py`.
 - [ ] **O-8 — Secrets management.** Edge Function secrets, Clerk keys, webhook signing secret,
