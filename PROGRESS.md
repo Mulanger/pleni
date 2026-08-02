@@ -624,3 +624,53 @@ Migration `004` revokes the existing grants and the default for future tables.
 - F1 is scoped in `docs/BUILD_PLAN.md` with an explicit file scope and an explicit
   must-not-touch list. Read it before starting; ADR 007 explains why the schema may be built
   while F0 is still open, and what may not be done until F0 closes.
+
+## FE-3 / FE-4 / FE-5 — playback signal integrity — DONE 2026-08-02
+
+**Built:** `web/src/App.tsx` (feed activation, playback state, action rail).
+**Tests:** `python tasks.py test lint typecheck` green — 160 passed, 54 deselected.
+`tsc --noEmit` green; `vite build` green (407.43 kB, 117.54 kB gzipped).
+Behaviour measured in Chrome at 375x812 against the sample feed, by hooking
+`HTMLMediaElement.prototype.play` and driving the scroller:
+
+| Scenario | Clips activated |
+|---|---|
+| Flick across 4 clips, 75 ms per clip (under the 180 ms dwell) | **1** |
+| Scroll across 4 clips, 400 ms per clip (over the dwell) | **3** |
+
+Loop check: `video.loop === false`, a dispatched `ended` calls `play()` once and playback
+resumes from zero.
+**Contracts touched:** none.
+
+**Decisions made:**
+- The dwell is 180 ms and the visibility floor is 0.72. The floor is
+  `IMPRESSION_VISIBLE_FRACTION`, written down once because T-8 requires the activation
+  rule and the analytics query to share one definition. When the analytics side is built,
+  import that constant rather than retyping the number.
+- Kept looping as product behaviour and implemented it explicitly rather than removing it.
+  The viewer experience is identical; the difference is that the loop boundary is now an
+  event instead of an invisible seek to zero.
+- `loopCounts` is a ref, not state. Counting a replay must not re-render the feed.
+- `blocked` is separate state from `paused` rather than a derived flag, so no future
+  refactor can quietly collapse "browser refused autoplay" into "viewer paused".
+- The comment button is icon-only. Measured in the browser: "Kommentera" needs 67 px and
+  "Kommentar" 62 px in a 54 px rail that sits 7 px from the screen edge, so no Swedish
+  label fits. It kept its accessible name.
+
+**Observations (not fixed, out of scope):**
+- `paused` is now write-only state — nothing reads it since a previous session removed the
+  persistent transport controls. It is the natural anchor for the FE-6 playback state
+  machine, so it was left in place rather than deleted and re-added.
+- The comment button still has no comment feature behind it. Removing it is a product
+  decision, not a data-integrity one, so it stayed.
+
+**Blocked / needs a decision:**
+- none
+
+**Next agent should know:**
+- FE-6 (the explicit idle/blocked/playing/paused/seeking/buffering/ended state machine with
+  `visibilitychange`) is the natural next step and should absorb `paused`, `blocked` and
+  `loopCounts` rather than adding a fourth parallel map.
+- The measurement harness above is worth re-running after any feed change: hook
+  `HTMLMediaElement.prototype.play`, drive `.feed-scroll` in fixed steps, count distinct
+  activations. A regression here is silent and only shows up as inflated impressions.
