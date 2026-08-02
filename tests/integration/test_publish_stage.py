@@ -10,6 +10,7 @@ from pathlib import Path
 from src.contracts import Candidate, PublishResult, SelectedClip, SentenceSpan, Source, Speech, Word
 from src.paths import work_paths
 from src.publish.bunny import BunnyUploadedObject
+from src.publish.migrations import discover_migrations
 from src.publish.supabase import SupabasePublishBatch
 from src.stages.publish import publish_dokid
 
@@ -34,12 +35,16 @@ class FakeBunnyUploader:
 
 
 class FakeSupabasePublisher:
+    """Stands in for the Management API with an empty migration ledger."""
+
     def __init__(self) -> None:
-        self.migrations: list[Path] = []
+        self.statements: list[str] = []
         self.batches: list[SupabasePublishBatch] = []
 
-    def apply_migration_file(self, migration_path: Path) -> Mapping[str, object]:
-        self.migrations.append(migration_path)
+    def execute_sql(self, query: str) -> Mapping[str, object]:
+        self.statements.append(query)
+        if "from public.schema_migrations" in query:
+            return {"result": []}
         return {}
 
     def publish_batch(self, batch: SupabasePublishBatch) -> Mapping[str, object]:
@@ -169,7 +174,14 @@ def test_remote_publish_uploads_then_writes_metadata(tmp_path: Path) -> None:
         f"clips/2026/08/{selected.clip_id}_540x960.mp4",
         f"thumbs/2026/08/{selected.clip_id}.webp",
     ]
-    assert supabase.migrations
+    # Every committed migration was applied against an empty ledger, and each
+    # one recorded a ledger row. Derived from the directory rather than a
+    # hardcoded list so adding migration 005 does not fail this test.
+    expected = discover_migrations()
+    ledger_writes = [s for s in supabase.statements if "insert into public.schema_migrations" in s]
+    assert len(ledger_writes) == len(expected)
+    for path in expected:
+        assert any(path.name in statement for statement in ledger_writes), path.name
     payload = supabase.batches[0].to_payload()
     assert payload["pipeline_run"]["idempotency_key"] == f"publish:{dokid}:v1"
     assert payload["politicians"] == [

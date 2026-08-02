@@ -153,6 +153,11 @@ class SupabasePublishClient:
     management: SupabaseManagementClient
     rest: SupabaseRestClient
 
+    def execute_sql(self, query: str) -> Mapping[str, Any]:
+        """Execute SQL through the Management API."""
+
+        return self.management.execute_sql(query)
+
     def apply_migration_file(self, migration_path: Path) -> Mapping[str, Any]:
         """Apply one migration through the Management API."""
 
