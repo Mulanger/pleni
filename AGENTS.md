@@ -12,7 +12,7 @@ Standing rules for every coding session on this repo. Read this before doing any
 
 ## What this project is
 
-A pipeline that takes a Swedish parliamentary debate video from Riksdagen webb-tv and produces vertical, subtitled, speaker-centred short clips, stored in Supabase and served from Bunny CDN.
+A pipeline that takes a Swedish parliamentary debate video from Riksdagen webb-tv and produces vertical, speaker-centred short clips. Heavy video/image files live in Bunny Storage/CDN. Supabase stores metadata, source/speech/clip rows, features, engagement events, jobs and publish state. The current product decision is **no captions**; do not assume an ASS/VTT caption artifact exists.
 
 The pipeline is a chain of **numbered stages**. Each stage reads the previous stage's artifact from disk and writes its own. No stage calls another stage directly.
 
@@ -36,6 +36,78 @@ work/<dokid>/
 ```
 
 This layout is not incidental. It is what makes each stage independently runnable, testable and resumable, and what lets you work on stage 7 without ever running stage 2.
+
+## Current state snapshot
+
+Last updated: 2026-08-02.
+
+### Repository and deployment
+
+- Git is initialized. Remote: `https://github.com/Mulanger/riketTV.git`. Main branch: `main`.
+- Public web app: `https://rikettv.nbg1-3.instapods.app/`.
+- InstaPods pod: `rikettv`, static runtime, auto-deploys from `origin/main`.
+- Latest known deployed frontend polish commit: `0d67e66` (`frontend: polish mobile player controls`).
+- The React app lives in `web/`, but the InstaPods Git deploy currently runs from the repo root. Its working settings are:
+  - Install command: `cd web && npm ci`
+  - Build command: `cd web && node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json && node ./node_modules/vite/bin/vite.js build && cd .. && rm -rf ./assets ./index.html ./dist && cp -R web/dist/. ./`
+  - Static host serves the pod root, so the build command copies `web/dist` contents to root. Do not change this back to a plain `npm ci` at repo root.
+- Frontend env vars in InstaPods:
+  - `VITE_SUPABASE_URL`
+  - `VITE_SUPABASE_PUBLISHABLE_KEY`
+- Do not put server secrets in Vite env vars. Bunny API keys, Supabase access tokens and Supabase secret/service keys belong only in local/server worker environments.
+
+### Pipeline completion
+
+- Completed chunks: C0, C1, C1b, C2, S1, C3, R1, C4, C5, C6, C7, C8, C9, C10, C11.
+- Next planned chunks in `docs/BUILD_PLAN.md`: C12 orchestration, then C13 hardening/observability/runbook.
+- Current default acceptance command: `python tasks.py test lint typecheck`.
+- Latest full local acceptance result: 138 passed, 2 deselected, 1 `audioop` deprecation warning.
+- `python tasks.py run-fixture` is the local end-to-end fixture runner. Use a fresh `--work-dir` when inspecting generated artifacts to avoid stale files from old runs.
+
+### Important architecture facts already discovered
+
+- `mhs-vodapi` is retired. Do not build new code against it.
+- Video metadata is scraped/parsed from the modern Riksdagen webb-tv page data path implemented in C1/C2.
+- Official speeches/transcripts come from the documented open-data `anforandelista`/speech XML flow added in C1b. `00_source.json["anforanden"]` includes `anforande_id`, speaker, party, `anforandetyp`, `intressent_id`, and full official text.
+- The official transcript parser preserves `(Applåder)` and `(TALMANNEN: ...)` markers because ranking can use them.
+- Available media ceiling is 1280x720. Direct downloads and HLS both showed only 720p and lower variants for checked 2026 debates; no 1080p rendition was found.
+- Full-bleed mobile output is fixed at 540x960. For a 1280x720 master, the largest 9:16 crop is 406x720. Use `src/config.py` and `src/paths.py`; do not scatter literal geometry or paths.
+- All times in every contract remain float seconds relative to the master video file, never a speech or clip-local offset.
+- C10 renders one primary MP4 per clip: `10_render/<clip_id>_540x960.mp4`, plus a vertical WebP thumbnail. No captions are rendered by current decision (ADR 004).
+- C11 publishes MP4/WebP to Bunny first, verifies public CDN visibility, then writes Supabase rows transactionally. A `clips` row must never point at a missing Bunny object.
+
+### Data, storage and schema
+
+- Bunny public CDN host used in live tests: `https://riketnlooigm.b-cdn.net`.
+- Supabase project ref used in live tests: `nlooigmwuqqhhnontlgp`.
+- Supabase stores metadata only. It does not store MP4/WebP bytes.
+- Public frontend reads `clips` joined to `speeches` and `sources`, including speaker name, party, `anforandetyp`, source title/date/url, transcript/title, duration and Bunny URLs.
+- Published HD10540 test batch: 16 clips and 16 thumbnails uploaded to Bunny and written to Supabase. The frontend feed currently displays those rows, with a local sample fallback in `web/src/data.ts`.
+- Supabase render columns are `url_540x960` and optional `url_360x640`; `vtt_url` is nullable.
+
+### Frontend app state
+
+- `web/` is a mobile-only React/Vite app. Widths `>=700px` intentionally show a "view on phone" gate.
+- The feed is a TikTok-style vertical scroll over published Bunny MP4s.
+- Current player behavior:
+  - audio starts unmuted where browser policy allows it;
+  - if unmuted autoplay is blocked, the center play button appears;
+  - tapping the video surface toggles pause/play;
+  - center play button is visible only while paused/blocked;
+  - progress uses real `video.currentTime`/duration and supports scrubbing;
+  - bottom nav is flush to the mobile viewport bottom.
+- The frontend data layer is `web/src/supabase.ts`; do not bypass it with hardcoded Bunny URLs except for the fallback sample data.
+- In this Codex desktop environment, `npm run ...` scripts have previously failed due a local Bun remap issue. Prefer direct Node commands:
+  - Typecheck: `node .\node_modules\typescript\bin\tsc --noEmit -p tsconfig.json`
+  - Build: `node .\node_modules\vite\bin\vite.js build`
+  - Dev server: `node .\node_modules\vite\bin\vite.js --host 127.0.0.1 --port 5199 --strictPort`
+
+### Known caveats
+
+- `src/segment/vad.py` uses deprecated stdlib `audioop`; tests pass on current Python, but Python 3.13 will require replacing it.
+- The active speaker implementation is a pragmatic C8 heuristic with OpenCV Haar detection plus a center-podium fallback. TalkNet/real ASD is still future work.
+- The Vite frontend intentionally uses only the Supabase publishable key. If a feature needs writes, worker orchestration or server-side API endpoints must own those writes.
+- `work/`, `test_outputs/`, `web/dist/`, `web/node_modules/`, env files and generated media are ignored and should stay uncommitted.
 
 ## The seven rules
 

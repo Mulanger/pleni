@@ -13,4 +13,9 @@ node .\node_modules\typescript\bin\tsc --noEmit -p tsconfig.json
 node .\node_modules\vite\bin\vite.js build
 ```
 
-InstaPods should use `web/` as the app root, `npm ci && node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json && node ./node_modules/vite/bin/vite.js build` as the build command, and `dist` as the static output directory.
+Current InstaPods Git deploy runs from the repository root. Use:
+
+- Install: `cd web && npm ci`
+- Build: `cd web && node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json && node ./node_modules/vite/bin/vite.js build && cd .. && rm -rf ./assets ./index.html ./dist && cp -R web/dist/. ./`
+
+The final copy step is required because the static host serves the pod root.

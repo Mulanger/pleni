@@ -6,7 +6,7 @@ Mobile-only React frontend for the published Riket TV clip feed.
 
 ```powershell
 npm ci
-npm run dev
+node .\node_modules\vite\bin\vite.js --host 127.0.0.1 --port 5199 --strictPort
 ```
 
 ## Build
@@ -18,10 +18,10 @@ node .\node_modules\vite\bin\vite.js build
 
 ## InstaPods
 
-Use this directory as the app root.
+The current pod deploy runs from the repository root, not this directory, because InstaPods ignored the subdirectory setting during dependency installation in testing.
 
-- Build command: `npm ci && node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json && node ./node_modules/vite/bin/vite.js build`
-- Output directory: `dist`
+- Install command: `cd web && npm ci`
+- Build command: `cd web && node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json && node ./node_modules/vite/bin/vite.js build && cd .. && rm -rf ./assets ./index.html ./dist && cp -R web/dist/. ./`
 - Runtime: static React/Vite
 
 Configure these environment variables in InstaPods:
