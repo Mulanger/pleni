@@ -25,6 +25,7 @@ import { loadPublishedClips } from "./supabase";
 import type { ClipItem, FeedMode, PartyCode, PersonProfile, Tab } from "./types";
 
 type BooleanMap = Record<string, boolean>;
+type NumberMap = Record<string, number>;
 
 const partyCodes = Object.keys(PARTIES).filter((code) => code !== "NONE") as PartyCode[];
 
@@ -38,7 +39,7 @@ function App() {
   const [partyFilter, setPartyFilter] = useState<PartyCode | null>(null);
   const [liked, setLiked] = useState<BooleanMap>({ [SAMPLE_CLIPS[1]?.id ?? ""]: true });
   const [saved, setSaved] = useState<BooleanMap>({});
-  const [muted, setMuted] = useState(true);
+  const [muted, setMuted] = useState(false);
   const [following, setFollowing] = useState<BooleanMap>({
     "gunnar-strommer": true,
     "mathias-tegner": true,
@@ -210,10 +211,16 @@ function FeedScreen({
   onOpenPerson: (personId: string) => void;
 }) {
   const [activeId, setActiveId] = useState(clips[0]?.id ?? "");
+  const [paused, setPaused] = useState<BooleanMap>({});
+  const [currentTimes, setCurrentTimes] = useState<NumberMap>({});
+  const [durations, setDurations] = useState<NumberMap>({});
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
 
   useEffect(() => {
     setActiveId(clips[0]?.id ?? "");
+    setPaused({});
+    setCurrentTimes({});
+    setDurations({});
   }, [clips]);
 
   useEffect(() => {
@@ -238,12 +245,51 @@ function FeedScreen({
       }
       video.muted = muted;
       if (clipId === activeId) {
-        video.play().catch(() => undefined);
+        video
+          .play()
+          .then(() => setPaused((state) => ({ ...state, [clipId]: false })))
+          .catch(() => setPaused((state) => ({ ...state, [clipId]: true })));
       } else {
         video.pause();
       }
     });
-  }, [activeId, muted]);
+  }, [activeId, clips]);
+
+  useEffect(() => {
+    Object.values(videoRefs.current).forEach((video) => {
+      if (video) {
+        video.muted = muted;
+      }
+    });
+  }, [muted]);
+
+  const toggleClipPlayback = (clipId: string) => {
+    const video = videoRefs.current[clipId];
+    if (!video || clipId !== activeId) {
+      return;
+    }
+    if (video.paused) {
+      video.muted = muted;
+      video
+        .play()
+        .then(() => setPaused((state) => ({ ...state, [clipId]: false })))
+        .catch(() => setPaused((state) => ({ ...state, [clipId]: true })));
+    } else {
+      video.pause();
+    }
+  };
+
+  const seekClip = (clipId: string, seconds: number) => {
+    const video = videoRefs.current[clipId];
+    if (!video) {
+      return;
+    }
+    const fallbackDuration = durations[clipId] ?? clips.find((clip) => clip.id === clipId)?.durationS ?? 0;
+    const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : fallbackDuration;
+    const nextTime = Math.min(Math.max(seconds, 0), duration);
+    video.currentTime = nextTime;
+    setCurrentTimes((state) => ({ ...state, [clipId]: nextTime }));
+  };
 
   return (
     <section className="feed-screen">
@@ -265,22 +311,57 @@ function FeedScreen({
           const isSaved = !!saved[clip.id];
           const isFollowing = !!following[person.id];
           return (
-            <article className="feed-item" data-clip-id={clip.id} key={clip.id}>
+            <article
+              className="feed-item"
+              data-clip-id={clip.id}
+              key={clip.id}
+              onClick={() => toggleClipPlayback(clip.id)}
+            >
               <video
                 ref={(node) => {
                   videoRefs.current[clip.id] = node;
                 }}
                 src={clip.videoUrl}
                 poster={clip.thumbUrl}
+                autoPlay={clip.id === activeId}
                 playsInline
                 muted={muted}
                 loop
                 preload="metadata"
+                onLoadedMetadata={(event) => {
+                  const duration = event.currentTarget.duration;
+                  setDurations((state) => ({
+                    ...state,
+                    [clip.id]: Number.isFinite(duration) && duration > 0 ? duration : clip.durationS
+                  }));
+                }}
+                onTimeUpdate={(event) => {
+                  const currentTime = event.currentTarget.currentTime;
+                  setCurrentTimes((state) => ({ ...state, [clip.id]: currentTime }));
+                }}
+                onPlay={() => setPaused((state) => ({ ...state, [clip.id]: false }))}
+                onPause={() => setPaused((state) => ({ ...state, [clip.id]: true }))}
               />
-              <button className="center-play" aria-label="Spela eller pausa">
-                <Play size={22} fill="currentColor" />
-              </button>
-              <button className="mute-button" aria-label={muted ? "Slå på ljud" : "Stäng av ljud"} onClick={() => setMuted(!muted)}>
+              {activeId === clip.id && (paused[clip.id] ?? false) && (
+                <button
+                  className="center-play"
+                  aria-label="Spela"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleClipPlayback(clip.id);
+                  }}
+                >
+                  <Play size={22} fill="currentColor" />
+                </button>
+              )}
+              <button
+                className="mute-button"
+                aria-label={muted ? "Slå på ljud" : "Stäng av ljud"}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setMuted(!muted);
+                }}
+              >
                 {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
               </button>
               <ActionRail
@@ -294,6 +375,9 @@ function FeedScreen({
                 clip={clip}
                 person={person}
                 following={isFollowing}
+                currentTime={currentTimes[clip.id] ?? 0}
+                duration={durations[clip.id] ?? clip.durationS}
+                onSeek={(seconds) => seekClip(clip.id, seconds)}
                 onOpenPerson={() => onOpenPerson(person.id)}
                 onToggleFollow={() => onToggleFollow(person.id)}
               />
@@ -319,7 +403,7 @@ function ActionRail({
   onSave: () => void;
 }) {
   return (
-    <div className="action-rail">
+    <div className="action-rail" onClick={(event) => event.stopPropagation()}>
       <ActionButton label={formatNumber(clip.likes + (liked ? 1 : 0))} active={liked} onClick={onLike}>
         <Heart size={21} fill={liked ? "currentColor" : "none"} />
       </ActionButton>
@@ -361,27 +445,35 @@ function ClipMeta({
   clip,
   person,
   following,
+  currentTime,
+  duration,
+  onSeek,
   onOpenPerson,
   onToggleFollow
 }: {
   clip: ClipItem;
   person: PersonProfile;
   following: boolean;
+  currentTime: number;
+  duration: number;
+  onSeek: (seconds: number) => void;
   onOpenPerson: () => void;
   onToggleFollow: () => void;
 }) {
-  const party = PARTIES[person.party];
+  const party = PARTIES[clip.party];
+  const displayName = cleanName(clip.speakerName) || person.name;
+  const speechType = clip.anforandetyp || person.role;
   return (
-    <div className="clip-meta">
+    <div className="clip-meta" onClick={(event) => event.stopPropagation()}>
       <div className="person-row">
         <button className="person-pill" onClick={onOpenPerson}>
-          <Avatar name={person.name} party={person.party} size="sm" />
+          <Avatar name={displayName} party={clip.party} size="sm" />
           <span className="person-copy">
-            <strong>{person.name}</strong>
+            <strong>{displayName}</strong>
             <span>
               <i style={{ background: party.color }} />
               {party.abbr !== "NONE" ? `${party.abbr} · ` : ""}
-              {person.role}
+              {speechType}
             </span>
           </span>
         </button>
@@ -395,6 +487,11 @@ function ClipMeta({
           {following ? "Följer" : "Följ"}
         </button>
       </div>
+      <div className="clip-context">
+        <span>{speechType}</span>
+        {clip.archetype && <span>{clip.archetype.toLowerCase()}</span>}
+        <span>Klipp {clip.rank}</span>
+      </div>
       <div className="clip-title">{clip.title}</div>
       <div className="clip-subtitle">
         {clip.sourceTitle} · {formatDate(clip.debateDate)}
@@ -403,13 +500,62 @@ function ClipMeta({
         Se hela debatten på riksdagen.se
         <ArrowUpRight size={13} />
       </a>
-      <div className="progress-row">
-        <span>0:14</span>
-        <div>
-          <i />
-        </div>
-        <span>{formatDuration(clip.durationS)}</span>
+      <ProgressRow currentTime={currentTime} duration={duration} onSeek={onSeek} />
+    </div>
+  );
+}
+
+function ProgressRow({
+  currentTime,
+  duration,
+  onSeek
+}: {
+  currentTime: number;
+  duration: number;
+  onSeek: (seconds: number) => void;
+}) {
+  const safeDuration = Math.max(duration, 0);
+  const percent = safeDuration > 0 ? Math.min(Math.max(currentTime / safeDuration, 0), 1) : 0;
+
+  const seekFromPointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (safeDuration <= 0) {
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = Math.min(Math.max(event.clientX - rect.left, 0), rect.width);
+    onSeek((x / rect.width) * safeDuration);
+  };
+
+  return (
+    <div className="progress-row" onClick={(event) => event.stopPropagation()}>
+      <span>{formatDuration(currentTime)}</span>
+      <div
+        className="progress-track"
+        role="slider"
+        aria-label="Klippets position"
+        aria-valuemin={0}
+        aria-valuemax={Math.round(safeDuration)}
+        aria-valuenow={Math.round(currentTime)}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          seekFromPointer(event);
+        }}
+        onPointerMove={(event) => {
+          if (event.buttons === 1) {
+            seekFromPointer(event);
+          }
+        }}
+        onPointerUp={(event) => {
+          event.stopPropagation();
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+        }}
+      >
+        <i style={{ width: `${percent * 100}%` }} />
       </div>
+      <span>{formatDuration(safeDuration)}</span>
     </div>
   );
 }

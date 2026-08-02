@@ -149,8 +149,8 @@ a {
 
 .feed-item::after {
   bottom: 0;
-  height: 360px;
-  background: linear-gradient(0deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.72) 42%, transparent);
+  height: 310px;
+  background: linear-gradient(0deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.58) 48%, transparent);
 }
 
 .feed-tabs {
@@ -220,8 +220,8 @@ a {
 .center-play {
   top: 45%;
   left: 50%;
-  width: 62px;
-  height: 62px;
+  width: 58px;
+  height: 58px;
   transform: translate(-50%, -50%);
   color: #4a4a46;
 }
@@ -237,7 +237,7 @@ a {
 .action-rail {
   position: absolute;
   right: 12px;
-  bottom: calc(176px + env(safe-area-inset-bottom));
+  bottom: calc(136px + env(safe-area-inset-bottom));
   z-index: 8;
   display: flex;
   flex-direction: column;
@@ -278,11 +278,11 @@ a {
   position: absolute;
   left: 16px;
   right: 72px;
-  bottom: calc(90px + env(safe-area-inset-bottom));
+  bottom: calc(72px + env(safe-area-inset-bottom));
   z-index: 8;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .person-row {
@@ -360,6 +360,26 @@ a {
   font-size: 13px;
 }
 
+.clip-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.clip-context span {
+  min-height: 22px;
+  padding: 4px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #55554f;
+  backdrop-filter: blur(14px);
+  font-size: 10.5px;
+  font-weight: 750;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
 .follow-button.following,
 .follow-wide.following,
 .mini-button {
@@ -415,22 +435,34 @@ a {
   font-size: 10px;
 }
 
-.progress-row div {
+.progress-track {
   position: relative;
   flex: 1;
-  height: 3px;
+  height: 14px;
   border-radius: 999px;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.progress-track::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 0;
+  left: 0;
+  height: 3px;
+  border-radius: inherit;
   background: rgba(0, 0, 0, 0.12);
 }
 
 .progress-row i {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: 5px;
+  height: 3px;
   left: 0;
-  width: 34%;
   border-radius: inherit;
   background: #25251f;
+  transition: width 120ms linear;
 }
 
 .bottom-nav {
@@ -440,9 +472,9 @@ a {
   left: 0;
   z-index: 40;
   display: flex;
-  height: calc(86px + env(safe-area-inset-bottom));
-  align-items: flex-start;
-  padding: 0 6px calc(26px + env(safe-area-inset-bottom));
+  height: calc(64px + env(safe-area-inset-bottom));
+  align-items: center;
+  padding: 0 6px env(safe-area-inset-bottom);
   border-top: 1px solid rgba(0, 0, 0, 0.07);
   background: rgba(255, 255, 255, 0.86);
   backdrop-filter: blur(24px);
@@ -451,7 +483,7 @@ a {
 .bottom-nav button {
   display: flex;
   flex: 1;
-  height: 56px;
+  height: 60px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -1031,7 +1063,7 @@ a {
 
 @media (max-height: 720px) {
   .action-rail {
-    bottom: calc(150px + env(safe-area-inset-bottom));
+    bottom: calc(118px + env(safe-area-inset-bottom));
     gap: 10px;
   }
 
@@ -1042,6 +1074,7 @@ a {
 
   .clip-meta {
     gap: 8px;
+    bottom: calc(66px + env(safe-area-inset-bottom));
   }
 
   .source-link {
