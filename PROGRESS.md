@@ -674,3 +674,48 @@ resumes from zero.
 - The measurement harness above is worth re-running after any feed change: hook
   `HTMLMediaElement.prototype.play`, drive `.feed-scroll` in fixed steps, count distinct
   activations. A regression here is silent and only shows up as inflated impressions.
+
+## P0 closed live — migrations 003/004 applied — DONE 2026-08-02
+
+**Applied:** `003_auth_probe`, `004_revoke_default_table_grants` to project
+`nlooigmwuqqhhnontlgp` via `python scripts/apply_migrations.py`.
+
+The ledger already held `001` and `002` with matching checksums, so the runner reported
+them `already-applied` and only ran `003` and `004`. That is the first real proof that
+`apply_pending_migrations()` works against a live database rather than a fake.
+
+**Tests:** `python -m pytest tests/live/test_db_privileges.py -m live` — **52 passed**.
+
+**Re-verified from outside the network, publishable key only:**
+
+| Probe | Before | After |
+|---|---|---|
+| `POST /rest/v1/clips` | `42501 new row violates row-level security policy` | `42501 permission denied for table clips` |
+| `GET /rest/v1/clip_features` | `200 []` | `42501 permission denied` |
+| `GET /rest/v1/jobs` | `200 []` | `42501 permission denied` |
+| `GET /rest/v1/pipeline_runs` | `200 []` | `42501 permission denied` |
+| `POST /rest/v1/rpc/auth_probe` | `404 PGRST202` | `42501 permission denied for function auth_probe` |
+| `GET /rest/v1/clips` | 16 rows | 16 rows |
+
+The first row is the finding and the fix in one line. `violates row-level security policy`
+means the grant was present and the statement reached the policy check; `permission denied`
+means the grant is gone. The last row is the no-regression check on the public feed.
+
+`auth_probe` moving from `404` to `permission denied` is half the Clerk proof: `anon` is
+correctly refused. The other half needs a signed-in session.
+
+**Blocked / needs a decision:**
+- **`P0-9` — rotate the Supabase Management access token.** It was pasted into a chat
+  transcript on 2026-08-02 to unblock this work, with the account holder's explicit
+  agreement to rotate afterwards. Revoke at Supabase dashboard -> Account -> Access Tokens
+  and replace the value in the gitignored `.env`. The `sk_live_...` Clerk secret key from
+  the previous session is still outstanding and unrelated to this repo.
+- The Clerk -> Supabase token link is still unverified end to end. Needs a sign-in.
+
+**Next agent should know:**
+- `.env` at the repo root now holds `RIKET_SUPABASE_PROJECT_REF` and
+  `RIKET_SUPABASE_ACCESS_TOKEN`, so `python -m pytest -m live` and
+  `python scripts/apply_migrations.py` both work without further setup.
+- New tables in `public` are now unreachable by default. After `create table public.foo`,
+  add an explicit `grant select on public.foo to anon` if the browser should read it.
+  Silence is denial, deliberately.

@@ -100,17 +100,23 @@ by being started later.
 Do this first. It is small, it is the only item that is a live risk right now, and everything
 else adds tables to a database whose privilege model is unverified.
 
-> **Status 2026-08-02.** The code and tests for this block are complete and committed.
-> Migrations `003` and `004` are **written but not yet applied** to project
-> `nlooigmwuqqhhnontlgp`, so the `anon` grant finding described in §1 is still live and
-> `tests/live/test_db_privileges.py` will fail until they are. Apply with:
+> **Status 2026-08-02 — CLOSED.** Migrations `003` and `004` are applied to project
+> `nlooigmwuqqhhnontlgp` and `python -m pytest tests/live/test_db_privileges.py -m live`
+> is green (52 passed). Re-verified from outside with nothing but the publishable key:
 >
-> ```
-> python scripts/apply_migrations.py
-> ```
+> | Probe | Before | After |
+> |---|---|---|
+> | `POST /rest/v1/clips` | `42501 new row violates row-level security policy` | `42501 permission denied for table clips` |
+> | `GET /rest/v1/clip_features` | `200 []` | `42501 permission denied` |
+> | `POST /rest/v1/rpc/auth_probe` | `404 PGRST202` | `42501 permission denied for function auth_probe` |
+> | `GET /rest/v1/clips` | 16 rows | 16 rows |
 >
-> then re-run `python -m pytest tests/live/test_db_privileges.py -m live`. Only mark
-> `P0-4` and `P0-7` fully closed once that run is green.
+> The first row is the whole point. `violates row-level security policy` means the grant
+> was there and the statement reached the policy check; `permission denied` means it is
+> gone. The last row confirms no regression to the public feed.
+>
+> Only `P0-8` (reconcile live rows against known runs) and `P0-9` (key rotation decision)
+> remain open in this block.
 
 - [x] **P0-1 · DONE 2026-08-02 — Verify the deployed privilege on `publish_clip_batch`.**
       Do not assume it is safe and do not assume it is broken. Run the check in Appendix B
