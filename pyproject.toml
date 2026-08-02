@@ -1,0 +1,54 @@
+[project]
+name = "riket-pipeline"
+version = "0.1.0"
+description = "Pipeline foundations for Swedish Riksdagen short-form clip generation."
+requires-python = ">=3.11"
+dependencies = [
+  "faster-whisper==1.2.1",
+  "imageio-ffmpeg==0.6.0",
+  "opencv-python==4.11.0.86",
+  "pydantic==2.11.7",
+  "pydantic-settings==2.10.1",
+  "praat-parselmouth==0.4.7",
+  "scenedetect==0.6.6",
+  "structlog==25.4.0",
+  "whisperx==3.8.6",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy==1.17.1",
+  "pytest==8.4.1",
+  "ruff==0.12.7",
+]
+
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "live: tests that hit real external services",
+  "slow: tests that are too slow for the default local run",
+]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["pydantic_settings.*", "structlog.*"]
+ignore_missing_imports = true

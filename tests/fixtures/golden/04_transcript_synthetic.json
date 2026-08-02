@@ -1,0 +1,53 @@
+{
+  "language": "sv",
+  "model": "fake-kb-whisper-small",
+  "sentences": [
+    {
+      "end_s": 7.0,
+      "index": 0,
+      "start_s": 5.0,
+      "text": "Herr talman.",
+      "word_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "end_s": 9.0,
+      "index": 1,
+      "start_s": 7.0,
+      "text": "Testar C4.",
+      "word_indices": [
+        2,
+        3
+      ]
+    }
+  ],
+  "speech_id": "transcribefixture_anf1",
+  "words": [
+    {
+      "end_s": 6.0,
+      "probability": 0.9,
+      "start_s": 5.0,
+      "text": "Herr"
+    },
+    {
+      "end_s": 7.0,
+      "probability": 0.8,
+      "start_s": 6.0,
+      "text": "talman."
+    },
+    {
+      "end_s": 8.5,
+      "probability": 0.7,
+      "start_s": 7.0,
+      "text": "Testar"
+    },
+    {
+      "end_s": 9.0,
+      "probability": 0.6,
+      "start_s": 8.5,
+      "text": "C4."
+    }
+  ]
+}

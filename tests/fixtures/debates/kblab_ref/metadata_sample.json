@@ -1,0 +1,222 @@
+{
+  "debates": [
+    {
+      "debatedate": "2022-04-08",
+      "dokid": "H910420",
+      "speeches": [
+        {
+          "anforande_nummer": "29",
+          "end_adjusted_s": 252.0,
+          "end_s": 254.0,
+          "party": "S",
+          "speaker": "Karl-Petter Thorwaldsson",
+          "start_adjusted_s": 10.4,
+          "start_s": 8.0
+        },
+        {
+          "anforande_nummer": "30",
+          "end_adjusted_s": 496.7,
+          "end_s": 498.0,
+          "party": "C",
+          "speaker": "Magnus Ek",
+          "start_adjusted_s": 256.3,
+          "start_s": 254.0
+        },
+        {
+          "anforande_nummer": "31",
+          "end_adjusted_s": 724.1,
+          "end_s": 726.0,
+          "party": "S",
+          "speaker": "Karl-Petter Thorwaldsson",
+          "start_adjusted_s": 501.3,
+          "start_s": 498.0
+        },
+        {
+          "anforande_nummer": "32",
+          "end_adjusted_s": 971.1,
+          "end_s": 972.0,
+          "party": "C",
+          "speaker": "Magnus Ek",
+          "start_adjusted_s": 729.0,
+          "start_s": 726.0
+        },
+        {
+          "anforande_nummer": "33",
+          "end_adjusted_s": 1207.9,
+          "end_s": 1210.0,
+          "party": "S",
+          "speaker": "Karl-Petter Thorwaldsson",
+          "start_adjusted_s": 974.5,
+          "start_s": 972.0
+        },
+        {
+          "anforande_nummer": "34",
+          "end_adjusted_s": 1335.3,
+          "end_s": 1337.0,
+          "party": "C",
+          "speaker": "Magnus Ek",
+          "start_adjusted_s": 1213.3,
+          "start_s": 1210.0
+        },
+        {
+          "anforande_nummer": "35",
+          "end_adjusted_s": 1452.3,
+          "end_s": 1453.0,
+          "party": "S",
+          "speaker": "Karl-Petter Thorwaldsson",
+          "start_adjusted_s": 1339.6,
+          "start_s": 1337.0
+        }
+      ]
+    },
+    {
+      "debatedate": "2022-05-20",
+      "dokid": "H910485",
+      "speeches": [
+        {
+          "anforande_nummer": "8",
+          "end_adjusted_s": 181.5,
+          "end_s": 184.0,
+          "party": "S",
+          "speaker": "Johan Danielsson",
+          "start_adjusted_s": 15.7,
+          "start_s": 14.0
+        },
+        {
+          "anforande_nummer": "9",
+          "end_adjusted_s": 428.4,
+          "end_s": 430.0,
+          "party": "SD",
+          "speaker": "Mikael Eskilandersson",
+          "start_adjusted_s": 186.7,
+          "start_s": 184.0
+        },
+        {
+          "anforande_nummer": "10",
+          "end_adjusted_s": 661.5,
+          "end_s": 663.0,
+          "party": "S",
+          "speaker": "Johan Danielsson",
+          "start_adjusted_s": 430.8,
+          "start_s": 430.0
+        },
+        {
+          "anforande_nummer": "11",
+          "end_adjusted_s": 905.3,
+          "end_s": 907.0,
+          "party": "SD",
+          "speaker": "Mikael Eskilandersson",
+          "start_adjusted_s": 664.9,
+          "start_s": 663.0
+        },
+        {
+          "anforande_nummer": "12",
+          "end_adjusted_s": 1112.5,
+          "end_s": 1115.0,
+          "party": "S",
+          "speaker": "Johan Danielsson",
+          "start_adjusted_s": 907.6,
+          "start_s": 907.0
+        },
+        {
+          "anforande_nummer": "13",
+          "end_adjusted_s": 1234.2,
+          "end_s": 1236.0,
+          "party": "SD",
+          "speaker": "Mikael Eskilandersson",
+          "start_adjusted_s": 1118.0,
+          "start_s": 1115.0
+        },
+        {
+          "anforande_nummer": "14",
+          "end_adjusted_s": 1350.7,
+          "end_s": 1352.0,
+          "party": "S",
+          "speaker": "Johan Danielsson",
+          "start_adjusted_s": 1237.8,
+          "start_s": 1236.0
+        }
+      ]
+    },
+    {
+      "debatedate": "2022-03-15",
+      "dokid": "H910377",
+      "speeches": [
+        {
+          "anforande_nummer": "94",
+          "end_adjusted_s": 168.2,
+          "end_s": 171.0,
+          "party": "S",
+          "speaker": "Johan Danielsson",
+          "start_adjusted_s": 12.4,
+          "start_s": 11.0
+        },
+        {
+          "anforande_nummer": "95",
+          "end_adjusted_s": 416.9,
+          "end_s": 418.0,
+          "party": "M",
+          "speaker": "Lars Beckman",
+          "start_adjusted_s": 176.2,
+          "start_s": 174.0
+        },
+        {
+          "anforande_nummer": "96",
+          "end_adjusted_s": 533.0,
+          "end_s": 535.0,
+          "party": "M",
+          "speaker": "Kjell Jansson",
+          "start_adjusted_s": 425.5,
+          "start_s": 424.0
+        },
+        {
+          "anforande_nummer": "97",
+          "end_adjusted_s": 773.8,
+          "end_s": 775.0,
+          "party": "S",
+          "speaker": "Johan Danielsson",
+          "start_adjusted_s": 537.1,
+          "start_s": 535.0
+        },
+        {
+          "anforande_nummer": "98",
+          "end_adjusted_s": 1017.5,
+          "end_s": 1019.0,
+          "party": "M",
+          "speaker": "Lars Beckman",
+          "start_adjusted_s": 776.5,
+          "start_s": 775.0
+        },
+        {
+          "anforande_nummer": "99",
+          "end_adjusted_s": 1264.1,
+          "end_s": 1265.0,
+          "party": "S",
+          "speaker": "Johan Danielsson",
+          "start_adjusted_s": 1025.6,
+          "start_s": 1024.0
+        },
+        {
+          "anforande_nummer": "100",
+          "end_adjusted_s": 1386.9,
+          "end_s": 1389.0,
+          "party": "M",
+          "speaker": "Lars Beckman",
+          "start_adjusted_s": 1267.2,
+          "start_s": 1265.0
+        },
+        {
+          "anforande_nummer": "101",
+          "end_adjusted_s": 1497.7,
+          "end_s": 1498.0,
+          "party": "S",
+          "speaker": "Johan Danielsson",
+          "start_adjusted_s": 1391.6,
+          "start_s": 1389.0
+        }
+      ]
+    }
+  ],
+  "notes": "Sampled by C3 from KBLab adjusted_metadata.csv.gz; debates selected from 2022 where Riksdagen raw metadata plus the C3 metadata bias lands within 2s of KBLab adjusted boundaries.",
+  "source_url": "https://github.com/kb-labb/riksdagen_anforanden/blob/main/metadata/adjusted_metadata.csv.gz"
+}

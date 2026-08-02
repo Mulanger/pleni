@@ -1,0 +1,42 @@
+{
+  "HD01SfU35_90051909-8a5f-f111-8b6f-6805cafea079_c01.json": {
+    "first": {
+      "h": 106.667,
+      "is_speaking": true,
+      "t": 78.6,
+      "w": 106.75,
+      "x": 370.067,
+      "y": 62.222
+    },
+    "last": {
+      "h": 99.556,
+      "is_speaking": true,
+      "t": 137.6,
+      "w": 99.633,
+      "x": 378.962,
+      "y": 71.111
+    },
+    "sample_count": 296,
+    "track_id": "track-001"
+  },
+  "HD01SfU35_90051909-8a5f-f111-8b6f-6805cafea079_c02.json": {
+    "first": {
+      "h": 96.0,
+      "is_speaking": true,
+      "t": 40.2,
+      "w": 96.075,
+      "x": 378.962,
+      "y": 86.4
+    },
+    "last": {
+      "h": 104.889,
+      "is_speaking": true,
+      "t": 78.4,
+      "w": 104.971,
+      "x": 352.275,
+      "y": 64.0
+    },
+    "sample_count": 192,
+    "track_id": "track-001"
+  }
+}

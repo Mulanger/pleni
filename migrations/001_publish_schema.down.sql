@@ -1,0 +1,9 @@
+drop function if exists public.publish_clip_batch(jsonb);
+drop table if exists public.pipeline_runs;
+drop table if exists public.jobs;
+drop table if exists public.engagement_events;
+drop table if exists public.clip_features;
+drop table if exists public.clips;
+drop table if exists public.speeches;
+drop table if exists public.politicians;
+drop table if exists public.sources;
