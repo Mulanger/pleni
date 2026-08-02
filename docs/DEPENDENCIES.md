@@ -13,3 +13,4 @@
 - `pytest==8.4.1` - test harness and golden-file helper tests.
 - `ruff==0.12.7` - formatter and linter.
 - `mypy==1.17.1` - strict static typing for `src/`.
+- `Ollama==0.32.5` - optional local structured-output runtime for C7 clip titles; the tested model is `qwen3:8b`. It is external to the Python environment and C7 retains a deterministic fallback when unavailable.

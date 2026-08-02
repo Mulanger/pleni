@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 from src.contracts import (
@@ -11,11 +12,15 @@ from src.contracts import (
     Scene,
     SelectedClip,
     Sentence,
+    Source,
     Speech,
     Transcript,
     Word,
 )
+from src.errors import ExternalServiceError
 from src.paths import WorkPaths, work_paths
+from src.scoring.text_features import title_from_candidate_text
+from src.scoring.titles import GeneratedTitle
 from src.stages.candidates import generate_candidates_dokid
 from src.stages.select import select_dokid
 
@@ -61,12 +66,67 @@ def test_select_stage_scores_candidates_and_writes_selected(tmp_path: Path) -> N
     assert any(candidate.gate_passed for candidate in scored_candidates)
 
 
+def test_select_stage_can_replace_fallback_titles(tmp_path: Path) -> None:
+    dokid = "rankfixture"
+    _write_stage_inputs(tmp_path, dokid)
+    generate_candidates_dokid(dokid, work_dir=tmp_path)
+
+    artifacts = select_dokid(
+        dokid,
+        work_dir=tmp_path,
+        title_generator=_FixedTitleGenerator(),
+    )
+
+    selected = [
+        SelectedClip.model_validate(item)
+        for item in json.loads(artifacts[0].read_text(encoding="utf-8"))
+    ]
+    assert selected
+    assert all(clip.title == "Andersson: Regeringen måste svara på frågan" for clip in selected)
+
+
+def test_select_stage_keeps_fallback_title_when_generator_fails(tmp_path: Path) -> None:
+    dokid = "rankfixture"
+    _write_stage_inputs(tmp_path, dokid)
+    generate_candidates_dokid(dokid, work_dir=tmp_path)
+
+    artifacts = select_dokid(
+        dokid,
+        work_dir=tmp_path,
+        title_generator=_FailingTitleGenerator(),
+    )
+
+    selected = [
+        SelectedClip.model_validate(item)
+        for item in json.loads(artifacts[0].read_text(encoding="utf-8"))
+    ]
+    assert selected
+    assert all(clip.title == title_from_candidate_text(clip.transcript) for clip in selected)
+
+
 def _write_stage_inputs(root: Path, dokid: str) -> WorkPaths:
     paths = work_paths(dokid, root=root)
     paths.ensure_directories()
     speech = _speech(dokid)
     transcript = _transcript(dokid)
     audio_features = _audio_features(speech.speech_id)
+    paths.source_json.write_text(
+        json.dumps(
+            {
+                "source": Source(
+                    dokid=dokid,
+                    title="Testdebatt",
+                    debate_type="test",
+                    debate_date=date(2026, 1, 1),
+                    source_url="https://example.invalid/test",
+                    duration_s=120.0,
+                ).model_dump(mode="json")
+            },
+            ensure_ascii=False,
+            default=str,
+        ),
+        encoding="utf-8",
+    )
     paths.scenes_json.write_text(
         json.dumps(
             [
@@ -172,3 +232,32 @@ def _audio_features(speech_id: str) -> AudioFeatures:
 
 def _read_candidates(path: Path) -> list[Candidate]:
     return [Candidate.model_validate(item) for item in json.loads(path.read_text(encoding="utf-8"))]
+
+
+class _FixedTitleGenerator:
+    def generate(
+        self,
+        *,
+        clip: SelectedClip,
+        speech: Speech,
+        debate_title: str,
+    ) -> GeneratedTitle:
+        assert clip.transcript
+        assert speech.speaker_name == "Anna Andersson"
+        assert debate_title == "Testdebatt"
+        return GeneratedTitle(
+            title="Andersson: Regeringen måste svara på frågan",
+            supporting_span="Men regeringen måste svara på frågan.",
+            attempts=1,
+        )
+
+
+class _FailingTitleGenerator:
+    def generate(
+        self,
+        *,
+        clip: SelectedClip,
+        speech: Speech,
+        debate_title: str,
+    ) -> GeneratedTitle:
+        raise ExternalServiceError("test title failure")
