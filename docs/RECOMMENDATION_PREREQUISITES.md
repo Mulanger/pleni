@@ -432,7 +432,7 @@ feed.
       Sign them; verify them; never accept a raw clip ID as proof of exposure.
 - [ ] **T-7 — Idempotent ingestion.** Replaying a batch converges to one row per event UUID.
       *Accept:* replay test, plus an out-of-order and an offline-then-flush test.
-- [ ] **T-8 — Impression definition, written down and implemented once.** Roughly 72% visible for
+- [x] **T-8 · PARTIAL 2026-08-02 — Impression definition, written down and implemented once.** Roughly 72% visible for
       at least one second while the document is visible. Both client and analytics use the same
       definition; a metric with two definitions is a metric with none.
 - [ ] **T-9 — Watch time is wall-clock active playback**, accumulated while playing *and*
@@ -463,13 +463,13 @@ training data, so they must change *before* telemetry is switched on, not after.
       `likes: 1200 + index * 143` and `comments: 64 + index * 17`. On a political feed, invented
       popularity figures shown as fact are a credibility problem well before they are a data
       problem. Show real counts or show none.
-- [ ] **FE-3 · GATE — Replace `loop` on the `<video>` element** (`App.tsx:358`) or instrument
+- [x] **FE-3 · DONE 2026-08-02 — Replace `loop` on the `<video>` element** (`App.tsx:358`) or instrument
       loop boundaries explicitly. Right now completion and replay are indistinguishable, so two
       of the strongest positive signals are unusable.
-- [ ] **FE-4 · GATE — Replace immediate `isIntersecting` activation** (`App.tsx:238`) with an
+- [x] **FE-4 · DONE 2026-08-02 — Replace immediate `isIntersecting` activation** (`App.tsx:238`) with an
       intersection-ratio winner plus a dwell timer. A fast scroll past ten clips currently marks
       ten clips active.
-- [ ] **FE-5 — Model `autoplay_blocked` separately from a user pause.** Browser policy blocking
+- [x] **FE-5 · DONE 2026-08-02 — Model `autoplay_blocked` separately from a user pause.** Browser policy blocking
       unmuted autoplay must never be recorded as a negative preference. This is a known live
       behaviour, already noted in `PROGRESS.md`.
 - [ ] **FE-6 — Explicit playback state machine**: idle / blocked / playing / paused / seeking /

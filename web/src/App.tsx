@@ -42,6 +42,21 @@ type PlaybackFlash = { clipId: string; icon: "play" | "pause"; nonce: number };
 
 const partyCodes = Object.keys(PARTIES).filter((code) => code !== "NONE") as PartyCode[];
 
+/**
+ * Visible fraction that counts as seeing a clip (prerequisite T-8).
+ *
+ * Written down once and used both to pick the active clip and, later, to decide
+ * what an impression is. A metric with two definitions is a metric with none.
+ */
+const IMPRESSION_VISIBLE_FRACTION = 0.72;
+
+/**
+ * How long a clip must hold the visibility lead before it becomes active
+ * (prerequisite FE-4). Long enough that scrolling past does not activate,
+ * short enough to feel instant when the viewer actually stops.
+ */
+const ACTIVATION_DWELL_MS = 180;
+
 function App() {
   const [tab, setTab] = useState<Tab>("hem");
   const [feedMode, setFeedMode] = useState<FeedMode>("fordig");
@@ -235,19 +250,49 @@ function FeedScreen({
 }) {
   const [activeId, setActiveId] = useState(clips[0]?.id ?? "");
   const [paused, setPaused] = useState<BooleanMap>({});
+  /**
+   * FE-5. Autoplay blocked by browser policy is not a user pause. Conflating
+   * them would record "browser refused to start unmuted audio" as a negative
+   * preference signal, which is the opposite of what happened. Kept separate
+   * from `paused` so the two can never be read as the same thing.
+   */
+  const [blocked, setBlocked] = useState<BooleanMap>({});
   const [currentTimes, setCurrentTimes] = useState<NumberMap>({});
   const [durations, setDurations] = useState<NumberMap>({});
   const [playbackFlash, setPlaybackFlash] = useState<PlaybackFlash | null>(null);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const flashTimer = useRef<number | null>(null);
+  /**
+   * FE-3. Loop boundaries per clip. A completion is the first `ended`; every
+   * later one is a deliberate replay of a clip the viewer chose not to scroll
+   * past. F2 reads this when the event stream exists; keeping the count now
+   * means the distinction is observable from the day telemetry is switched on.
+   */
+  const loopCounts = useRef<Record<string, number>>({});
 
   useEffect(() => {
     setActiveId(clips[0]?.id ?? "");
     setPaused({});
+    setBlocked({});
     setCurrentTimes({});
     setDurations({});
     setPlaybackFlash(null);
+    loopCounts.current = {};
   }, [clips]);
+
+  /**
+   * FE-3. Explicit loop rather than the `loop` attribute. The clip restarts
+   * exactly as before; the difference is that the boundary is now a countable
+   * event instead of an invisible seek to zero.
+   */
+  const handleClipEnded = (clipId: string, video: HTMLVideoElement) => {
+    loopCounts.current[clipId] = (loopCounts.current[clipId] ?? 0) + 1;
+    if (clipId !== activeId) {
+      return;
+    }
+    video.currentTime = 0;
+    void video.play().catch(() => setBlocked((state) => ({ ...state, [clipId]: true })));
+  };
 
   useEffect(() => {
     return () => {
@@ -257,19 +302,77 @@ function FeedScreen({
     };
   }, []);
 
+  /**
+   * FE-4 (GATE). Activation used to be `if (entry.isIntersecting) setActiveId(...)`
+   * at a single 0.72 threshold, which had two problems:
+   *
+   * 1. Every entry that crossed the threshold won, in callback order. A fast
+   *    scroll past ten clips marked ten clips active — and once telemetry
+   *    exists, that is ten impressions for a feed the viewer never saw.
+   * 2. Two clips can exceed 0.72 during a slow drag, and the winner was
+   *    whichever the browser reported last.
+   *
+   * Now: keep every ratio, pick the single highest above the visibility floor,
+   * and only commit it after it has held the lead for a dwell period. Scrolling
+   * straight past a clip never activates it.
+   *
+   * `IMPRESSION_VISIBLE_FRACTION` is the shared definition T-8 asks for — the
+   * same number must drive both this activation and the analytics query, or the
+   * metric has two definitions and therefore none.
+   */
   useEffect(() => {
+    const ratios = new Map<string, number>();
+    let dwellTimer: number | null = null;
+    let pendingWinner: string | null = null;
+
+    const commitWinner = () => {
+      let best: string | null = null;
+      let bestRatio = IMPRESSION_VISIBLE_FRACTION;
+      ratios.forEach((ratio, clipId) => {
+        if (ratio >= bestRatio) {
+          best = clipId;
+          bestRatio = ratio;
+        }
+      });
+
+      if (best === null || best === pendingWinner) {
+        return;
+      }
+      pendingWinner = best;
+
+      if (dwellTimer !== null) {
+        window.clearTimeout(dwellTimer);
+      }
+      dwellTimer = window.setTimeout(() => {
+        dwellTimer = null;
+        if (pendingWinner !== null) {
+          setActiveId(pendingWinner);
+        }
+      }, ACTIVATION_DWELL_MS);
+    };
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setActiveId((entry.target as HTMLElement).dataset.clipId ?? "");
+          const clipId = (entry.target as HTMLElement).dataset.clipId;
+          if (clipId) {
+            ratios.set(clipId, entry.intersectionRatio);
           }
         });
+        commitWinner();
       },
-      { threshold: 0.72 }
+      // Several thresholds so the ratio map stays current through a scroll
+      // rather than only updating as one boundary is crossed.
+      { threshold: [0, 0.25, 0.5, IMPRESSION_VISIBLE_FRACTION, 0.9, 1] }
     );
+
     document.querySelectorAll<HTMLElement>("[data-clip-id]").forEach((element) => observer.observe(element));
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (dwellTimer !== null) {
+        window.clearTimeout(dwellTimer);
+      }
+    };
   }, [clips]);
 
   useEffect(() => {
@@ -281,8 +384,16 @@ function FeedScreen({
       if (clipId === activeId) {
         video
           .play()
-          .then(() => setPaused((state) => ({ ...state, [clipId]: false })))
-          .catch(() => setPaused((state) => ({ ...state, [clipId]: true })));
+          .then(() => {
+            setPaused((state) => ({ ...state, [clipId]: false }));
+            setBlocked((state) => ({ ...state, [clipId]: false }));
+          })
+          .catch(() => {
+            // FE-5: browser policy refused unmuted autoplay. Record it as
+            // blocked, never as a pause the viewer chose.
+            setPaused((state) => ({ ...state, [clipId]: true }));
+            setBlocked((state) => ({ ...state, [clipId]: true }));
+          });
       } else {
         video.pause();
       }
@@ -392,7 +503,11 @@ function FeedScreen({
                 autoPlay={clip.id === activeId}
                 playsInline
                 muted={muted}
-                loop
+                /* FE-3 (GATE): no `loop` attribute. Native looping made
+                   completion and deliberate replay indistinguishable, which
+                   costs two of the strongest positive signals. The clip still
+                   loops — see onEnded — but the boundary is now an event we
+                   can count. */
                 preload="metadata"
                 onLoadedMetadata={(event) => {
                   const duration = event.currentTarget.duration;
@@ -405,10 +520,30 @@ function FeedScreen({
                   const currentTime = event.currentTarget.currentTime;
                   setCurrentTimes((state) => ({ ...state, [clip.id]: currentTime }));
                 }}
-                onPlay={() => setPaused((state) => ({ ...state, [clip.id]: false }))}
+                onEnded={(event) => handleClipEnded(clip.id, event.currentTarget)}
+                onPlay={() => {
+                  setPaused((state) => ({ ...state, [clip.id]: false }));
+                  setBlocked((state) => ({ ...state, [clip.id]: false }));
+                }}
                 onPause={() => setPaused((state) => ({ ...state, [clip.id]: true }))}
               />
               {flashIcon && flashNonce !== null && <PlaybackFlashIcon key={flashNonce} icon={flashIcon} />}
+              {/* FE-5: only shown when browser policy refused autoplay, never
+                  for a pause the viewer chose. AGENTS.md documents this
+                  affordance; without it a blocked clip is a frozen poster with
+                  no visible way to start it. */}
+              {blocked[clip.id] && clip.id === activeId && (
+                <button
+                  className="center-play"
+                  aria-label="Spela upp"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleClipPlayback(clip.id);
+                  }}
+                >
+                  <Play size={30} fill="currentColor" />
+                </button>
+              )}
               <button
                 className="mute-button"
                 aria-label={muted ? "Slå på ljud" : "Stäng av ljud"}
@@ -474,7 +609,9 @@ function ActionRail({
       <ActionButton label="Gilla" active={liked} onClick={onLike}>
         <Heart size={21} fill={liked ? "currentColor" : "none"} />
       </ActionButton>
-      <ActionButton label="Kommentera">
+      {/* Icon only: no Swedish word for this fits the 54px rail, and there is
+          no real count to put there. The accessible name still describes it. */}
+      <ActionButton label="Kommentarer" hideLabel>
         <MessageCircle size={21} />
       </ActionButton>
       <ActionButton label="Spara" active={saved} onClick={onSave}>
@@ -491,11 +628,14 @@ function ActionButton({
   children,
   label,
   active = false,
+  hideLabel = false,
   onClick
 }: {
   children: React.ReactNode;
   label: string;
   active?: boolean;
+  /** Keep the accessible name, drop the visible caption. */
+  hideLabel?: boolean;
   onClick?: () => void;
 }) {
   return (
@@ -503,7 +643,7 @@ function ActionButton({
       <button className={active ? "active" : ""} onClick={onClick} aria-label={label}>
         {children}
       </button>
-      <span>{label}</span>
+      {!hideLabel && <span>{label}</span>}
     </div>
   );
 }
