@@ -399,3 +399,22 @@ This file is the source of truth for chunk status and handoff notes.
 
 **Next agent should know:**
 - Local Vite QA ran at `http://127.0.0.1:5199/` using Chrome mobile viewports 393x852, 360x640, and 320x568.
+
+## Frontend feed cleanup - DONE 2026-08-02
+
+**Built:** `web/src/App.tsx`, `web/src/styles.css`
+**Tests:** `node .\node_modules\typescript\bin\tsc --noEmit -p tsconfig.json` green, `node .\node_modules\vite\bin\vite.js build` green, `python tasks.py test lint typecheck` green.
+**Contracts touched:** none.
+
+**Decisions made:**
+- Removed the under-name clip tags (`svar`, archetype, `Klipp N`) from the feed overlay.
+- Removed the persistent center transport controls. Tapping the video now flashes only a play or pause icon for ~520 ms, then clears the screen again.
+
+**Observations (not fixed, out of scope):**
+- Fast seeking remains available through the draggable progress scrubber rather than persistent center skip buttons.
+
+**Blocked / needs a decision:**
+- none
+
+**Next agent should know:**
+- Chrome mobile QA verified zero `.clip-context` elements, zero persistent transport controls, and a transient `.playback-flash` that disappears after tap.

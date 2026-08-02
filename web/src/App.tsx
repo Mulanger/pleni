@@ -6,13 +6,11 @@ import {
   ChevronRight,
   Clock3,
   Download,
-  FastForward,
   Heart,
   Home,
   MessageCircle,
   Pause,
   Play,
-  Rewind,
   Search,
   Share2,
   ShieldCheck,
@@ -29,6 +27,7 @@ import type { ClipItem, FeedMode, PartyCode, PersonProfile, Tab } from "./types"
 
 type BooleanMap = Record<string, boolean>;
 type NumberMap = Record<string, number>;
+type PlaybackFlash = { clipId: string; icon: "play" | "pause"; nonce: number };
 
 const partyCodes = Object.keys(PARTIES).filter((code) => code !== "NONE") as PartyCode[];
 
@@ -212,22 +211,22 @@ function FeedScreen({
   const [paused, setPaused] = useState<BooleanMap>({});
   const [currentTimes, setCurrentTimes] = useState<NumberMap>({});
   const [durations, setDurations] = useState<NumberMap>({});
-  const [controlClipId, setControlClipId] = useState<string | null>(null);
+  const [playbackFlash, setPlaybackFlash] = useState<PlaybackFlash | null>(null);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
-  const controlsTimer = useRef<number | null>(null);
+  const flashTimer = useRef<number | null>(null);
 
   useEffect(() => {
     setActiveId(clips[0]?.id ?? "");
     setPaused({});
     setCurrentTimes({});
     setDurations({});
-    setControlClipId(null);
+    setPlaybackFlash(null);
   }, [clips]);
 
   useEffect(() => {
     return () => {
-      if (controlsTimer.current !== null) {
-        window.clearTimeout(controlsTimer.current);
+      if (flashTimer.current !== null) {
+        window.clearTimeout(flashTimer.current);
       }
     };
   }, []);
@@ -272,21 +271,15 @@ function FeedScreen({
     });
   }, [muted]);
 
-  useEffect(() => {
-    setControlClipId(null);
-  }, [activeId]);
-
-  const revealControls = (clipId: string, sticky = false) => {
-    setControlClipId(clipId);
-    if (controlsTimer.current !== null) {
-      window.clearTimeout(controlsTimer.current);
-      controlsTimer.current = null;
+  const flashPlayback = (clipId: string, icon: PlaybackFlash["icon"]) => {
+    if (flashTimer.current !== null) {
+      window.clearTimeout(flashTimer.current);
+      flashTimer.current = null;
     }
-    if (!sticky) {
-      controlsTimer.current = window.setTimeout(() => {
-        setControlClipId((current) => (current === clipId ? null : current));
-      }, 1400);
-    }
+    setPlaybackFlash({ clipId, icon, nonce: Date.now() });
+    flashTimer.current = window.setTimeout(() => {
+      setPlaybackFlash((current) => (current?.clipId === clipId ? null : current));
+    }, 520);
   };
 
   const toggleClipPlayback = (clipId: string) => {
@@ -300,16 +293,16 @@ function FeedScreen({
         .play()
         .then(() => {
           setPaused((state) => ({ ...state, [clipId]: false }));
-          revealControls(clipId);
+          flashPlayback(clipId, "play");
         })
         .catch(() => {
           setPaused((state) => ({ ...state, [clipId]: true }));
-          revealControls(clipId, true);
+          flashPlayback(clipId, "play");
         });
     } else {
       video.pause();
       setPaused((state) => ({ ...state, [clipId]: true }));
-      revealControls(clipId, true);
+      flashPlayback(clipId, "pause");
     }
   };
 
@@ -323,13 +316,6 @@ function FeedScreen({
     const nextTime = Math.min(Math.max(seconds, 0), duration);
     video.currentTime = nextTime;
     setCurrentTimes((state) => ({ ...state, [clipId]: nextTime }));
-  };
-
-  const skipClip = (clipId: string, deltaSeconds: number) => {
-    const video = videoRefs.current[clipId];
-    const currentTime = video?.currentTime ?? currentTimes[clipId] ?? 0;
-    seekClip(clipId, currentTime + deltaSeconds);
-    revealControls(clipId);
   };
 
   return (
@@ -351,8 +337,8 @@ function FeedScreen({
           const isLiked = !!liked[clip.id];
           const isSaved = !!saved[clip.id];
           const isFollowing = !!following[person.id];
-          const isPaused = paused[clip.id] ?? false;
-          const showTransport = activeId === clip.id && (isPaused || controlClipId === clip.id);
+          const flashIcon = playbackFlash?.clipId === clip.id ? playbackFlash.icon : null;
+          const flashNonce = playbackFlash?.clipId === clip.id ? playbackFlash.nonce : null;
           return (
             <article
               className="feed-item"
@@ -385,14 +371,7 @@ function FeedScreen({
                 onPlay={() => setPaused((state) => ({ ...state, [clip.id]: false }))}
                 onPause={() => setPaused((state) => ({ ...state, [clip.id]: true }))}
               />
-              {showTransport && (
-                <TransportControls
-                  paused={isPaused}
-                  onToggle={() => toggleClipPlayback(clip.id)}
-                  onSkipBack={() => skipClip(clip.id, -10)}
-                  onSkipForward={() => skipClip(clip.id, 10)}
-                />
-              )}
+              {flashIcon && flashNonce !== null && <PlaybackFlashIcon key={flashNonce} icon={flashIcon} />}
               <button
                 className="mute-button"
                 aria-label={muted ? "Slå på ljud" : "Stäng av ljud"}
@@ -430,30 +409,10 @@ function FeedScreen({
   );
 }
 
-function TransportControls({
-  paused,
-  onToggle,
-  onSkipBack,
-  onSkipForward
-}: {
-  paused: boolean;
-  onToggle: () => void;
-  onSkipBack: () => void;
-  onSkipForward: () => void;
-}) {
+function PlaybackFlashIcon({ icon }: { icon: PlaybackFlash["icon"] }) {
   return (
-    <div className="transport-controls" onClick={(event) => event.stopPropagation()} aria-label="Videokontroller">
-      <button className="transport-skip" onClick={onSkipBack} aria-label="Spola tillbaka 10 sekunder">
-        <Rewind size={21} fill="currentColor" />
-        <span>10</span>
-      </button>
-      <button className="transport-main" onClick={onToggle} aria-label={paused ? "Spela" : "Pausa"}>
-        {paused ? <Play size={25} fill="currentColor" /> : <Pause size={25} fill="currentColor" />}
-      </button>
-      <button className="transport-skip" onClick={onSkipForward} aria-label="Spola fram 10 sekunder">
-        <FastForward size={21} fill="currentColor" />
-        <span>10</span>
-      </button>
+    <div className="playback-flash" aria-hidden="true">
+      {icon === "play" ? <Play size={38} fill="currentColor" /> : <Pause size={38} fill="currentColor" />}
     </div>
   );
 }
@@ -550,11 +509,6 @@ function ClipMeta({
         >
           {following ? "Följer" : "Följ"}
         </button>
-      </div>
-      <div className="clip-context">
-        <span>{speechType}</span>
-        {clip.archetype && <span>{clip.archetype.toLowerCase()}</span>}
-        <span>Klipp {clip.rank}</span>
       </div>
       <div className="clip-title">{clip.title}</div>
       <div className="clip-subtitle">
