@@ -42,6 +42,31 @@ export interface ClipItem {
   debateDate: string;
   publishedAt: string | null;
   rank: number;
-  likes: number;
-  comments: number;
+  /**
+   * True for the built-in demo clips in `data.ts`.
+   *
+   * Prerequisite FE-1: sample clips must never generate telemetry. Tagging them
+   * on the item means a stray impression can be dropped at the source instead
+   * of relying on every call site to remember which array it is looking at.
+   *
+   * `likes` and `comments` used to live here and were fabricated arithmetic
+   * (`1200 + index * 143`). Invented popularity figures on political content are
+   * a credibility problem before they are a data problem — FE-2. Reintroduce
+   * them only when a real count exists behind them.
+   */
+  isSample: boolean;
+}
+
+/**
+ * Where a rendered feed came from. The UI must be able to tell the difference:
+ * substituting demo data for a failed request silently is exactly what FE-12
+ * forbids.
+ */
+export type ClipSource = "supabase" | "sample";
+
+export interface ClipFeed {
+  clips: ClipItem[];
+  source: ClipSource;
+  /** Present when the Supabase read failed and the feed is empty. */
+  error?: string;
 }

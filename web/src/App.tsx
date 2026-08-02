@@ -21,11 +21,20 @@ import {
   VolumeX,
   X
 } from "lucide-react";
-import { Show, SignInButton, SignOutButton, SignUpButton, UserButton, useUser } from "@clerk/react";
+import {
+  Show,
+  SignInButton,
+  SignOutButton,
+  SignUpButton,
+  UserButton,
+  useSession,
+  useUser
+} from "@clerk/react";
 import { clerkEnabled } from "./clerk";
-import { initials, PARTIES, partyInk, partyTint, PEOPLE, PERSON_CLIPS, SAMPLE_CLIPS, TRENDING } from "./data";
-import { loadPublishedClips } from "./supabase";
-import type { ClipItem, FeedMode, PartyCode, PersonProfile, Tab } from "./types";
+import { initials, PARTIES, partyInk, partyTint, PEOPLE, PERSON_CLIPS, TRENDING } from "./data";
+import { checkClerkSupabaseLink, loadPublishedClips } from "./supabase";
+import type { ClerkSupabaseLinkStatus } from "./supabase";
+import type { ClipItem, ClipSource, FeedMode, PartyCode, PersonProfile, Tab } from "./types";
 
 type BooleanMap = Record<string, boolean>;
 type NumberMap = Record<string, number>;
@@ -36,12 +45,16 @@ const partyCodes = Object.keys(PARTIES).filter((code) => code !== "NONE") as Par
 function App() {
   const [tab, setTab] = useState<Tab>("hem");
   const [feedMode, setFeedMode] = useState<FeedMode>("fordig");
-  const [clips, setClips] = useState<ClipItem[]>(SAMPLE_CLIPS);
+  // Starts empty, not seeded with demo clips (FE-1). A brief loading state is
+  // honest; a flash of fabricated content that then becomes real is not.
+  const [clips, setClips] = useState<ClipItem[]>([]);
+  const [clipSource, setClipSource] = useState<ClipSource>("supabase");
+  const [feedError, setFeedError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [partyFilter, setPartyFilter] = useState<PartyCode | null>(null);
-  const [liked, setLiked] = useState<BooleanMap>({ [SAMPLE_CLIPS[1]?.id ?? ""]: true });
+  const [liked, setLiked] = useState<BooleanMap>({});
   const [saved, setSaved] = useState<BooleanMap>({});
   const [muted, setMuted] = useState(false);
   const [following, setFollowing] = useState<BooleanMap>({});
@@ -63,14 +76,17 @@ function App() {
   useEffect(() => {
     let mounted = true;
     loadPublishedClips()
-      .then((published) => {
+      .then((feed) => {
         if (mounted) {
-          setClips(published);
+          setClips(feed.clips);
+          setClipSource(feed.source);
+          setFeedError(feed.error ?? null);
         }
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (mounted) {
-          setClips(SAMPLE_CLIPS);
+          setClips([]);
+          setFeedError(error instanceof Error ? error.message : "Okänt fel");
         }
       })
       .finally(() => {
@@ -124,6 +140,8 @@ function App() {
                 saved={saved}
                 following={following}
                 loading={loading}
+                clipSource={clipSource}
+                feedError={feedError}
                 onLike={(clipId) => setLiked((state) => ({ ...state, [clipId]: !state[clipId] }))}
                 onSave={(clipId) => setSaved((state) => ({ ...state, [clipId]: !state[clipId] }))}
                 onToggleFollow={(personId) =>
@@ -192,6 +210,8 @@ function FeedScreen({
   saved,
   following,
   loading,
+  clipSource,
+  feedError,
   onLike,
   onSave,
   onToggleFollow,
@@ -206,6 +226,8 @@ function FeedScreen({
   saved: BooleanMap;
   following: BooleanMap;
   loading: boolean;
+  clipSource: ClipSource;
+  feedError: string | null;
   onLike: (clipId: string) => void;
   onSave: (clipId: string) => void;
   onToggleFollow: (personId: string) => void;
@@ -335,6 +357,17 @@ function FeedScreen({
 
       {loading && <div className="loading-chip">Hämtar klipp</div>}
 
+      {clipSource === "sample" && <div className="loading-chip">Demodata</div>}
+
+      {/* FE-12: an honest empty state. Demo clips must never quietly stand in
+          for a failed or empty catalogue read. */}
+      {!loading && clips.length === 0 && (
+        <div className="feed-empty" role="status">
+          <strong>Inga klipp att visa</strong>
+          <span>{feedError ? "Klippen kunde inte hämtas just nu." : "Kom tillbaka snart."}</span>
+        </div>
+      )}
+
       <div className="feed-scroll">
         {clips.map((clip) => {
           const person = personForClip(clip);
@@ -436,10 +469,12 @@ function ActionRail({
 }) {
   return (
     <div className="action-rail" onClick={(event) => event.stopPropagation()}>
-      <ActionButton label={formatNumber(clip.likes + (liked ? 1 : 0))} active={liked} onClick={onLike}>
+      {/* FE-2: no counts until a real one exists. These used to render
+          `1200 + index * 143` as if it were a measured figure. */}
+      <ActionButton label="Gilla" active={liked} onClick={onLike}>
         <Heart size={21} fill={liked ? "currentColor" : "none"} />
       </ActionButton>
-      <ActionButton label={formatNumber(clip.comments)}>
+      <ActionButton label="Kommentera">
         <MessageCircle size={21} />
       </ActionButton>
       <ActionButton label="Spara" active={saved} onClick={onSave}>
@@ -759,10 +794,13 @@ function ProfileScreen({
       <Header title="Profil" />
       <div className="panel-scroll">
         <AccountCard />
+        {/* FE-2: "Sparade klipp 24" and "Följda ämnen 12" were invented. Saves
+            and follows do not persist anywhere yet (C-9), so there is no honest
+            number to show and the rows are gone until F1 stores them. */}
         <Group title="Konto">
-          <ListRow title="Sparade klipp" action={<span className="muted">24</span>} chevron />
-          <ListRow title="Aviseringar" action={<span className="muted">På</span>} chevron />
-          <ListRow title="Följda ämnen" action={<span className="muted">12</span>} chevron />
+          <ListRow title="Sparade klipp" chevron />
+          <ListRow title="Aviseringar" chevron />
+          <ListRow title="Följda ämnen" chevron />
         </Group>
         <Group title="Integritet & data">
           {consentRows.map((row) => (
@@ -777,6 +815,11 @@ function ProfileScreen({
           <ListRow title="Samtycken & cookies" icon={<ShieldCheck size={18} />} chevron />
           <ListRow title="Radera konto" icon={<Trash2 size={18} />} tone="danger" chevron />
         </Group>
+        {clerkEnabled && (
+          <Show when="signed-in">
+            <AuthDiagnostics />
+          </Show>
+        )}
         <div className="version">Kammaren 1.0 · data från riksdagen.se</div>
       </div>
     </section>
@@ -845,6 +888,76 @@ function SignedInAccountCard() {
       </SignOutButton>
     </div>
   );
+}
+
+/**
+ * Signed-in-only check that the Clerk → Supabase link actually works.
+ *
+ * Prerequisite A-3 / A-4. Configuring the integration in two dashboards proves
+ * nothing on its own; this calls `public.auth_probe()`, which is granted to
+ * `authenticated` and revoked from `anon`, and shows what Postgres saw. A `sub`
+ * that matches the Clerk user id is the end-to-end evidence.
+ *
+ * It reads only the signed-in caller's own claims and stays in the app on
+ * purpose — a check that lives in someone's shell history is a check nobody
+ * else can repeat.
+ */
+function AuthDiagnostics() {
+  const { session } = useSession();
+  const [status, setStatus] = useState<ClerkSupabaseLinkStatus | null>(null);
+  const [running, setRunning] = useState(false);
+
+  const run = () => {
+    setRunning(true);
+    checkClerkSupabaseLink(async () => (await session?.getToken()) ?? null)
+      .then(setStatus)
+      .catch((error: unknown) =>
+        setStatus({
+          state: "rejected",
+          status: 0,
+          detail: error instanceof Error ? error.message : String(error)
+        })
+      )
+      .finally(() => setRunning(false));
+  };
+
+  return (
+    <Group title="Diagnostik">
+      <ListRow
+        title="Testa Clerk → Supabase"
+        subtitle={describeLinkStatus(status, running)}
+        action={
+          <button className="mini-button" onClick={run} disabled={running}>
+            Kör
+          </button>
+        }
+      />
+      {status?.state === "ok" && (
+        <pre className="diagnostic-output">{JSON.stringify(status.claims, null, 2)}</pre>
+      )}
+      {status?.state === "rejected" && <pre className="diagnostic-output">{status.detail}</pre>}
+    </Group>
+  );
+}
+
+function describeLinkStatus(status: ClerkSupabaseLinkStatus | null, running: boolean): string {
+  if (running) {
+    return "Kör…";
+  }
+  switch (status?.state) {
+    case undefined:
+      return "Kontrollerar att Supabase accepterar Clerk-token.";
+    case "ok":
+      return `OK — Postgres ser sub=${status.claims.sub ?? "?"} som roll ${status.claims.pg_role}.`;
+    case "probe-missing":
+      return "auth_probe() saknas — migration 003 är inte applicerad.";
+    case "signed-out":
+      return "Ingen aktiv session.";
+    case "unconfigured":
+      return "Supabase är inte konfigurerat.";
+    case "rejected":
+      return `Avvisad med HTTP ${status.status}.`;
+  }
 }
 
 function PersonScreen({

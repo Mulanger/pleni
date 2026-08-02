@@ -203,6 +203,44 @@ a {
   backdrop-filter: blur(16px);
 }
 
+/* Honest empty state for the feed (FE-12). */
+.feed-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.feed-empty strong {
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.feed-empty span {
+  font-size: 13px;
+}
+
+/* Signed-in Clerk → Supabase diagnostic output (A-3/A-4). */
+.diagnostic-output {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .center-play,
 .mute-button {
   position: absolute;

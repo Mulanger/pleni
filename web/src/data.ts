@@ -128,8 +128,7 @@ export const SAMPLE_CLIPS: ClipItem[] = [
     debateDate: "2026-06-03",
     publishedAt: "2026-08-02T00:00:00Z",
     rank: 1,
-    likes: 2341,
-    comments: 184
+    isSample: true
   },
   {
     id: "HD10540_e0bb9ba6-5d6e-f111-bf27-6805cafeabf9_c01",
@@ -151,8 +150,7 @@ export const SAMPLE_CLIPS: ClipItem[] = [
     debateDate: "2026-06-03",
     publishedAt: "2026-08-02T00:00:00Z",
     rank: 2,
-    likes: 1876,
-    comments: 240
+    isSample: true
   },
   {
     id: "HD10540_e3bb9ba6-5d6e-f111-bf27-6805cafeabf9_c01",
@@ -174,8 +172,7 @@ export const SAMPLE_CLIPS: ClipItem[] = [
     debateDate: "2026-06-03",
     publishedAt: "2026-08-02T00:00:00Z",
     rank: 8,
-    likes: 1204,
-    comments: 96
+    isSample: true
   },
   {
     id: "HD10540_e4bb9ba6-5d6e-f111-bf27-6805cafeabf9_c02",
@@ -197,8 +194,7 @@ export const SAMPLE_CLIPS: ClipItem[] = [
     debateDate: "2026-06-03",
     publishedAt: "2026-08-02T00:00:00Z",
     rank: 9,
-    likes: 3102,
-    comments: 411
+    isSample: true
   }
 ];
 
