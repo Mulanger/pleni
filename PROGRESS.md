@@ -418,3 +418,121 @@ This file is the source of truth for chunk status and handoff notes.
 
 **Next agent should know:**
 - Chrome mobile QA verified zero `.clip-context` elements, zero persistent transport controls, and a transient `.playback-flash` that disappears after tap.
+
+## C7 local title generation experiment - DONE 2026-08-02
+
+**Built:** `src/scoring/titles.py`, Ollama title integration in `src/stages/select.py`, title settings in `src/config.py`, and focused unit/integration coverage.
+**Tests:** `python tasks.py test lint typecheck` green: 144 passed, 2 deselected, 1 existing `audioop` deprecation warning.
+**Contracts touched:** none.
+
+**Decisions made:**
+- Title generation is opt-in with `RIKET_TITLE_BACKEND=ollama` or `--title-backend ollama`; the default remains the deterministic first-sentence fallback so CI and unattended runs never require Ollama.
+- The tested local model is `qwen3:8b` through Ollama 0.32.5. C7 sends only final selected clip text, speaker metadata, archetype, and debate title; it never uploads video.
+- The model selects one numbered transcript sentence as evidence. A title is accepted only when it is 28-60 characters, uses Latin characters, is not all caps or dangling, introduces no number, keeps content words grounded and in evidence order, preserves important forecast/number qualifiers, and attributes CONFRONT titles. Invalid output gets up to three corrective attempts, then C7 keeps the fallback title.
+- The selector remains deterministic and pure. LLM enrichment happens in the C7 stage after portfolio selection, without changing `SelectedClip` or any other shared contract.
+
+**Local benchmark:**
+- Initial raw `qwen3:4b-instruct` output was not safe: it produced all-caps text, altered numbers, misspelled Swedish words, and inverted claims.
+- `qwen3.5:4b` improved wording but still edited evidence and overclaimed. The final `qwen3:8b` guarded run used the GTX 1080 at 100% GPU with a 4096-token context and took 94.8 seconds for 16 clips including retries.
+- Strict validation accepted 4/16 titles and safely retained the old title for 12/16: `Strömmer: Tyresö bör ha egen polisstation`, `Fler patruller och en starkare närvaro i vardagen`, `Strömmer: Polistillväxten ska öka`, and `Sverige riskerar att hamna i EU:s underskottsförfarande`.
+
+**Observations (not fixed, out of scope):**
+- The free 8B model is useful as a draft generator but is not good enough for unattended replacement of every political title. A same-model critic incorrectly approved a subject/object inversion, so it was not added.
+- Ollama 0.32.5 and `qwen3:8b` are installed locally. The verified 1.56 GB installer was moved to `D:\OllamaSetup-0.32.5.exe` because the C drive was low on space.
+
+**Blocked / needs a decision:**
+- Decide whether titles should remain local draft suggestions with editorial review, or whether to benchmark a stronger hosted model for higher automatic acceptance. The current implementation deliberately favors fallback over a plausible but unsupported title.
+
+**Next agent should know:**
+- Re-run the benchmark with `python -m src.stages.select --dokid HD10540 --work-dir work\local_test_hd10540 --title-backend ollama --title-model qwen3:8b`.
+
+## Clerk auth foundation + P0 privilege hardening - DONE 2026-08-02
+
+**Built:** `web/src/clerk.tsx`, `web/src/main.tsx`, `web/src/App.tsx`, `web/src/supabase.ts`,
+`web/src/styles.css`, `web/src/vite-env.d.ts`, `web/package.json`, `web/.env.example`,
+`migrations/002_security_hardening.{up,down}.sql`, `src/stages/publish.py`,
+`tests/unit/test_publish_migrations.py`, `docs/RECOMMENDATION_PREREQUISITES.md`,
+`docs/DEPENDENCIES.md`
+**Tests:** Full acceptance green - `pytest -m "not live and not slow"` **154 passed, 2 deselected**
+(144 before, +10 new migration tests); `ruff check .` clean; `mypy src` strict clean, 66 files.
+TypeScript `tsc --noEmit` green; `vite build` green.
+Caveats on how that was verified: the Linux sandbox has Python 3.10 while the project targets
+3.11+, so the run used a venv with a `.pth` shim aliasing `datetime.UTC` to `timezone.utc` (the
+only 3.11-only feature in `src/` and `tests/`), and `opencv-python-headless` in place of
+`opencv-python`. The `vite build` used `cssMinify:false` because the committed `node_modules`
+holds win32-only native bindings. **Re-run `python tasks.py test lint typecheck` on Windows**
+against the real pins before committing.
+**Contracts touched:** none.
+
+**Decisions made:**
+- Identity is Clerk only, through Supabase's *native* third-party auth integration. The Clerk
+  Supabase JWT template has been deprecated since 2025-04-01 and must not be used; it requires
+  sharing the Supabase JWT secret with a third party.
+- Clerk's own quickstart prompt targets Next.js App Router (`proxy.ts`, `clerkMiddleware()`,
+  `app/layout.tsx`, `@clerk/nextjs`). None of it applies here - `web/` is a React 19 + Vite SPA
+  with no router and no server. The correct SDK is `@clerk/react`, wrapping `main.tsx`.
+- Auth uses `mode="modal"` for sign-in/sign-up. This sidesteps prerequisite N-4 entirely: the
+  InstaPods static host has no SPA fallback, so redirect routes like `/sign-in` would 404.
+- Clerk is optional at runtime. `AuthProvider` renders children unwrapped when
+  `VITE_CLERK_PUBLISHABLE_KEY` is absent, so a deploy without the env var cannot take the public
+  feed down. `clerkEnabled` gates every Clerk component.
+- `loadPublishedClips()` stays anonymous. Published clips are public data readable by `anon`, so
+  sending a Clerk token there would only create a failure mode. The token path lives in the new
+  `supabaseRest(path, { accessToken })` helper for the private endpoints F1/F2 will add.
+- Added `checkClerkSupabaseLink()` as a diagnostic. It performs one authenticated read and
+  reports whether Supabase accepted the Clerk JWT - the fastest way to tell whether the
+  third-party auth registration has been done.
+- Consent switches now default to **off** (`personal`, `analytics`, `email` all `false`). They
+  were `personal: true, email: true`. Still in-memory only; this is a partial C-5 fix.
+- `discover_migrations()` replaces the hardcoded `MIGRATION_PATH`. `--apply-migrations` applied
+  only `001_publish_schema.up.sql`, so migration 002 would never have run.
+- Migration 002 revokes the default `PUBLIC` execute grant on `publish_clip_batch(jsonb)`, loops
+  over every `SECURITY DEFINER` function in `public` and does the same, pins the definer
+  `search_path` to `pg_catalog, public`, adds a `schema_migrations` ledger table, and drops
+  `discovered` from `sources_public_read`.
+
+**Live findings (recorded, not fixed):**
+- The `sk_live_...` secret key was pasted into a chat transcript. It must be rotated in the
+  Clerk dashboard. It is not used anywhere in this repo.
+- The supplied `pk_live_Y2xlcmsudmFrdHNrb2xhbi5zZSQ` decodes to `clerk.vaktskolan.se` - a
+  production instance bound to a domain the app is not served from. Unusable at
+  `rikettv.nbg1-3.instapods.app`.
+- The Clerk dashboard already has a dedicated **RiketTV** application. Its development instance
+  is `leading-seasnail-33.clerk.accounts.dev`; JWKS at
+  `https://leading-seasnail-33.clerk.accounts.dev/.well-known/jwks.json`. Both its keys read
+  "Never used". `web/.env.local` holds the dev publishable key and is gitignored via `.env.*`.
+- Bundle cost of Clerk: `index.js` 219.6 kB -> 528.0 kB raw (159.9 kB gzipped). Acceptable for
+  now; revisit with code-splitting if the mobile feed's first paint regresses.
+
+**Observations (not fixed, out of scope):**
+- `BUILD_PLAN.md` at the repo root and `docs/BUILD_PLAN.md` have diverged (different checksums).
+  `AGENTS.md` points at the `docs/` copy. One should be deleted.
+- `ProfileScreen` still shows invented counts ("Sparade klipp 24", "Följda ämnen 12") and
+  `mapClip()` still fabricates `likes`/`comments`. Prerequisite FE-2.
+- No CI exists (`.github/` absent), so every gate is enforced by hand.
+
+**Dashboard configuration completed this session:**
+- Clerk dashboard -> Connect Clerk with Supabase, instance RiketTV / Riket / **Development**:
+  status **Enabled**. Clerk session tokens now carry the `role: authenticated` claim that
+  Supabase PostgREST requires.
+- Supabase project `nlooigmwuqqhhnontlgp` -> Authentication -> Sign In / Providers ->
+  Third-Party Auth: **Clerk ENABLED**, domain `https://leading-seasnail-33.clerk.accounts.dev`.
+  This was the project's first third-party provider.
+- Both sides point at the Clerk *development* instance. Repeat both steps for the production
+  instance once A-2 (custom domain) is resolved; the two instances have different domains, so
+  the Supabase entry must be added again, not edited.
+
+**Blocked / needs a decision:**
+- Production launch still needs a domain. See prerequisite A-2.
+- Nothing yet writes to `private.*` because that schema does not exist. Authenticated Supabase
+  calls now *authenticate*, but there is still no table only a signed-in user may read or write,
+  so the integration is not yet exercised by real product code. F1 adds that.
+
+**Next agent should know:**
+- Run `npm install` inside `web/` on Windows before anything else; `@clerk/react` and
+  `@clerk/localizations` are in `package.json` but not yet in the local `node_modules`.
+- Dev server: `node .\node_modules\vite\bin\vite.js --host 127.0.0.1 --port 5199 --strictPort`.
+- Do not add `CLERK_SECRET_KEY` to any `VITE_*` variable. `web/.env.example` says so explicitly.
+- The full prerequisite checklist for the recommender is `docs/RECOMMENDATION_PREREQUISITES.md`.
+  This session closed P0-2, P0-3 (partially - the ledger table exists but nothing writes to it
+  yet), P0-4 (file-level only, not a live privilege test), P0-6, and started A-3/A-6.

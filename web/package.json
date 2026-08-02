@@ -10,6 +10,8 @@
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@clerk/localizations": "4.13.10",
+    "@clerk/react": "6.12.10",
     "lucide-react": "1.28.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"

@@ -21,6 +21,8 @@ import {
   VolumeX,
   X
 } from "lucide-react";
+import { Show, SignInButton, SignOutButton, SignUpButton, UserButton, useUser } from "@clerk/react";
+import { clerkEnabled } from "./clerk";
 import { initials, PARTIES, partyInk, partyTint, PEOPLE, PERSON_CLIPS, SAMPLE_CLIPS, TRENDING } from "./data";
 import { loadPublishedClips } from "./supabase";
 import type { ClipItem, FeedMode, PartyCode, PersonProfile, Tab } from "./types";
@@ -54,7 +56,9 @@ function App() {
     L: false,
     NONE: false
   });
-  const [consent, setConsent] = useState({ personal: true, analytics: false, email: true });
+  // Consent defaults to off. These switches are still in-memory only and do not
+  // yet gate any server-side processing — see docs/RECOMMENDATION_PREREQUISITES.md C-5.
+  const [consent, setConsent] = useState({ personal: false, analytics: false, email: false });
 
   useEffect(() => {
     let mounted = true;
@@ -754,14 +758,7 @@ function ProfileScreen({
     <section className="panel-screen">
       <Header title="Profil" />
       <div className="panel-scroll">
-        <div className="profile-card">
-          <Avatar name="Elin Norberg" party="NONE" size="lg" />
-          <div>
-            <strong>Elin Norberg</strong>
-            <span>elin.norberg@mail.se</span>
-          </div>
-          <button className="mini-button">Redigera</button>
-        </div>
+        <AccountCard />
         <Group title="Konto">
           <ListRow title="Sparade klipp" action={<span className="muted">24</span>} chevron />
           <ListRow title="Aviseringar" action={<span className="muted">På</span>} chevron />
@@ -780,10 +777,73 @@ function ProfileScreen({
           <ListRow title="Samtycken & cookies" icon={<ShieldCheck size={18} />} chevron />
           <ListRow title="Radera konto" icon={<Trash2 size={18} />} tone="danger" chevron />
         </Group>
-        <button className="logout-button">Logga ut</button>
         <div className="version">Kammaren 1.0 · data från riksdagen.se</div>
       </div>
     </section>
+  );
+}
+
+/**
+ * Identity block at the top of the Profil tab.
+ *
+ * Three states: Clerk not configured, signed out, signed in. The anonymous
+ * `Senaste` feed works in all three — signing in is never required to watch.
+ */
+function AccountCard() {
+  if (!clerkEnabled) {
+    return (
+      <div className="account-card account-card--muted">
+        <div className="account-copy">
+          <strong>Inloggning är inte konfigurerad</strong>
+          <span>Sätt VITE_CLERK_PUBLISHABLE_KEY för att aktivera konton.</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <Show when="signed-out">
+        <div className="account-card">
+          <div className="account-copy">
+            <strong>Logga in för ditt flöde</strong>
+            <span>Senaste fungerar utan konto. Med konto kan du spara klipp och följa politiker.</span>
+          </div>
+          <div className="account-actions">
+            <SignInButton mode="modal">
+              <button className="account-button account-button--primary">Logga in</button>
+            </SignInButton>
+            <SignUpButton mode="modal">
+              <button className="account-button">Skapa konto</button>
+            </SignUpButton>
+          </div>
+        </div>
+      </Show>
+      <Show when="signed-in">
+        <SignedInAccountCard />
+      </Show>
+    </>
+  );
+}
+
+function SignedInAccountCard() {
+  const { user } = useUser();
+  const displayName = user?.fullName ?? user?.username ?? "Ditt konto";
+  const email = user?.primaryEmailAddress?.emailAddress ?? "";
+
+  return (
+    <div className="account-card">
+      <UserButton
+        appearance={{ elements: { userButtonAvatarBox: { width: 46, height: 46 } } }}
+      />
+      <div className="account-copy">
+        <strong>{displayName}</strong>
+        {email ? <span>{email}</span> : null}
+      </div>
+      <SignOutButton>
+        <button className="mini-button">Logga ut</button>
+      </SignOutButton>
+    </div>
   );
 }
 

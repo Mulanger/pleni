@@ -32,8 +32,86 @@ interface RawClip {
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, "") ?? "";
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "";
 
+export const supabaseConfigured = SUPABASE_URL.length > 0 && SUPABASE_KEY.length > 0;
+
+/**
+ * Fetch a Clerk session token, or `null` when signed out / Clerk not configured.
+ * Matches the shape of Clerk's `session.getToken`.
+ */
+export type AccessTokenGetter = () => Promise<string | null>;
+
+/**
+ * One request against the Supabase REST API.
+ *
+ * `apikey` is always the publishable key — it identifies the project, not the
+ * caller. `Authorization` carries the Clerk session token when the caller is
+ * signed in, so Postgres RLS sees `auth.jwt()->>'sub'` as the Clerk user ID;
+ * otherwise it falls back to the publishable key and the request is evaluated
+ * as `anon`.
+ *
+ * This requires Clerk to be registered as a third-party auth provider on the
+ * Supabase project. Until that is done, signed-in requests are rejected, which
+ * is why callers that only need public data should pass no token at all.
+ */
+export async function supabaseRest(
+  path: string,
+  options: { accessToken?: string | null; signal?: AbortSignal } = {}
+): Promise<Response> {
+  if (!supabaseConfigured) {
+    throw new Error("Supabase is not configured: set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY");
+  }
+
+  const bearer = options.accessToken ?? SUPABASE_KEY;
+
+  return fetch(`${SUPABASE_URL}/rest/v1/${path.replace(/^\//, "")}`, {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${bearer}`,
+      Accept: "application/json"
+    },
+    signal: options.signal
+  });
+}
+
+export type ClerkSupabaseLinkStatus =
+  | { state: "unconfigured" }
+  | { state: "signed-out" }
+  | { state: "ok" }
+  | { state: "rejected"; status: number; detail: string };
+
+/**
+ * Diagnostic: does Supabase accept this Clerk session token?
+ *
+ * Performs a cheap authenticated read against a public table. A 401/403 means
+ * Clerk has not been registered as a third-party auth provider on the Supabase
+ * project, or the session token is missing the `role: authenticated` claim.
+ */
+export async function checkClerkSupabaseLink(
+  getToken: AccessTokenGetter
+): Promise<ClerkSupabaseLinkStatus> {
+  if (!supabaseConfigured) {
+    return { state: "unconfigured" };
+  }
+
+  const token = await getToken();
+  if (!token) {
+    return { state: "signed-out" };
+  }
+
+  const response = await supabaseRest("clips?select=id&limit=1", { accessToken: token });
+  if (response.ok) {
+    return { state: "ok" };
+  }
+
+  return {
+    state: "rejected",
+    status: response.status,
+    detail: (await response.text()).slice(0, 300)
+  };
+}
+
 export async function loadPublishedClips(limit = 60): Promise<ClipItem[]> {
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
+  if (!supabaseConfigured) {
     return SAMPLE_CLIPS;
   }
 
@@ -60,13 +138,9 @@ export async function loadPublishedClips(limit = 60): Promise<ClipItem[]> {
     moderation: "neq.rejected"
   });
 
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/clips?${query.toString()}`, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      Accept: "application/json"
-    }
-  });
+  // Published clips are public data readable by `anon`, so this stays an
+  // anonymous request whether or not a viewer is signed in.
+  const response = await supabaseRest(`clips?${query.toString()}`);
 
   if (!response.ok) {
     throw new Error(`Supabase clip read failed: ${response.status}`);

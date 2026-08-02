@@ -14,3 +14,8 @@
 - `ruff==0.12.7` - formatter and linter.
 - `mypy==1.17.1` - strict static typing for `src/`.
 - `Ollama==0.32.5` - optional local structured-output runtime for C7 clip titles; the tested model is `qwen3:8b`. It is external to the Python environment and C7 retains a deterministic fallback when unavailable.
+
+## Frontend (`web/package.json`)
+
+- `@clerk/react==6.12.10` - sole identity provider for the mobile app; supplies `<ClerkProvider>`, the prebuilt sign-in/sign-up modals and the session token used for Supabase third-party auth. Chosen over Supabase Auth per the locked decision in `docs/RECOMMENDATION_PREREQUISITES.md` §0.
+- `@clerk/localizations==4.13.10` - Swedish (`svSE`) strings for the Clerk components. The app is Swedish-only, so the default English UI is not acceptable; this is Clerk's own localization package rather than a hand-maintained string table.

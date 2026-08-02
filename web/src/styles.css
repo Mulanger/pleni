@@ -770,7 +770,8 @@ a {
   font-size: 13px;
 }
 
-.profile-card {
+.profile-card,
+.account-card {
   display: flex;
   align-items: center;
   gap: 13px;
@@ -780,6 +781,66 @@ a {
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.account-card {
+  flex-wrap: wrap;
+}
+
+.account-card--muted {
+  border-style: dashed;
+  background: #fbfbf9;
+}
+
+.account-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.account-copy strong {
+  font-size: 16px;
+}
+
+.account-copy span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.account-actions {
+  display: flex;
+  width: 100%;
+  gap: 9px;
+}
+
+.account-button {
+  height: 40px;
+  flex: 1;
+  border: 1px solid #e4e4df;
+  border-radius: 999px;
+  background: #fff;
+  color: #3d3d39;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 750;
+}
+
+.account-button--primary {
+  border-color: #141412;
+  background: linear-gradient(180deg, #2c2c2a, #141412);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+/* Clerk's modal renders in a portal at the document root; keep it above the
+   feed and inside the mobile safe area. */
+.cl-modalBackdrop {
+  z-index: 60;
 }
 
 .profile-card div {
