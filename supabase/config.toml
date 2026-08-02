@@ -1,0 +1,56 @@
+# Supabase local development configuration.
+#
+# Prerequisite A-4: the Clerk third-party auth registration was done by hand in
+# the hosted dashboard, and dashboard state is invisible to everyone who was not
+# in the room. This file is the committed copy, so `supabase start` reproduces
+# it and a reviewer can see what the hosted project is supposed to look like.
+#
+# This is the NATIVE third-party auth integration. The Clerk "Supabase JWT
+# template" has been deprecated since 2025-04-01 and must not be reintroduced:
+# it works by sharing the Supabase JWT signing secret with a third party. See
+# docs/adr/006-clerk-sole-identity-provider.md.
+
+project_id = "riket-tv"
+
+[api]
+enabled = true
+port = 54321
+# `private` is deliberately absent. Viewer behaviour and political-interest
+# profiles must never be reachable through PostgREST (prerequisite C-1).
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[auth]
+enabled = true
+# The app is served from the static InstaPods host today; localhost is the dev
+# origin. Clerk's own allowed-origins list needs the same values (N-3).
+site_url = "http://127.0.0.1:5199"
+additional_redirect_urls = ["https://rikettv.nbg1-3.instapods.app"]
+
+# Supabase Auth is not used as an identity provider. Identity is Clerk only.
+[auth.email]
+enable_signup = false
+
+[auth.third_party.clerk]
+enabled = true
+# Clerk DEVELOPMENT instance for the RiketTV application.
+# Production needs a second entry once A-2 (custom domain) is resolved — the
+# instances have different domains, so it is an addition, not an edit.
+domain = "leading-seasnail-33.clerk.accounts.dev"
+
+[functions.feed]
+# A-11: the platform-level check does not validate Clerk's RS256 tokens against
+# the Clerk JWKS. Verification happens inside the handler instead.
+verify_jwt = false
+
+[functions.events]
+verify_jwt = false
+
+[functions.clerk-webhook]
+# A-14: authenticated by the Svix signature, not by a Supabase JWT.
+verify_jwt = false
