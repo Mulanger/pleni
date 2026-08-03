@@ -44,8 +44,13 @@ Last updated: 2026-08-02.
 ### Repository and deployment
 
 - **The pipeline runs on the owner's local Windows workstation, not in the cloud.** It needs
-  the local GPU (ASR, vision) and ffmpeg. InstaPods hosts the *static frontend only* and
-  knows nothing about the pipeline, the job queue or the orchestrator.
+  local ffmpeg. InstaPods hosts the *static frontend only* and knows nothing about the
+  pipeline, the job queue or the orchestrator.
+- **There is no GPU on that machine, and nothing currently needs one.** `torch` is installed
+  as `2.11.0+cpu`; `cuda.is_available()` is False. Earlier revisions of this file claimed the
+  pipeline needs a GPU for ASR — it does not, because ASR does not run: C4 uses Riksdagen's
+  official transcript with distributed word timings (ADR 011). The `gpu` worker pool is a
+  naming artifact, not a hardware requirement. One debate takes about 9 minutes end to end.
 - Because that machine sleeps and reboots, discovery is catch-up (watermark-based), never
   tick-based, and every job is idempotent and resumable. Start everything with
   `python -m src.orchestrator.cli daemon`. See `docs/RUNBOOK.md`.

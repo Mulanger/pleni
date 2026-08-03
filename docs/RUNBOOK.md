@@ -200,9 +200,11 @@ Three things worth knowing:
 ### The back catalogue decision
 
 On a machine with no watermark, the first discovery pass sees Riksdagen's whole
-document list — roughly 50 Frågestund debates going back to 2024 — and starts
-working through it. At hours of GPU time per debate, that is a decision, so make
-it deliberately:
+document list and starts working through it. Observed 2026-08-03: it offered
+debates from **2002, 2004, 2007, 2012 and 2016** — the archive goes back much
+further than the "recent" list you might picture, so this is not a small
+accident. At hours of processing per debate, that is a decision, so make it
+deliberately:
 
 ```bash
 # Only process debates published from now on.
@@ -220,6 +222,31 @@ fast. Just decide rather than discover it running.
 `--max-enqueue` caps how many debates one pass offers (default 25). Anything over
 the cap is **deferred, not skipped** — the watermark does not advance past it, so
 the next pass picks it up.
+
+### Changing `RIKET_WORK_DIR` silently resets discovery
+
+The watermark is a file **inside the work dir**
+(`<work_dir>/discovery_watermark.txt`). Point `RIKET_WORK_DIR` somewhere new —
+a bigger disk, a different machine, a scratch directory — and the next `daemon`
+or `discover` run finds no watermark, treats itself as a first run, and starts on
+the 2002 archive. Nothing warns you; it just looks like discovery working hard.
+
+This happened on 2026-08-03 when the work dir moved to `D:/riketvideos`. The
+`--max-enqueue` cap was the only thing that kept it to 25 debates.
+
+**When you move the work dir, carry the watermark or set it deliberately:**
+
+```bash
+# Carry it across.
+cp <old_work_dir>/discovery_watermark.txt <new_work_dir>/
+
+# Or pin it so only genuinely new debates are picked up.
+python -c "from datetime import datetime; from pathlib import Path; \
+Path('<new_work_dir>/discovery_watermark.txt').write_text(datetime.now().replace(microsecond=0).isoformat())"
+```
+
+`backfill` is unaffected — it never reads or writes the watermark, which is
+exactly why it is the right tool for a historical window.
 
 ### "POSSIBLE GAP" in the discovery output
 

@@ -20,7 +20,12 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 from src.config import Settings, get_settings
-from src.errors import ConfigurationError, NotClippableError, PipelineError
+from src.errors import (
+    ConfigurationError,
+    ExternalServiceError,
+    NotClippableError,
+    PipelineError,
+)
 from src.logging import configure_logging, stage_logger
 from src.orchestrator.discovery import (
     DEFAULT_MAX_ENQUEUE,
@@ -49,6 +54,10 @@ DEFAULT_DISCOVERY_INTERVAL_S = 1800
 #: `LISTEN/NOTIFY` is unavailable over the stateless transport (ADR 009), and at
 #: one debate every few hours this cadence is irrelevant.
 IDLE_POLL_S = 5.0
+#: Ceiling for poll backoff. Long enough that a Supabase outage costs a few
+#: wasted requests rather than thousands, short enough that a 64-debate
+#: backfill resumes on its own within a minute of the API coming back.
+MAX_POLL_BACKOFF_S = 60.0
 
 
 @dataclass
@@ -169,13 +178,41 @@ class Worker:
         return result
 
     def run_forever(self, *, max_iterations: int | None = None) -> int:
-        """Poll until interrupted. Returns how many jobs were run."""
+        """Poll until interrupted. Returns how many jobs were run.
+
+        A failed *poll* is not a failed job. The queue lives behind an HTTP API,
+        so `claim()` can raise for reasons that have nothing to do with the work:
+        a 30-second curl timeout, a transient 5xx, a dropped connection. Before
+        this, any one of those killed the worker outright — all three died on an
+        idle poll during the first backfill debate, minutes after finishing it.
+        Over a 64-debate run that means coming back to a stalled queue and no
+        obvious reason why.
+
+        So transport failures back off and retry forever, while a genuine job
+        failure keeps its existing behaviour: `run_once` records it against the
+        job, and the queue's attempt limit and dead-letter state decide when to
+        stop trying.
+        """
 
         completed = 0
         iterations = 0
+        backoff_s = IDLE_POLL_S
         while max_iterations is None or iterations < max_iterations:
             iterations += 1
-            result = self.run_once()
+            try:
+                result = self.run_once()
+            except ExternalServiceError as error:
+                if max_iterations is not None:
+                    raise
+                self.logger.warning(
+                    "queue_poll_failed",
+                    error=str(error)[:200],
+                    retry_in_s=round(backoff_s, 1),
+                )
+                time.sleep(backoff_s)
+                backoff_s = min(backoff_s * 2, MAX_POLL_BACKOFF_S)
+                continue
+            backoff_s = IDLE_POLL_S
             if result.claimed:
                 completed += 1
                 continue

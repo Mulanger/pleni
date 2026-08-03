@@ -29,6 +29,7 @@ from typing import Any
 
 import pytest
 
+from src.errors import ExternalServiceError
 from src.orchestrator.cli import Worker
 from src.orchestrator.jobs import (
     STAGE_GRAPH,
@@ -567,3 +568,46 @@ def test_a_worker_never_claims_another_pools_work(table: FakeJobsTable) -> None:
 def test_idempotency_keys_follow_the_documented_scheme() -> None:
     assert idempotency_key("render", "HD10540_c01") == "render:HD10540_c01:v1"
     assert idempotency_key("render", "x", version="v2") == "render:x:v2"
+
+
+def test_a_transient_queue_poll_failure_does_not_kill_the_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The queue is an HTTP API, so polling it can fail for reasons unrelated to work.
+
+    On 2026-08-03 all three workers died on an idle `claim()` — a 30 s curl
+    timeout against Supabase — minutes after finishing a debate cleanly. Over a
+    64-debate backfill that means returning to a stalled queue with no obvious
+    cause. A failed poll must back off and retry; only a failed *job* counts
+    against the job.
+    """
+
+    table = FakeJobsTable()
+    recorder = StageRecorder()
+    worker = _worker(table, recorder, pool="cpu")
+
+    calls = {"n": 0}
+    real_run_once = worker.run_once
+
+    def flaky_run_once() -> Any:
+        calls["n"] += 1
+        if calls["n"] <= 3:
+            raise ExternalServiceError("curl: (28) Operation timed out")
+        return real_run_once()
+
+    monkeypatch.setattr(worker, "run_once", flaky_run_once)
+    monkeypatch.setattr("src.orchestrator.cli.time.sleep", lambda _s: None)
+
+    # Unbounded mode is the one that must survive; stop it after a few polls.
+    stop = {"n": 0}
+
+    def counting_sleep(_s: float) -> None:
+        stop["n"] += 1
+        if stop["n"] > 6:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr("src.orchestrator.cli.time.sleep", counting_sleep)
+    with suppress(KeyboardInterrupt):
+        worker.run_forever()
+
+    assert calls["n"] > 3, "the worker kept polling after the transport failures"
