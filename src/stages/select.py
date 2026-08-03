@@ -15,7 +15,11 @@ from src.logging import configure_logging, stage_logger
 from src.paths import work_paths
 from src.scoring.archetypes import score_candidates_for_speech
 from src.scoring.select import select_for_speech
-from src.scoring.titles import OllamaTitleGenerator, TitleGenerator
+from src.scoring.titles import (
+    OllamaTitleGenerator,
+    OpenAICompatibleTitleGenerator,
+    TitleGenerator,
+)
 from src.stages._io import read_json_object, read_model, read_model_list, write_json
 
 
@@ -95,7 +99,7 @@ def main() -> None:
     parser.add_argument("--work-dir", type=Path, default=None, help="Override RIKET_WORK_DIR")
     parser.add_argument(
         "--title-backend",
-        choices=("fallback", "ollama"),
+        choices=("fallback", "ollama", "api"),
         default=None,
         help="Title generator. Defaults to RIKET_TITLE_BACKEND.",
     )
@@ -148,6 +152,19 @@ def _title_generator(
     if backend == "ollama":
         return OllamaTitleGenerator(
             endpoint=endpoint,
+            model=model,
+            timeout_s=timeout_s,
+            max_attempts=max_attempts,
+        )
+    if backend == "api":
+        settings = get_settings()
+        if not settings.title_api_key:
+            raise ConfigurationError(
+                "Title backend `api` needs RIKET_TITLE_API_KEY. See .env.example."
+            )
+        return OpenAICompatibleTitleGenerator(
+            base_url=settings.title_api_base_url,
+            api_key=settings.title_api_key,
             model=model,
             timeout_s=timeout_s,
             max_attempts=max_attempts,

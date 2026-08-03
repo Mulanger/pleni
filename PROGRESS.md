@@ -993,3 +993,67 @@ documents** for March 2026, a workable month-sized window.
 - The M 81% / S 19% party skew seen in the first 16 clips comes from interpellation
   debates structurally — a minister answers repeatedly. Watch it as `ip` volume grows;
   it is `F0-13` territory, not a bug.
+
+## C7 title generation moved to a hosted API — DONE 2026-08-03
+
+**Built:** `OpenAICompatibleTitleGenerator` + `TokenUsage` + shared
+`_evaluate_title_response` in `src/scoring/titles.py`, `api` backend in
+`src/stages/select.py`, title API settings in `src/config.py`,
+`scripts/benchmark_titles.py`, 6 new tests, `.env.example` entries.
+**Tests:** 248 passed (was 243); ruff and mypy clean on 74 files.
+**Contracts touched:** none.
+
+**Benchmark, 16 real HD10540 clips, deepseek-chat:**
+
+| | local qwen3:8b | DeepSeek API |
+|---|---|---|
+| Accepted | 4/16 (28%) | **7/16 (44%)** |
+| Wall clock | 94.8 s | **42.4 s** |
+| Attempts per accepted | — | 1.57 |
+| Cost | GPU time | **$0.0013 → $0.08 per 1,000 clips** |
+
+59% of input tokens were cache hits — the 1,553-char system prompt is identical
+on every call and DeepSeek bills cache reads at ~10% of the miss price. That is
+why the real cost came in ~3x below the estimate.
+
+**Decisions made:**
+- The validation loop is now shared by both backends via
+  `_evaluate_title_response`. The model is the cheap, swappable part;
+  `title_validation_errors` is what makes a headline safe to publish over a real
+  politician's face, and it must not vary by provider.
+- The backend is generic OpenAI-compatible rather than DeepSeek-specific, so
+  switching to MiniMax, z.ai or anything else is an env change.
+- `_schema_error()` reports the actual title length instead of the opaque
+  `invalid_json_schema:string_too_long`, and the correction prompt restates the
+  limit. **This removed all three length failures.**
+- Acceptance nonetheless stayed at 7/16: the three clips that had failed on
+  length now fail on grounding instead. Forced to be short, the model invents a
+  word rather than dropping one. **The binding constraint is the grounding
+  rules, not formatting** — which is the honest reading, and the reason not to
+  chase the number by loosening the validator.
+
+**Rejection profile after the fix** (9 rejections):
+`title_words_out_of_evidence_order` 7, `ungrounded_title_words` 6 (overlapping).
+Both are the fact-checker working. The order rule is the strictest of them and
+would move acceptance most if relaxed — it exists because the previous session
+caught a subject/object inversion that a same-model critic approved, so it
+should not be relaxed without a deliberate decision recorded here.
+
+**Observations (not fixed, out of scope):**
+- At $0.08 per 1,000 clips, a 44% acceptance rate is still a good trade: the full
+  ~15,000-clip archive costs about $1.20 and yields ~6,600 better titles. Cost is
+  not a reason to tune anything.
+- The 9 rejected clips keep their deterministic first-sentence title, which is
+  the correct conservative behaviour and unchanged.
+
+**Blocked / needs a decision:**
+- `P0-9` — rotate both the Supabase token and the DeepSeek key; both were pasted
+  into chat transcripts.
+- Whether to relax `title_words_out_of_evidence_order`. Not recommended without
+  a benchmark showing it does not readmit inversions.
+
+**Next agent should know:**
+- `python scripts/benchmark_titles.py --dokid HD10540 --work-dir work/local_test_hd10540`
+  re-runs the comparison against any provider; `--model` and `--base-url` override.
+- Set `RIKET_TITLE_BACKEND=api` to use it in C7. Default stays `fallback` so no
+  unattended run starts spending money by accident.

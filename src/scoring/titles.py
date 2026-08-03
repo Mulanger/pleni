@@ -155,6 +155,7 @@ class TitleGenerator(Protocol):
 
 
 JsonTransport = Callable[[str, Mapping[str, object], float], Mapping[str, object]]
+AuthedJsonTransport = Callable[[str, str, Mapping[str, object], float], Mapping[str, object]]
 
 
 class OllamaTitleGenerator:
@@ -266,6 +267,203 @@ class OllamaTitleGenerator:
         )
 
 
+class OpenAICompatibleTitleGenerator:
+    """Generate grounded titles through an OpenAI-compatible chat API.
+
+    Covers DeepSeek, MiniMax, z.ai and most hosted providers, which all speak
+    `POST /chat/completions` with the same request and response shape. The model
+    and base URL are configuration, so switching provider is an env change
+    rather than a code change.
+
+    **The validation loop is deliberately identical to the local one.** The
+    model is the cheap, swappable part; `title_validation_errors` is what makes
+    a generated headline safe to publish over a real politician's face, and it
+    must not vary by backend. A stronger model gets better at *sounding* right —
+    the local benchmark caught a same-model critic approving a subject/object
+    inversion — so the deterministic checks matter more with a better model, not
+    less.
+
+    Usage is accumulated across attempts so a benchmark can report real cost per
+    accepted title rather than per request.
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        model: str,
+        timeout_s: float,
+        max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+        temperature: float = 0.15,
+        transport: AuthedJsonTransport | None = None,
+    ) -> None:
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be at least 1")
+        if not api_key:
+            raise ExternalServiceError("Title API key is missing")
+        self._url = f"{base_url.rstrip('/')}/chat/completions"
+        self._api_key = api_key
+        self._model = model
+        self._timeout_s = timeout_s
+        self._max_attempts = max_attempts
+        self._temperature = temperature
+        self._transport = transport or _post_json_authed
+        self.usage = TokenUsage()
+
+    def generate(
+        self,
+        *,
+        clip: SelectedClip,
+        speech: Speech,
+        debate_title: str,
+    ) -> GeneratedTitle:
+        evidence_sentences = _title_sentences(clip.transcript)
+        messages: list[dict[str, object]] = [
+            {"role": "system", "content": TITLE_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": _title_user_prompt(
+                    clip=clip,
+                    speech=speech,
+                    debate_title=debate_title,
+                    evidence_sentences=evidence_sentences,
+                ),
+            },
+        ]
+        last_errors: tuple[str, ...] = ("unknown_validation_error",)
+
+        for attempt_number in range(1, self._max_attempts + 1):
+            response = self._transport(
+                self._url,
+                self._api_key,
+                {
+                    "model": self._model,
+                    "messages": messages,
+                    "stream": False,
+                    "temperature": self._temperature,
+                    # Every provider in this family supports json_object. A
+                    # provider-specific json_schema would be stricter but would
+                    # stop this class being generic, and the Pydantic model
+                    # rejects a bad shape anyway.
+                    "response_format": {"type": "json_object"},
+                    "max_tokens": 200,
+                },
+                self._timeout_s,
+            )
+            self.usage.add(response.get("usage"))
+            raw_content = _chat_completion_content(response)
+
+            errors, generated = _evaluate_title_response(
+                raw_content,
+                evidence_sentences=evidence_sentences,
+                clip=clip,
+                speech=speech,
+                attempt_number=attempt_number,
+            )
+            if generated is not None:
+                return generated
+            last_errors = errors
+
+            if attempt_number < self._max_attempts:
+                messages.extend(
+                    [
+                        {"role": "assistant", "content": raw_content},
+                        {"role": "user", "content": _correction_prompt(last_errors)},
+                    ]
+                )
+
+        raise ExternalServiceError(
+            f"{self._model} returned no grounded title after "
+            f"{self._max_attempts} attempts: {', '.join(last_errors)}"
+        )
+
+
+@dataclass
+class TokenUsage:
+    """Accumulated token usage, for real cost reporting."""
+
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cached_tokens: int = 0
+    requests: int = 0
+
+    def add(self, usage: object) -> None:
+        """Fold in one response's `usage` block, tolerating a missing one."""
+
+        if not isinstance(usage, Mapping):
+            return
+        self.requests += 1
+        self.prompt_tokens += _as_int(usage.get("prompt_tokens"))
+        self.completion_tokens += _as_int(usage.get("completion_tokens"))
+        # DeepSeek reports cache hits here; they are billed at ~2% of the
+        # miss price, and the 1,553-char system prompt is identical on every
+        # call, so this number should climb steeply after the first few clips.
+        details = usage.get("prompt_tokens_details")
+        if isinstance(details, Mapping):
+            self.cached_tokens += _as_int(details.get("cached_tokens"))
+        self.cached_tokens += _as_int(usage.get("prompt_cache_hit_tokens"))
+
+    def cost_usd(self, *, input_per_m: float, output_per_m: float, cached_per_m: float) -> float:
+        """Cost in USD for the accumulated usage."""
+
+        billed_input = max(0, self.prompt_tokens - self.cached_tokens)
+        return (
+            billed_input / 1_000_000 * input_per_m
+            + self.cached_tokens / 1_000_000 * cached_per_m
+            + self.completion_tokens / 1_000_000 * output_per_m
+        )
+
+
+def _evaluate_title_response(
+    raw_content: str,
+    *,
+    evidence_sentences: list[str],
+    clip: SelectedClip,
+    speech: Speech,
+    attempt_number: int,
+) -> tuple[tuple[str, ...], GeneratedTitle | None]:
+    """Validate one model response. Shared by every backend.
+
+    Extracted so the hosted and local generators cannot drift apart on the one
+    thing that must never differ between them.
+    """
+
+    try:
+        candidate = _TitleResponse.model_validate_json(raw_content)
+    except ValidationError as exc:
+        return (_schema_error(exc),), None
+
+    invalid_indices = sorted(
+        {
+            index
+            for index in candidate.evidence_indices
+            if index < 1 or index > len(evidence_sentences)
+        }
+    )
+    ordered = sorted(set(candidate.evidence_indices))
+    if invalid_indices or ordered != candidate.evidence_indices:
+        return ("invalid_evidence_indices:choose_exactly_one_valid_index",), None
+
+    supporting_span = " ".join(
+        evidence_sentences[index - 1] for index in candidate.evidence_indices
+    )
+    errors = title_validation_errors(
+        candidate.title,
+        supporting_span,
+        transcript=clip.transcript,
+        speaker_name=speech.speaker_name,
+        archetype=clip.archetype,
+    )
+    if errors:
+        return errors, None
+    return (), GeneratedTitle(
+        title=candidate.title.strip(),
+        supporting_span=supporting_span,
+        attempts=attempt_number,
+    )
+
+
 def title_validation_errors(
     title: str,
     supporting_span: str,
@@ -368,11 +566,31 @@ def _title_user_prompt(
     )
 
 
+def _schema_error(exc: ValidationError) -> str:
+    """Turn a Pydantic failure into something the model can act on.
+
+    `invalid_json_schema:string_too_long` tells a model nothing. Length
+    overshoot was a third of all rejections in the first DeepSeek benchmark and
+    it survived all three attempts every time, because the correction prompt
+    never said what the limit was or by how much it had been missed.
+    """
+
+    error = exc.errors()[0]
+    if error.get("type") in {"string_too_long", "string_too_short"}:
+        actual = len(str(error.get("input", "")))
+        return f"title_length:{actual}_tecken_men_kravet_ar_{MIN_TITLE_CHARS}-{MAX_TITLE_CHARS}"
+    return f"invalid_json_schema:{error['type']}"
+
+
 def _correction_prompt(errors: tuple[str, ...]) -> str:
     details = "; ".join(errors)
     return (
         "Förslaget underkändes av den automatiska faktakontrollen: "
-        f"{details}. Gör om svaret. Välj exakt ett giltigt evidence_index. Använd innehållsord "
+        f"{details}. Gör om svaret. "
+        f"Rubriken MÅSTE vara mellan {MIN_TITLE_CHARS} och {MAX_TITLE_CHARS} tecken — "
+        "räkna tecknen innan du svarar och korta ned genom att ta bort ord, "
+        "inte genom att hugga av mitt i en fras. "
+        "Välj exakt ett giltigt evidence_index. Använd innehållsord "
         "som står exakt i de valda meningarna, förutom talarens namn och neutrala "
         "attributord, och behåll innehållsorden i samma ordning som i meningen. Bevara alla "
         "viktiga förbehåll. Skriv en enda komplett fras utan punkt."
@@ -387,6 +605,60 @@ def _message_content(response: Mapping[str, object]) -> str:
     if not isinstance(content, str) or not content.strip():
         raise ExternalServiceError("Ollama response is missing message content")
     return content
+
+
+def _chat_completion_content(response: Mapping[str, object]) -> str:
+    """Pull the assistant message out of an OpenAI-compatible response."""
+
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise ExternalServiceError(f"Title API response has no choices: {str(response)[:200]}")
+    first = choices[0]
+    if not isinstance(first, Mapping):
+        raise ExternalServiceError("Title API choice is not an object")
+    message = first.get("message")
+    if not isinstance(message, Mapping):
+        raise ExternalServiceError("Title API choice has no message")
+    content = message.get("content")
+    if not isinstance(content, str) or not content.strip():
+        raise ExternalServiceError("Title API returned empty content")
+    return content
+
+
+def _as_int(value: object) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _post_json_authed(
+    url: str,
+    api_key: str,
+    payload: Mapping[str, object],
+    timeout_s: float,
+) -> Mapping[str, object]:
+    """POST JSON with a bearer token. The API key never appears in an error."""
+
+    request = Request(
+        url,
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=timeout_s) as response:
+            decoded: object = json.load(response)
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:400]
+        raise ExternalServiceError(f"Title API failed with HTTP {exc.code}: {detail}") from exc
+    except OSError as exc:
+        raise ExternalServiceError(f"Title API request failed: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise ExternalServiceError("Title API response is not valid JSON") from exc
+    if not isinstance(decoded, Mapping):
+        raise ExternalServiceError("Title API response is not a JSON object")
+    return decoded
 
 
 def _post_json(

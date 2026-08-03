@@ -27,9 +27,18 @@ class Settings(BaseSettings):
     min_candidate_s: float = Field(default=38.0, gt=0.0)
     max_candidate_s: float = Field(default=62.0, gt=0.0)
     max_clip_overlap_frac: float = Field(default=0.20, ge=0.0, le=1.0)
+    # `fallback` (deterministic first sentence), `ollama` (local), or `api`
+    # (any OpenAI-compatible provider — DeepSeek, MiniMax, z.ai, ...).
     title_backend: str = Field(default="fallback")
     title_model: str = Field(default="qwen3:8b")
     title_ollama_url: str = Field(default="http://127.0.0.1:11434")
+    title_api_base_url: str = Field(default="https://api.deepseek.com/v1")
+    # SECRET. Server-side only; never a VITE_ variable.
+    title_api_key: str | None = Field(default=None)
+    # Published prices, USD per million tokens, for cost reporting only.
+    title_api_input_per_m: float = Field(default=0.14, ge=0.0)
+    title_api_cached_per_m: float = Field(default=0.014, ge=0.0)
+    title_api_output_per_m: float = Field(default=0.28, ge=0.0)
     title_timeout_s: float = Field(default=240.0, gt=0.0)
     title_max_attempts: int = Field(default=3, ge=1, le=3)
     output_width: int = Field(default=OUTPUT_WIDTH, gt=0)
