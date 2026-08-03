@@ -141,6 +141,33 @@ def main() -> None:
     print("\n".join(str(path) for path in artifacts))
 
 
+def _log_politician_linkage(batch: SupabasePublishBatch, *, dokid: str) -> None:
+    """Warn per debate when a speech will land without a politician.
+
+    `publish_clip_batch` joins on `intressent_id`, so a speech without one is
+    stored with `politician_id = null` and no error. It is then invisible to a
+    party page, a follow, or per-politician exposure (`Q-2`). Over a 15,000-clip
+    backfill that would be discovered far too late, so it is said out loud here
+    and counted in `scripts/pipeline_report.py`.
+    """
+
+    speeches = batch.to_payload().get("speeches")
+    if not isinstance(speeches, list):
+        return
+    unlinked = [
+        str(row.get("id"))
+        for row in speeches
+        if isinstance(row, Mapping) and not str(row.get("intressent_id") or "").strip()
+    ]
+    if unlinked:
+        stage_logger("C11_publish", dokid=dokid).warning(
+            "speeches_without_politician",
+            unlinked=len(unlinked),
+            total=len(speeches),
+            speech_ids=unlinked[:5],
+        )
+
+
 def _publishable(paths: WorkPaths, selected: list[SelectedClip]) -> list[SelectedClip]:
     """Drop clips C8 could not attribute to a speaker.
 
@@ -210,6 +237,7 @@ def _publish_remote(
         uploaded_urls=uploaded_urls,
         published_at=published_at,
     )
+    _log_politician_linkage(batch, dokid=source.dokid)
     publisher.publish_batch(batch)
 
     written: list[Path] = []

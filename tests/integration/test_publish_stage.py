@@ -293,3 +293,46 @@ def _write_publish_fixture(paths: Any, dokid: str) -> tuple[SelectedClip, Speech
     paths.render_primary_mp4(selected.clip_id).write_bytes(b"mp4")
     paths.render_thumb(selected.clip_id).write_bytes(b"webp")
     return selected, speech
+
+
+def test_a_speech_without_an_intressent_id_is_reported(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An unlinked speech must be loud, because the database will not complain.
+
+    `publish_clip_batch` joins politicians with a left join, so a missing
+    `intressent_id` yields `politician_id = null` silently. That row is then
+    invisible to a party page or a follow (`Q-2`), and over a 15,000-clip
+    backfill it would be found far too late.
+    """
+
+    dokid = "HDNOID"
+    paths = work_paths(dokid, root=tmp_path)
+    paths.ensure_directories()
+    selected, _speech = _write_publish_fixture(paths, dokid)
+    payload = json.loads(paths.source_json.read_text(encoding="utf-8"))
+    for entry in payload["anforanden"]:
+        entry.pop("intressent_id", None)
+    paths.source_json.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    paths.camera_json(selected.clip_id).write_text(
+        CameraPlan(
+            clip_id=selected.clip_id,
+            keyframes=(CameraKeyframe(t=20.0, crop_x=437.0),),
+            mode=CameraMode.STATIC,
+        ).model_dump_json(),
+        encoding="utf-8",
+    )
+
+    publish_dokid(
+        dokid,
+        work_dir=tmp_path,
+        backend="remote",
+        bunny_uploader=FakeBunnyUploader(),
+        supabase_publisher=FakeSupabasePublisher(),
+    )
+
+    # structlog writes its own line to stdout rather than through stdlib logging,
+    # so caplog never sees it.
+    output = capsys.readouterr().out
+    assert "speeches_without_politician" in output
+    assert "unlinked=1" in output

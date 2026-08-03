@@ -299,6 +299,35 @@ def inventory(executor: SqlExecutor) -> Mapping[str, int]:
     return {key: _int(row.get(key)) for key in keys}
 
 
+def politician_linkage(executor: SqlExecutor) -> Mapping[str, int]:
+    """How many speeches resolve to a politician row, and how many do not.
+
+    `publish_clip_batch` links a speech with
+    `left join politicians on intressent_id`, so a speech whose official metadata
+    carries no `intressent_id` silently lands with `politician_id = null`. Nothing
+    errors, nothing retries — the row is simply invisible to anything keyed on a
+    person: a party profile grid, follows, per-politician exposure (`Q-2`).
+
+    At sixteen clips that is easy to eyeball. At fifteen thousand it is not, which
+    is why it is a metric rather than a spot check. Some speeches legitimately
+    have no id (the Talman, guests), so this is reported, not enforced.
+    """
+
+    rows = _rows(
+        executor.execute_sql(
+            "select "
+            "  count(*)::int as speeches, "
+            "  count(politician_id)::int as linked, "
+            "  (count(*) - count(politician_id))::int as unlinked, "
+            "  (select count(*) from public.politicians)::int as politicians "
+            "from public.speeches;"
+        )
+    )
+    row = rows[0] if rows else {}
+    keys = ("speeches", "linked", "unlinked", "politicians")
+    return {key: _int(row.get(key)) for key in keys}
+
+
 # -- helpers -------------------------------------------------------------
 
 

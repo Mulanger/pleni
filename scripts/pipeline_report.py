@@ -31,6 +31,7 @@ from src.observability.metrics import (  # noqa: E402
     freshness,
     inventory,
     party_distribution,
+    politician_linkage,
     stage_failures,
     stage_timings,
 )
@@ -61,6 +62,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     counts = inventory(client)
+    linkage = politician_linkage(client)
     timings = stage_timings(client, days=args.days)
     failures = stage_failures(client, days=args.days)
     slo = freshness(client, days=args.freshness_days)
@@ -71,6 +73,7 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(
                 {
                     "inventory": dict(counts),
+                    "politician_linkage": dict(linkage),
                     "stage_timings": [t.__dict__ for t in timings],
                     "stage_failures": [
                         {**f.__dict__, "failure_rate": f.failure_rate} for f in failures
@@ -98,6 +101,19 @@ def main(argv: list[str] | None = None) -> int:
         f"  {counts['debates']} debates · {counts['speeches']} speeches · "
         f"{counts['published_clips']} published clips · {counts['parties']} parties"
     )
+    linked, unlinked = linkage["linked"], linkage["unlinked"]
+    total = linked + unlinked
+    share = f"{linked / total * 100:.1f}%" if total else "n/a"
+    print(
+        f"  {linkage['politicians']} politicians · {share} of speeches link to one"
+        + (f" · {unlinked} unlinked" if unlinked else "")
+    )
+    if unlinked:
+        print(
+            "  Q-2: an unlinked speech is invisible to a party page, a follow or "
+            "per-politician exposure. Check its official metadata for intressent_id."
+        )
+
     if counts["published_clips"] < 2000:
         print(
             f"  Q-1: {counts['published_clips']} of ~2000 clips. Pool-based ranking "
