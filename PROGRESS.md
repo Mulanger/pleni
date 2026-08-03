@@ -925,3 +925,71 @@ milliseconds, and only the clip that actually failed is redone.
 - Four workers on four machines render a debate in roughly a quarter of the time.
   On one workstation the win is smaller but the retry cost is the real prize.
 - `python -m src.stages.render --dokid X --clip-id Y --force` re-renders one clip.
+
+## Backfill readiness — doktype survey, skip state, month windows — DONE 2026-08-03
+
+**Built:** `migrations/008_job_skipped_state.{up,down}.sql`, `NotClippableError` in
+`src/errors.py`, `backfill_window()` + `pipeline backfill` in
+`src/orchestrator/{discovery,cli}.py`, `JobQueue.skip()`, corrected
+`DEFAULT_DISCOVERY_DOKTYPES`, runbook backfill section, 9 new tests.
+**Tests:** 243 passed (was 235); ruff and mypy clean on 74 files.
+**Contracts touched:** none.
+
+**Surveyed the live Riksdagen API before backfilling anything** — the owner asked
+whether webb-tv content beyond debates (guest visits and so on) would break the
+pipeline. Measured, not assumed:
+
+| doktyp | What it is | Documents | Through real C1 |
+|---|---|---|---|
+| `ip` | Interpellationsdebatt | 15,757 | HD10540: 7 speakers / 7 anföranden |
+| `kam-fs` | Frågestund | 604 | 81 / 81 |
+| `kam-sd` | Särskild debatt | 100 | 66 / 66 |
+| `kam-ad` | Aktuell debatt | 97 | 90 / 90 |
+| `kam-vo` | Beslut / Votering | 8,047 | refuses — nothing to clip |
+| `kam-ip` | Session wrapper "Interpellationssvar" | 616 | refuses — no speaker list |
+| `kam-al` | Session wrapper | 68 | refuses |
+
+**Two findings:**
+
+1. **Discovery was asking for the wrong type.** `DEFAULT_DISCOVERY_DOKTYPES` was
+   `("kam-fs",)`, but HD10540 — the batch actually published, the 16 clips live in
+   the app — is `doktyp=ip`. The automated loop would never have found the content
+   type already validated end to end. Now `("ip", "kam-fs", "kam-sd", "kam-ad")`.
+2. **`kam-ip` is not `ip`.** 616 session-level "Interpellationssvar" wrappers versus
+   15,757 individual debates. Easy to pick the wrong one; the constant says so.
+
+**Discovery is a whitelist, which is the safety property the owner was asking about.**
+`dokumentlista?doktyp=X` only returns what is named, so guest visits, ceremonies and
+school tours cannot appear. And a non-debate fails in `discover` — the first stage,
+metadata only — before `acquire` downloads any video. The cost of a wrong doktype is
+a failed metadata fetch, not a wasted download.
+
+**Decisions made:**
+- `NotClippableError` is now distinct from `RiksdagenParseError`. An empty speaker
+  list is not schema drift — it is a written interpellation answer or a recess
+  session. Conflating them made the daily canary cry wolf and, during a backfill,
+  would have buried real failures behind hundreds of normal gaps. Everything from
+  2026-06-18 onward is in that category: the chamber had risen for the summer.
+- Migration 008 adds a `skipped` state. Terminal but not failed: the job ran,
+  concluded correctly that there was nothing to do, and the chain stops. Retrying it
+  three times first was wrong twice over.
+- **Backfill never reads or writes the discovery watermark.** Backfill is bounded and
+  historical; the daemon is the forward loop. Sharing state is how backfilling
+  January silently makes the daemon skip August.
+- Backfilled work is enqueued at **negative priority**, so this morning's debate is
+  always claimed before an archive of 2024.
+- `--to` is exclusive, so consecutive months cannot double-count a day. Overlapping
+  windows are safe regardless — the idempotency key admits each debate once.
+
+**Live check:** `backfill --from 2026-03-01 --to 2026-04-01 --dry-run` found **64
+documents** for March 2026, a workable month-sized window.
+
+**Blocked / needs a decision:**
+- `P0-9` — rotate the Supabase Management access token from the 2026-08-02 transcript.
+
+**Next agent should know:**
+- Volume: `ip` alone is 15,757 documents. Do not run an unbounded backfill; a month is
+  the unit, and `pipeline_report.py` after each one is the feedback loop.
+- The M 81% / S 19% party skew seen in the first 16 clips comes from interpellation
+  debates structurally — a minister answers repeatedly. Watch it as `ip` volume grows;
+  it is `F0-13` territory, not a bug.

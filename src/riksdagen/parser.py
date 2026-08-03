@@ -13,6 +13,7 @@ from typing import cast
 from xml.etree import ElementTree
 
 from src.contracts import Source, SpeakerEntry
+from src.errors import NotClippableError
 
 NEXT_DATA_RE = re.compile(
     r'<script id="__NEXT_DATA__" type="application/json">(?P<payload>.*?)</script>',
@@ -387,7 +388,12 @@ def _party(speaker: Mapping[str, object]) -> str | None:
 def _speaker_list(value: object) -> tuple[Mapping[str, object], ...]:
     speakers = _listify(value)
     if not speakers:
-        raise RiksdagenParseError("Response speaker list is missing or empty")
+        # Not schema drift: a document with an empty speaker list usually has no
+        # video at all — a written interpellation answer, a recess session, a
+        # procedural item. Raising the drift error here would make the daily
+        # canary cry wolf and would make a backfill dead-letter hundreds of
+        # perfectly normal gaps. See `NotClippableError`.
+        raise NotClippableError("Riksdagen document has no speaker list; nothing to clip")
     return tuple(_required_mapping(item, "speaker") for item in speakers)
 
 

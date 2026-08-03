@@ -420,5 +420,38 @@ def test_counts_by_state_always_reports_every_state() -> None:
 
     counts = queue.counts_by_state(entity_id="HD10540")
 
-    assert counts == {"queued": 3, "running": 0, "complete": 0, "dead": 0}
+    assert counts == {"queued": 3, "running": 0, "complete": 0, "dead": 0, "skipped": 0}
     assert "entity_id = 'HD10540'" in executor.last
+
+
+# -- skipped: terminal, but not a failure --------------------------------
+
+
+def test_skipping_is_neither_complete_nor_dead() -> None:
+    """A Riksdagen document with no video is a fact about the archive.
+
+    Marking it `dead` would bury real failures under hundreds of normal recess
+    gaps during a backfill; marking it `complete` would advance the chain into
+    stages that have nothing to work on.
+    """
+
+    queue, executor = _queue()
+
+    queue.skip(_job(), "Riksdagen document has no speaker list; nothing to clip")
+
+    sql = executor.last
+    assert "state = 'skipped'" in sql
+    assert "nothing to clip" in sql
+    assert "locked_by = null" in sql
+
+
+def test_a_skip_is_recorded_in_the_run_history() -> None:
+    """Otherwise a backfill's shape is invisible in the metrics."""
+
+    queue, executor = _queue()
+
+    queue.skip(_job(), "no video")
+
+    history = [s for s in executor.statements if "insert into public.job_runs" in s]
+    assert len(history) == 1
+    assert "'skipped'" in history[0]

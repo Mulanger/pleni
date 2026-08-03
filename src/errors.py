@@ -25,3 +25,17 @@ class ContractValidationError(PipelineError):
 
 class StageExecutionError(PipelineError):
     """A stage failed while producing its own artifact."""
+
+
+class NotClippableError(PipelineError):
+    """This source has no clippable content, and never will.
+
+    Distinct from a failure. A Riksdagen document can legitimately carry no
+    video and no speakers — an interpellation answered in writing, a session
+    during summer recess, a procedural item — and retrying that three times
+    before dead-lettering buries real failures under normal gaps. Especially
+    during a backfill, where hundreds of such documents are expected.
+
+    The orchestrator treats this as terminal-but-not-failed: the job is marked
+    `skipped` and the chain stops there.
+    """

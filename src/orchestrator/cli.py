@@ -16,15 +16,16 @@ from __future__ import annotations
 import argparse
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from src.config import Settings, get_settings
-from src.errors import ConfigurationError, PipelineError
+from src.errors import ConfigurationError, NotClippableError, PipelineError
 from src.logging import configure_logging, stage_logger
 from src.orchestrator.discovery import (
     DEFAULT_MAX_ENQUEUE,
     DiscoveryResult,
+    backfill_window,
     build_client,
     discover_and_enqueue,
     seed_watermark,
@@ -98,6 +99,19 @@ class Worker:
 
         try:
             self._execute(job)
+        except NotClippableError as error:
+            # Nothing to do, and no amount of retrying will change that.
+            self.queue.skip(job, str(error))
+            result.outcome = "skipped"
+            self.logger.info(
+                "job_skipped",
+                job_id=job.id,
+                kind=job.kind,
+                dokid=job.entity_id,
+                reason=str(error),
+                duration_ms=int((time.monotonic() - started) * 1000),
+            )
+            return result
         except PipelineError as error:
             # Expected pipeline failures: retryable, and the message is useful.
             result.outcome = self.queue.fail(job, f"{type(error).__name__}: {error}")
@@ -270,6 +284,14 @@ def main(argv: list[str] | None = None) -> int:
         "--max-enqueue", type=int, default=DEFAULT_MAX_ENQUEUE,
     )
 
+    backfill_parser = subparsers.add_parser(
+        "backfill", help="Enqueue a bounded historical window. Does not touch the watermark."
+    )
+    backfill_parser.add_argument("--from", dest="from_date", required=True, metavar="YYYY-MM-DD")
+    backfill_parser.add_argument("--to", dest="to_date", required=True, metavar="YYYY-MM-DD")
+    backfill_parser.add_argument("--max-enqueue", type=int, default=500)
+    backfill_parser.add_argument("--dry-run", action="store_true")
+
     subparsers.add_parser("reap", help="Return expired leases to the queue")
     subparsers.add_parser("graph", help="Print the stage graph")
 
@@ -309,6 +331,27 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  enqueued  {dokid}")
         for dokid in discovered.skipped_over_cap:
             print(f"  deferred  {dokid}  (over --max-enqueue; found again next pass)")
+        return 0
+
+    if args.command == "backfill":
+        client = build_client(
+            user_agent=settings.riksdagen_user_agent,
+            timeout_s=settings.http_timeout_s,
+            max_retries=settings.max_http_retries,
+        )
+        window = backfill_window(
+            client,
+            queue,
+            since=date.fromisoformat(args.from_date),
+            until=date.fromisoformat(args.to_date),
+            max_enqueue=args.max_enqueue,
+            dry_run=args.dry_run,
+        )
+        print(f"{args.from_date} .. {args.to_date}: {window.summary()}")
+        for dokid in window.enqueued:
+            print(f"  enqueued  {dokid}")
+        if window.skipped_over_cap:
+            print(f"  {len(window.skipped_over_cap)} over --max-enqueue; narrow the window")
         return 0
 
     if args.command == "daemon":

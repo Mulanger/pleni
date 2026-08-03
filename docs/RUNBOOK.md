@@ -35,6 +35,7 @@ errors. `queued` climbing with nothing `running` means no worker is alive.
 | `dead` > 0 | A job exhausted its retries. Go to **Dead-lettered job**. |
 | `queued` > 0, `running` = 0 | No worker is running for that pool. Start one. |
 | Everything `complete`, feed still stale | Nothing was discovered. Go to **No new debates**. |
+| Lots of `skipped` | Normal during a backfill: those documents have no video. Not a failure. |
 
 ---
 
@@ -155,6 +156,46 @@ python -m src.orchestrator.cli enqueue --dokid <DOKID>   # force one debate
 
 If `discover` fails, the usual cause is Riksdagen changing its page shape. See
 **Riksdagen schema drift**.
+
+## Backfilling the archive
+
+Riksdagen's archive is large. Measured 2026-08-03:
+
+| doktyp | What it is | Documents | Clippable? |
+|---|---|---|---|
+| `ip` | Interpellationsdebatt | 15,757 | yes — HD10540 was one |
+| `kam-fs` | Frågestund | 604 | yes |
+| `kam-sd` | Särskild debatt | 100 | yes |
+| `kam-ad` | Aktuell debatt | 97 | yes |
+| `kam-vo` | Beslut / Votering | 8,047 | **no** — procedural, nothing to clip |
+| `kam-ip`, `kam-al` | Session wrappers | 684 | **no** — no speaker list |
+
+Discovery is a **whitelist**, so guest visits, ceremonies and school tours never
+appear. Only the four clippable types are in `DEFAULT_DISCOVERY_DOKTYPES`.
+
+Backfill one month at a time and look at the result before continuing:
+
+```bash
+python -m src.orchestrator.cli backfill --from 2026-03-01 --to 2026-04-01 --dry-run
+python -m src.orchestrator.cli backfill --from 2026-03-01 --to 2026-04-01
+python scripts/pipeline_report.py --days 30
+```
+
+`--to` is **exclusive**, so consecutive months cannot double-count a day. Windows
+may overlap safely anyway — the idempotency key admits each debate once.
+
+Three things worth knowing:
+
+- **Backfill never touches the discovery watermark.** It is a bounded historical
+  operation; the daemon is the forward-moving loop. Sharing state is how
+  backfilling January silently makes the daemon skip August.
+- **Backfilled work is enqueued at negative priority**, so a debate from this
+  morning is always claimed before an archive of 2024. Freshness is the product
+  promise; back catalogue is inventory.
+- **Expect skips.** Written interpellation answers and recess sessions have no
+  video. They come back as `skipped`, not `dead`, so the dead-letter list stays
+  meaningful. Everything from 2026-06-18 onward is currently in that category —
+  the chamber had risen for the summer.
 
 ### The back catalogue decision
 

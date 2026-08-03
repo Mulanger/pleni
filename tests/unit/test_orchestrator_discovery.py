@@ -228,3 +228,101 @@ def test_discovery_starts_the_chain_at_the_first_stage(tmp_path: Path) -> None:
     assert call["kind"] == "discover"
     assert call["idempotency_key"] == "discover:HD0000:v1"
     assert call["pool"] == "io"
+
+
+# -- bounded historical backfill -----------------------------------------
+
+
+class WindowRiksdagen(FakeRiksdagen):
+    """Records the query params so the date window can be asserted."""
+
+    def fetch_document_list(self, params: Mapping[str, str]) -> Mapping[str, Any]:
+        self.requests.append(dict(params))
+        return super().fetch_document_list(params)
+
+
+def test_backfill_never_touches_the_watermark(tmp_path: Path) -> None:
+    """Backfill is bounded and historical; discovery is the forward loop.
+
+    Sharing state is how backfilling January silently makes the daemon skip
+    August.
+    """
+
+    from datetime import date
+
+    from src.orchestrator.discovery import backfill_window
+
+    client = WindowRiksdagen(_records(3))
+    enqueuer = RecordingEnqueuer()
+    discover_and_enqueue(client, enqueuer, work_dir=tmp_path)  # type: ignore[arg-type]
+    before = read_watermark(watermark_path(tmp_path))
+
+    backfill_window(  # type: ignore[arg-type]
+        client, enqueuer, since=date(2024, 1, 1), until=date(2024, 2, 1)
+    )
+
+    assert read_watermark(watermark_path(tmp_path)) == before
+
+
+def test_backfill_asks_for_a_half_open_window(tmp_path: Path) -> None:
+    """`--to` is exclusive, so consecutive months cannot double-count a day."""
+
+    from datetime import date
+
+    from src.orchestrator.discovery import backfill_window
+
+    client = WindowRiksdagen([])
+    backfill_window(  # type: ignore[arg-type]
+        client, RecordingEnqueuer(), since=date(2026, 3, 1), until=date(2026, 4, 1)
+    )
+
+    assert client.requests[0]["from"] == "2026-03-01"
+    assert client.requests[0]["tom"] == "2026-03-31"
+
+
+def test_backfill_queues_behind_fresh_work(tmp_path: Path) -> None:
+    """A debate from this morning must outrank an archive of 2024."""
+
+    from datetime import date
+
+    from src.orchestrator.discovery import backfill_window
+
+    enqueuer = RecordingEnqueuer()
+    backfill_window(  # type: ignore[arg-type]
+        WindowRiksdagen(_records(2)), enqueuer, since=date(2024, 1, 1), until=date(2024, 2, 1)
+    )
+
+    assert all(call["priority"] < 0 for call in enqueuer.calls)
+    assert all(call["payload"]["backfill"] is True for call in enqueuer.calls)
+
+
+def test_overlapping_backfill_windows_cannot_double_process(tmp_path: Path) -> None:
+    from datetime import date
+
+    from src.orchestrator.discovery import backfill_window
+
+    client = WindowRiksdagen(_records(3))
+    enqueuer = RecordingEnqueuer()
+
+    first = backfill_window(  # type: ignore[arg-type]
+        client, enqueuer, since=date(2026, 1, 1), until=date(2026, 2, 1)
+    )
+    second = backfill_window(  # type: ignore[arg-type]
+        client, enqueuer, since=date(2026, 1, 15), until=date(2026, 2, 15)
+    )
+
+    assert len(first.enqueued) == 3
+    assert second.enqueued == []
+    assert len(second.already_known) == 3
+
+
+def test_backfill_covers_every_chosen_doktype() -> None:
+    """The whitelist decided on 2026-08-03, verified clippable through C1."""
+
+    from src.riksdagen.discovery import DEFAULT_DISCOVERY_DOKTYPES
+
+    assert set(DEFAULT_DISCOVERY_DOKTYPES) == {"ip", "kam-fs", "kam-sd", "kam-ad"}
+    # kam-vo is 8,047 voting sessions with nothing to clip; kam-ip and kam-al
+    # are session-level wrappers with no speaker list.
+    assert "kam-vo" not in DEFAULT_DISCOVERY_DOKTYPES
+    assert "kam-ip" not in DEFAULT_DISCOVERY_DOKTYPES

@@ -9,6 +9,7 @@ from typing import cast
 import pytest
 
 from src.contracts import Source, SpeakerEntry
+from src.errors import NotClippableError
 from src.riksdagen.parser import (
     RiksdagenParseError,
     html_to_text,
@@ -101,13 +102,28 @@ def test_parse_rejects_empty_response() -> None:
         parse_video_response({})
 
 
-def test_parse_rejects_missing_speaker_list() -> None:
+def test_an_empty_speaker_list_is_not_clippable_rather_than_drift() -> None:
+    """A document with no speakers usually has no video at all.
+
+    Written interpellation answers, recess sessions and procedural items are all
+    normal and expected — especially during a backfill. Reporting them as schema
+    drift would make the daily canary cry wolf and would bury real failures in
+    the dead-letter list behind hundreds of ordinary gaps.
+    """
+
     payload = {
         "pageProps": {"contentApiData": {"documentId": "X", "title": "T", "date": "2026-01-01"}}
     }
 
-    with pytest.raises(RiksdagenParseError, match="speaker list"):
+    with pytest.raises(NotClippableError, match="nothing to clip"):
         parse_video_response(payload)
+
+
+def test_not_clippable_is_still_distinct_from_a_malformed_response() -> None:
+    """Real drift must keep raising the drift error, or the canary is useless."""
+
+    with pytest.raises(RiksdagenParseError):
+        parse_video_response({"pageProps": {}})
 
 
 def test_parse_rejects_missing_start_positions() -> None:

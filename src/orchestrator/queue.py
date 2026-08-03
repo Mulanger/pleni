@@ -32,7 +32,7 @@ POOLS = ("gpu", "cpu", "io")
 
 #: Terminal and non-terminal states. There is deliberately no `failed` resting
 #: state — a failure is either retryable or `dead`. See migration 006.
-STATES = ("queued", "running", "complete", "dead")
+STATES = ("queued", "running", "complete", "dead", "skipped")
 
 #: How long a claim is valid before the reaper may take it back. Must exceed the
 #: longest plausible stage runtime; rendering a 60s clip dominates and the
@@ -189,6 +189,23 @@ class JobQueue:
             "update public.jobs set "
             "state = 'complete', locked_at = null, locked_by = null, "
             "last_error = null, updated_at = now() "
+            f"where id = {int(job.id)};"
+        )
+
+    def skip(self, job: Job, reason: str) -> None:
+        """Terminal, but not a failure: there was nothing to do (migration 008).
+
+        Distinct from `complete` because the chain must not advance, and from
+        `dead` because nothing is broken. A Riksdagen document with no video is
+        a normal fact about the archive, not an incident, and burying it in the
+        dead-letter list would make that list useless during a backfill.
+        """
+
+        self._record_run(job, outcome="skipped", error=reason)
+        self.executor.execute_sql(
+            "update public.jobs set "
+            "state = 'skipped', locked_at = null, locked_by = null, "
+            f"last_error = {_text(_truncate(reason))}, updated_at = now() "
             f"where id = {int(job.id)};"
         )
 

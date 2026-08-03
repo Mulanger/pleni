@@ -11,7 +11,19 @@ from typing import cast
 from src.riksdagen.client import RiksdagenClient
 from src.riksdagen.parser import RiksdagenParseError
 
-DEFAULT_DISCOVERY_DOKTYPES = ("kam-fs",)
+#: Document types Riket TV clips, chosen 2026-08-03 and verified through the
+#: real C1 path — each returns speakers and official anföranden.
+#:
+#: `ip` is individual interpellation debates (15,757 documents) and is NOT the
+#: same as `kam-ip` (616), which is session-level "Interpellationssvar" wrappers
+#: with no speaker list. The published HD10540 batch is an `ip`, so this is the
+#: only type proven end to end through render and publish.
+#:
+#: Deliberately excluded: `kam-vo` (8,047 Beslut/Votering) is procedural voting
+#: with nothing to clip, and `kam-al` / `kam-ip` are session wrappers. The list
+#: is a whitelist, so anything not named here — guest visits, ceremonies, school
+#: tours — simply never appears.
+DEFAULT_DISCOVERY_DOKTYPES = ("ip", "kam-fs", "kam-sd", "kam-ad")
 
 
 @dataclass(frozen=True)

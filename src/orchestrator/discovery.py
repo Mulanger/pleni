@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from src.orchestrator.jobs import Enqueuer, enqueue_debate
@@ -41,6 +41,7 @@ from src.riksdagen.discovery import (
     DiscoveryRecord,
     discover_since,
     next_watermark,
+    parse_document_list,
     read_watermark,
     write_watermark,
 )
@@ -151,6 +152,70 @@ def discover_and_enqueue(
     processed = records[: max_enqueue if result.skipped_over_cap else len(records)]
     result.watermark = next_watermark(processed, watermark)
     write_watermark(path, result.watermark)
+    return result
+
+
+def backfill_window(
+    client: RiksdagenClient,
+    enqueuer: Enqueuer,
+    *,
+    since: date,
+    until: date,
+    doktypes: Sequence[str] = DEFAULT_DISCOVERY_DOKTYPES,
+    max_enqueue: int = 500,
+    page_size: int = 500,
+    priority: int = -1,
+    dry_run: bool = False,
+) -> DiscoveryResult:
+    """Enqueue every clippable debate published in `[since, until)`.
+
+    **Deliberately does not read or write the watermark.** Backfill is a bounded
+    historical operation; discovery is the forward-moving loop. Sharing state
+    between them is how a backfill of January silently makes the daemon skip
+    August. They are kept independent so a backfill can be run, re-run, or
+    abandoned without touching what the daemon does next.
+
+    Idempotent through the same mechanism as everything else: the enqueue key is
+    `discover:<dokid>:v1`, so overlapping windows cannot double-process a debate.
+
+    Backfilled work is enqueued at **negative priority**, so a debate that
+    happened this morning is always claimed before an archive of 2024. Freshness
+    is the product promise; the back catalogue is inventory.
+    """
+
+    records: list[DiscoveryRecord] = []
+    for doktyp in doktypes:
+        payload = client.fetch_document_list(
+            {
+                "doktyp": doktyp,
+                "from": since.isoformat(),
+                "tom": (until - timedelta(days=1)).isoformat(),
+                "utformat": "json",
+                "sz": str(page_size),
+            }
+        )
+        records.extend(parse_document_list(payload))
+
+    deduped = {record.dokid: record for record in records}
+    ordered = sorted(deduped.values(), key=lambda r: (r.published_at, r.dokid))
+
+    result = DiscoveryResult(found=len(ordered))
+    for record in ordered[:max_enqueue]:
+        if dry_run:
+            result.enqueued.append(record.dokid)
+            continue
+        created = enqueue_debate(
+            enqueuer,
+            record.dokid,
+            priority=priority,
+            payload={
+                "title": record.title,
+                "document_type": record.document_type,
+                "backfill": True,
+            },
+        )
+        (result.enqueued if created else result.already_known).append(record.dokid)
+    result.skipped_over_cap = [record.dokid for record in ordered[max_enqueue:]]
     return result
 
 
