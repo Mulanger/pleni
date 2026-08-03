@@ -791,3 +791,72 @@ That is the ledger behaving as designed, on its first real opportunity to.
   It now prints the token summary and the raw response on failure, not just a Swedish label.
 - Clerk development instances accept `+clerk_test` addresses with the fixed code `424242`, so
   this can be re-run without a real identity.
+
+## C13 — Observability, freshness SLO and runbook — DONE 2026-08-03
+
+**Built:** `migrations/007_job_runs.{up,down}.sql`, `src/observability/{__init__,metrics}.py`,
+`scripts/pipeline_report.py`, `docs/RUNBOOK.md`, `.github/workflows/schema-drift.yml`,
+`tests/unit/test_observability_metrics.py`, `tests/live/test_observability.py`, plus job-run
+recording in `src/orchestrator/queue.py`.
+**Tests:** `python tasks.py test lint typecheck` green — **208 passed**, 61 deselected;
+ruff clean; mypy strict clean on 73 files. Live: 6 observability + 6 queue + 53 privilege.
+**Contracts touched:** none.
+
+**Decisions made:**
+- `public.jobs` is mutated in place, so once a job completes the only surviving evidence of a
+  rocky path is `attempts = 3`. `public.job_runs` is append-only, one row per attempt, and is
+  what makes "how long does render take", "what fails most" and "did Tuesday process cleanly"
+  answerable at all. Cost is one INSERT per transition.
+- **The reaper writes history too.** A crashed worker reports nothing, so without an explicit
+  `reaped` row the most interesting failures would be precisely the ones missing from the
+  metrics.
+- History is written *before* the state change, while `locked_at`/`locked_by` still describe
+  the attempt the update is about to clear.
+- ADR 009's one-statement rule does not extend to the history INSERT, and the code says so.
+  That rule exists because `claim` is where atomicity buys the exclusion guarantee. A request
+  dying between the state change and the history row costs a gap in a chart, not a lost job.
+- `reaped` counts as a failure in `stage_failures()`. A worker that died mid-job did not
+  succeed.
+- Timings use `percentile_disc`, never a mean. A mean hides the tail, and the tail is what
+  breaks a lease.
+- Freshness excludes backfilled debates by filtering on `debate_date`, not `published_at`.
+  A 2024 debate published today would otherwise report a two-year lag and destroy the
+  percentile — the same distinction `Q-4` makes for ranking.
+- Party distribution is **reported, not enforced**. The balance policy is `F0-13` and belongs
+  to product, not to a scoring function. Building the measurement first is what makes that an
+  informed decision.
+
+**Live numbers, project `nlooigmwuqqhhnontlgp` (2026-08-03):**
+- Inventory: 1 debate, 7 speeches, **16 published clips**, 2 parties. `Q-1` wants ~2000.
+- Freshness over 120 days: 1/1 debates published, **p50 = p95 = 41.2 days**. That is the
+  backfilled test batch, not steady state — the 30-day window correctly reports "no debates"
+  and will stay honest once real supply starts.
+- Party exposure: **M 81.2%, S 18.8%** across 16 clips. An interpellation debate where the
+  minister answers repeatedly. Not a ranking artefact — it is what the source material
+  contains — but it is exactly the kind of skew `F0-13` exists to have an opinion about.
+- Stage timing/reliability: empty. No job has run through the queue yet.
+
+**Observations (not fixed, out of scope):**
+- **No discovery cron.** C12 calls for 30-minute discovery; debates are still enqueued by
+  hand. This is the largest remaining gap in P1 and the reason "unattended" currently means
+  "unattended once started".
+- **Render is one job per debate**, serial, with no skip-if-exists. A crash at clip 399 of 400
+  re-encodes all 400. At high volume the render can also outlive its six-hour lease, at which
+  point the reaper starts a *second* worker on the same debate. Both are in
+  `docs/RUNBOOK.md` under Known sharp edges.
+- The freshness SLO is measured from midnight on `debate_date` because that column is a DATE.
+  It overstates lag by up to a day and cannot be fixed by arithmetic — it needs Riksdagen's
+  publication timestamp captured at C1.
+
+**Blocked / needs a decision:**
+- `P0-9` — the Supabase Management access token is still the one pasted into a chat
+  transcript on 2026-08-02. Rotate it.
+
+**Next agent should know:**
+- `python scripts/pipeline_report.py` is the one command to run first when something looks
+  wrong. `--json` for machine-readable, `--freshness-days N` to widen the window.
+- `docs/RUNBOOK.md` is organised by symptom, not by subsystem, because a symptom is what you
+  actually have when something breaks.
+- The schema-drift workflow runs daily at 06:15 UTC and is the only early warning for the
+  pipeline's least stable dependency. A red run means discovery is broken *silently* — the app
+  keeps serving yesterday's clips and nothing reaches a user.

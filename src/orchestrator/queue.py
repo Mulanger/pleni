@@ -184,11 +184,35 @@ class JobQueue:
     def complete(self, job: Job) -> None:
         """Mark a job done. Terminal."""
 
+        self._record_run(job, outcome="complete", error=None)
         self.executor.execute_sql(
             "update public.jobs set "
             "state = 'complete', locked_at = null, locked_by = null, "
             "last_error = null, updated_at = now() "
             f"where id = {int(job.id)};"
+        )
+
+    def _record_run(self, job: Job, *, outcome: str, error: str | None) -> None:
+        """Append one row of execution history (C13, migration 007).
+
+        Written *before* the state change, so `locked_at` and `locked_by` are
+        still the values from this attempt — the update is about to clear them.
+
+        This is a second statement, and the one-statement rule from ADR 009 does
+        not extend to it. That rule exists because `claim` is where atomicity
+        buys the exclusion guarantee. Here, a request that dies between the two
+        statements costs a missing metrics row, not a lost or duplicated job.
+        Better a gap in a chart than a contortion in the queue.
+        """
+
+        self.executor.execute_sql(
+            "insert into public.job_runs "
+            "(job_id, kind, entity_id, pool, attempt, worker_id, started_at, "
+            " finished_at, duration_ms, outcome, error) "
+            "select id, kind, entity_id, pool, attempts, locked_by, locked_at, now(), "
+            "(extract(epoch from (now() - locked_at)) * 1000)::bigint, "
+            f"{_text(outcome)}, {_text(_truncate(error)) if error else 'null'} "
+            f"from public.jobs where id = {int(job.id)};"
         )
 
     def fail(self, job: Job, error: str) -> str:
@@ -202,6 +226,7 @@ class JobQueue:
 
         if job.attempts_remaining > 0:
             delay = backoff_seconds(job.attempts)
+            self._record_run(job, outcome="retry", error=error)
             self.executor.execute_sql(
                 "update public.jobs set "
                 "state = 'queued', locked_at = null, locked_by = null, "
@@ -212,6 +237,7 @@ class JobQueue:
             )
             return "queued"
 
+        self._record_run(job, outcome="dead", error=error)
         self.executor.execute_sql(
             "update public.jobs set "
             "state = 'dead', locked_at = null, locked_by = null, "
@@ -241,6 +267,19 @@ class JobQueue:
 
         lease = f"locked_at < now() - interval '{int(self.lease_s)} seconds'"
         reason = "'lease expired; worker presumed dead'"
+
+        # History first, while `locked_at`/`locked_by` still name the attempt.
+        # A crashed worker reports nothing itself, so without this the most
+        # interesting failures are the ones missing from the metrics.
+        self.executor.execute_sql(
+            "insert into public.job_runs "
+            "(job_id, kind, entity_id, pool, attempt, worker_id, started_at, "
+            " finished_at, duration_ms, outcome, error) "
+            "select id, kind, entity_id, pool, attempts, locked_by, locked_at, now(), "
+            "(extract(epoch from (now() - locked_at)) * 1000)::bigint, "
+            f"'reaped', {reason} "
+            f"from public.jobs where state = 'running' and {lease};"
+        )
 
         dead = self.executor.execute_sql(
             "update public.jobs set "

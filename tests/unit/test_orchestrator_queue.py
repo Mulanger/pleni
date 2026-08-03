@@ -297,8 +297,10 @@ def test_reaping_returns_expired_leases_to_the_queue() -> None:
     connection whose loss could signal otherwise.
     """
 
-    # First response is the dead-letter pass, second the requeue pass.
+    # Three statements now: the C13 history insert, then the dead-letter
+    # pass, then the requeue pass.
     executor = RecordingExecutor([
+        {"result": []},
         {"result": [{"id": 9}]},
         {"result": [{"id": 1}, {"id": 2}]},
     ])

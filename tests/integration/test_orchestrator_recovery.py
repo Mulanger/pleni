@@ -46,6 +46,7 @@ class FakeJobsTable:
 
     def __init__(self) -> None:
         self.rows: list[dict[str, Any]] = []
+        self.runs: list[dict[str, str]] = []
         self._next_id = 1
         self.now = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
 
@@ -58,6 +59,8 @@ class FakeJobsTable:
 
     def execute_sql(self, query: str) -> Mapping[str, Any]:
         collapsed = " ".join(query.split())
+        if collapsed.startswith("insert into public.job_runs"):
+            return self._record_run(collapsed)
         if collapsed.startswith("insert into public.jobs"):
             return self._insert(collapsed)
         if "for update skip locked" in collapsed:
@@ -80,6 +83,13 @@ class FakeJobsTable:
         raise AssertionError(f"FakeJobsTable does not understand: {collapsed[:160]}")
 
     # -- statements -----------------------------------------------------
+
+    def _record_run(self, sql: str) -> Mapping[str, Any]:
+        """C13 history. Records the outcome so tests can assert on it."""
+
+        outcome = re.search(r"'(complete|retry|dead|reaped)'", sql)
+        self.runs.append({"outcome": outcome.group(1) if outcome else "?"})
+        return {"result": []}
 
     def _insert(self, sql: str) -> Mapping[str, Any]:
         # Literal order matches the column list:

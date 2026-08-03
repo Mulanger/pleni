@@ -1,0 +1,61 @@
+name: Riksdagen schema drift
+
+# Prerequisite P1-3. The C1 live test, on a schedule.
+#
+# This guards the pipeline's least stable dependency. `mhs-vodapi` is retired
+# (ADR 001), so C1 parses the modern webb-tv page data — a surface Riksdagen can
+# change without notice and without telling anyone.
+#
+# The failure mode is what makes this worth a scheduled job rather than a note in
+# the runbook: when the page shape changes, `discover` starts failing and
+# **nothing else visibly breaks**. The app keeps serving yesterday's clips, no
+# error reaches a user, and the feed just quietly stops moving. A red run here is
+# the only early warning.
+#
+# Deliberately not part of the main CI workflow: it hits a third party, so it
+# must not fail a pull request that had nothing to do with it, and a flaky
+# network must not block a merge.
+
+on:
+  schedule:
+    # 06:15 UTC daily — after the overnight publication window, before the
+    # Swedish working day, so a failure is seen before it matters.
+    - cron: "15 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  live-schema:
+    name: C1 live parse
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        # Only what C1 needs. The torch stack is irrelevant to parsing a web page
+        # and would make a daily job needlessly expensive.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pydantic==2.11.7 pydantic-settings==2.10.1 \
+            structlog==25.4.0 pytest==8.4.1
+
+      - name: Parse live Riksdagen metadata
+        run: python -m pytest tests/live/test_riksdagen_live.py -m live -v
+
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::error::Riksdagen page shape changed — C1 can no longer parse it."
+          echo "Discovery is silently broken: no new debates will be enqueued and"
+          echo "nothing else will report an error."
+          echo ""
+          echo "Fix in src/riksdagen/parser.py, then re-record the fixture:"
+          echo "  python -m src.stages.discover --dokid hdc120260305fs --work-dir work/drift-check"
+          echo ""
+          echo "See docs/RUNBOOK.md -> Riksdagen schema drift."

@@ -45,7 +45,7 @@ Verified against the repo on 2026-08-02, not assumed.
 | Area | Reality | Consequence |
 |---|---|---|
 | Pipeline | C0–C11 complete, 138 tests green | Content production is fine. Nothing here blocks the recommender. |
-| Orchestration | C12 and C13 not started | No unattended supply. Freshness cannot be promised. |
+| Orchestration | C12 queue + graph + CLI built; C13 metrics, runbook and drift alert built. **No discovery cron, and render is one job per debate** | `P1-2` … `P1-5`, `P1-7` closed. Supply still needs a human to enqueue. |
 | Inventory | 16 published clips, one debate (`HD10540`) | Far too thin for pool-based ranking. See `Q-5`. |
 | Migrations | `001` … `005`, all **applied** to the live project and recorded in the ledger | `python scripts/apply_migrations.py` is the runner. |
 | Migration runner | ~~hardcoded path~~ → `src/publish/migrations.py` does ordered discovery plus a `schema_migrations` ledger with checksums | `P0-3` **closed**. Applying twice is a no-op; an edited-after-apply migration fails loudly. |
@@ -187,20 +187,20 @@ A recommender over a static 16-clip catalogue is a shuffle. The pools in the lau
 (`fresh_interest`, `fresh_general`, `back_catalog_interest`, …) are meaningless without a stream
 of new content.
 
-- [ ] **P1-1 — C12 orchestration**, per `docs/BUILD_PLAN.md`: job graph, fan-out, idempotency
+- [ ] **P1-1 · PARTIAL 2026-08-03 — C12 orchestration**, per `docs/BUILD_PLAN.md`: job graph, fan-out, idempotency
       keys, backoff, dead-letter, worker pools, CLI, 30-minute cron discovery.
-- [ ] **P1-2 — Crash-recovery acceptance**: kill mid-render, restart, converge with no duplicate
+- [x] **P1-2 · DONE 2026-08-03 — Crash-recovery acceptance**: kill mid-render, restart, converge with no duplicate
       work and no missing output. This is C12's stated acceptance criterion; do not soften it.
-- [ ] **P1-3 — C13 observability**: per-stage timing, `pipeline status` queries, failure-rate
+- [x] **P1-3 · DONE 2026-08-03 — C13 observability**: per-stage timing, `pipeline status` queries, failure-rate
       alerting, Riksdagen schema-drift alerting via the scheduled C1 live test.
-- [ ] **P1-4 — Party/speaker distribution query** (ARCHITECTURE §R5): clips per party over
+- [x] **P1-4 · DONE 2026-08-03 — Party/speaker distribution query** (ARCHITECTURE §R5): clips per party over
       trailing 7 days. Needed later as a fairness guardrail; build it now while it is cheap.
-- [ ] **P1-5 — Freshness SLO**: measure and publish debate-available → published-eligible lag.
+- [x] **P1-5 · DONE 2026-08-03 — Freshness SLO**: measure and publish debate-available → published-eligible lag.
       Until this number exists, "fresh" is not a thing the ranker can reason about.
 - [ ] **P1-6 — Backfill script with rate limiting**, and a rule that backfilled old debates carry
       their real `debate_date` and never enter a `fresh_*` pool on the strength of a recent
       `published_at`.
-- [ ] **P1-7 — `docs/RUNBOOK.md`** covering every failure mode in `ARCHITECTURE.md`.
+- [x] **P1-7 · DONE 2026-08-03 — `docs/RUNBOOK.md`** covering every failure mode in `ARCHITECTURE.md`.
 - [ ] **P1-8 — Unattended full debate day** processes without human intervention.
 
 ---
