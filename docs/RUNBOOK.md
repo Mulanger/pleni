@@ -98,22 +98,96 @@ Retrying the dead job restarts the chain from there.
 
 ---
 
+## Where this actually runs
+
+> **The pipeline runs on one Windows workstation, not in the cloud.** It needs the
+> local GPU for ASR and vision, and a local ffmpeg for rendering. InstaPods hosts
+> the *static frontend only* and knows nothing about any of this.
+>
+> That single fact shapes the design. The machine sleeps, reboots, and gets shut
+> for the weekend, so:
+>
+> - Discovery is **catch-up, not tick-based**. It asks "what is newer than the
+>   last thing I saw?", so a week offline is collected on the next run rather
+>   than lost.
+> - Every stage is resumable and every job is idempotent, because "the process
+>   died" is a normal Tuesday, not an incident.
+> - There is no always-on worker. Nothing progresses while the machine is off,
+>   and that is expected.
+
+## Starting the pipeline
+
+One process does everything on one machine:
+
+```bash
+python -m src.orchestrator.cli daemon
+```
+
+It discovers every 30 minutes, works all three pools, and reaps expired leases.
+Pool separation exists for a future second machine; on one workstation it would
+only mean three terminals to forget about.
+
+Leave it running. Stop it with Ctrl-C — an interrupted job is reclaimed by the
+lease reaper on the next start.
+
+**To start it automatically at logon** (run this yourself; it changes a system
+setting):
+
+```powershell
+$action = New-ScheduledTaskAction -Execute "python" -Argument "-m src.orchestrator.cli daemon" -WorkingDirectory "C:\Users\Mulen\Desktop\riket.se"
+$trigger = New-ScheduledTaskTrigger -AtLogOn
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -DontStopOnIdleEnd -ExecutionTimeLimit ([TimeSpan]::Zero)
+Register-ScheduledTask -TaskName "RiketTV pipeline" -Action $action -Trigger $trigger -Settings $settings
+```
+
+`-StartWhenAvailable` is the important flag: it runs the task after a missed
+schedule rather than skipping it, which is what makes an intermittently-on
+machine behave.
+
 ## No new debates appear
 
 The chain begins at `discover`. If nothing is being enqueued, nothing else runs.
 
 ```bash
-python -m src.orchestrator.cli enqueue --dokid <DOKID>
-python -m src.orchestrator.cli run --pool io --once
+python -m src.orchestrator.cli discover --dry-run   # what would be picked up
+python -m src.orchestrator.cli discover             # one pass, for real
+python -m src.orchestrator.cli enqueue --dokid <DOKID>   # force one debate
 ```
 
 If `discover` fails, the usual cause is Riksdagen changing its page shape. See
 **Riksdagen schema drift**.
 
-> **There is no cron yet.** `docs/BUILD_PLAN.md` C12 calls for 30-minute discovery
-> and it is not implemented — debates are enqueued by hand today. Until that
-> lands, "unattended" means "unattended once started", not "self-starting". This
-> is the largest open gap in P1.
+### The back catalogue decision
+
+On a machine with no watermark, the first discovery pass sees Riksdagen's whole
+document list — roughly 50 Frågestund debates going back to 2024 — and starts
+working through it. At hours of GPU time per debate, that is a decision, so make
+it deliberately:
+
+```bash
+# Only process debates published from now on.
+python -m src.orchestrator.cli discover --since now
+
+# Or from a specific date.
+python -m src.orchestrator.cli discover --since 2026-01-01
+```
+
+Backfilling is a legitimate choice — the back catalogue is the fastest route to
+the `Q-1` inventory threshold, and the freshness SLO already excludes old debates
+by filtering on `debate_date`, so it cannot make the pipeline look artificially
+fast. Just decide rather than discover it running.
+
+`--max-enqueue` caps how many debates one pass offers (default 25). Anything over
+the cap is **deferred, not skipped** — the watermark does not advance past it, so
+the next pass picks it up.
+
+### "POSSIBLE GAP" in the discovery output
+
+Riksdagen's document list is paginated. After a long enough outage, debates you
+have not seen can fall off the end of the first page. When every record on a full
+page is newer than the watermark, discovery says so rather than assuming it saw
+everything. Re-run with a larger `--max-enqueue`, or enqueue the missing dokids
+by hand.
 
 ---
 
@@ -213,8 +287,9 @@ failure here means something is reachable from a browser that should not be.
 
 Things that are true right now and will bite someone.
 
-- **No discovery cron.** Debates are enqueued by hand. C12's 30-minute discovery
-  is unimplemented.
+- **Nothing runs while the workstation is off.** Discovery catches up on the next
+  start, so nothing is lost, but freshness is bounded by how often the machine is
+  on. This is inherent to running locally, not a bug.
 - **Render is one job per debate.** All 400 encodes run serially in one process,
   so extra machines do not help, and a crash at clip 399 re-encodes all 400 —
   there is no skip-if-exists check. At high volume the render can also exceed its

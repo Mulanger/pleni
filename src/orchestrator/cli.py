@@ -16,11 +16,19 @@ from __future__ import annotations
 import argparse
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from src.config import Settings, get_settings
 from src.errors import ConfigurationError, PipelineError
 from src.logging import configure_logging, stage_logger
+from src.orchestrator.discovery import (
+    DEFAULT_MAX_ENQUEUE,
+    DiscoveryResult,
+    build_client,
+    discover_and_enqueue,
+    seed_watermark,
+)
 from src.orchestrator.jobs import (
     MAX_LEASE_S,
     STAGE_GRAPH,
@@ -30,6 +38,11 @@ from src.orchestrator.jobs import (
 )
 from src.orchestrator.queue import Job, JobQueue
 from src.publish.supabase import SupabaseManagementClient
+
+#: How often the daemon looks for new debates. Riksdagen publishes a handful of
+#: videos a day, so anything under ~15 minutes is polling a public service for
+#: no reason.
+DEFAULT_DISCOVERY_INTERVAL_S = 1800
 
 #: How long a worker waits before polling again when the queue is empty.
 #: `LISTEN/NOTIFY` is unavailable over the stateless transport (ADR 009), and at
@@ -200,6 +213,41 @@ def main(argv: list[str] | None = None) -> int:
     retry_parser.add_argument("--kind", default=None)
     retry_parser.add_argument("--dokid", default=None)
 
+    discover_parser = subparsers.add_parser(
+        "discover", help="Poll Riksdagen for new debates and enqueue them"
+    )
+    discover_parser.add_argument(
+        "--max-enqueue", type=int, default=DEFAULT_MAX_ENQUEUE,
+        help="Safety cap per pass. Deferred debates are found again next time.",
+    )
+    discover_parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Report what would be enqueued without enqueuing or moving the watermark.",
+    )
+    discover_parser.add_argument(
+        "--since", default=None, metavar="YYYY-MM-DD",
+        help=(
+            "Seed the watermark, then discover. Use `now` to ignore the back "
+            "catalogue and only process debates published from here on. Without "
+            "this, a fresh machine starts working through Riksdagen's archive."
+        ),
+    )
+
+    daemon_parser = subparsers.add_parser(
+        "daemon", help="Discover on an interval and work every pool. One workstation, one process."
+    )
+    daemon_parser.add_argument(
+        "--interval", type=int, default=DEFAULT_DISCOVERY_INTERVAL_S,
+        help="Seconds between discovery passes.",
+    )
+    daemon_parser.add_argument(
+        "--pools", default="io,cpu,gpu",
+        help="Comma-separated pools this machine serves.",
+    )
+    daemon_parser.add_argument(
+        "--max-enqueue", type=int, default=DEFAULT_MAX_ENQUEUE,
+    )
+
     subparsers.add_parser("reap", help="Return expired leases to the queue")
     subparsers.add_parser("graph", help="Print the stage graph")
 
@@ -223,6 +271,33 @@ def main(argv: list[str] | None = None) -> int:
         created = enqueue_debate(queue, args.dokid, priority=args.priority)
         print(f"{'enqueued' if created else 'already queued'}: {args.dokid}")
         return 0
+
+    if args.command == "discover":
+        if args.since:
+            since = (
+                datetime.now(tz=UTC)
+                if args.since.lower() == "now"
+                else datetime.fromisoformat(args.since).replace(tzinfo=UTC)
+            )
+            seed_watermark(Path(work_dir), since)
+            print(f"watermark seeded to {since.isoformat()}")
+        discovered = _discover(settings, queue, Path(work_dir), args.max_enqueue, args.dry_run)
+        print(discovered.summary())
+        for dokid in discovered.enqueued:
+            print(f"  enqueued  {dokid}")
+        for dokid in discovered.skipped_over_cap:
+            print(f"  deferred  {dokid}  (over --max-enqueue; found again next pass)")
+        return 0
+
+    if args.command == "daemon":
+        return _run_daemon(
+            settings,
+            queue,
+            work_dir=Path(work_dir),
+            pools=[pool.strip() for pool in args.pools.split(",") if pool.strip()],
+            interval_s=args.interval,
+            max_enqueue=args.max_enqueue,
+        )
 
     if args.command == "run":
         worker = Worker(queue, pool=args.pool, work_dir=Path(work_dir))
@@ -259,6 +334,94 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     raise ConfigurationError(f"Unhandled command {args.command!r}")
+
+
+def _discover(
+    settings: Settings,
+    queue: JobQueue,
+    work_dir: Path,
+    max_enqueue: int,
+    dry_run: bool,
+) -> DiscoveryResult:
+    """One discovery pass against Riksdagen."""
+
+    client = build_client(
+        user_agent=settings.riksdagen_user_agent,
+        timeout_s=settings.http_timeout_s,
+        max_retries=settings.max_http_retries,
+    )
+    return discover_and_enqueue(
+        client,
+        queue,
+        work_dir=work_dir,
+        max_enqueue=max_enqueue,
+        dry_run=dry_run,
+    )
+
+
+def _run_daemon(
+    settings: Settings,
+    queue: JobQueue,
+    *,
+    work_dir: Path,
+    pools: list[str],
+    interval_s: int,
+    max_enqueue: int,
+) -> int:
+    """Discover on an interval and work every pool, in one process.
+
+    Deliberately not three processes. This runs on one workstation with one GPU
+    and one set of cores, so pool separation would buy nothing but three
+    terminals to forget about. Split them when there is a second machine.
+
+    Ordering matters: work is drained before discovering more. A machine that is
+    only on for a few hours should finish what it started rather than collecting
+    a backlog it will never process.
+    """
+
+    logger = stage_logger("C12_daemon", pools=",".join(pools))
+    workers = [Worker(queue, pool=pool, work_dir=work_dir) for pool in pools]
+
+    reaped = queue.reap_expired_leases()
+    if reaped.total:
+        logger.info("leases_recovered", requeued=reaped.requeued, dead=reaped.dead)
+
+    last_discovery = 0.0
+    logger.info("daemon_started", interval_s=interval_s, work_dir=str(work_dir))
+
+    while True:
+        now = time.monotonic()
+        if now - last_discovery >= interval_s:
+            last_discovery = now
+            try:
+                result = _discover(settings, queue, work_dir, max_enqueue, dry_run=False)
+                logger.info(
+                    "discovery_pass",
+                    found=result.found,
+                    enqueued=len(result.enqueued),
+                    deferred=len(result.skipped_over_cap),
+                    possible_gap=result.possible_gap,
+                )
+                if result.possible_gap:
+                    logger.warning(
+                        "discovery_possible_gap",
+                        detail=(
+                            "the document list page did not reach back to the watermark; "
+                            "older debates may have been missed"
+                        ),
+                    )
+            except Exception as error:
+                # Riksdagen being unreachable must not stop the worker loop.
+                # There may be hours of queued work that has nothing to do with
+                # discovery.
+                logger.error("discovery_failed", error=str(error))
+
+        worked = any(worker.run_once().claimed for worker in workers)
+        if not worked:
+            # Nothing to do. Sleep briefly rather than spinning, but stay well
+            # under the discovery interval so new work is picked up promptly.
+            time.sleep(IDLE_POLL_S)
+            queue.reap_expired_leases()
 
 
 def _describe(result: WorkerResult) -> str:

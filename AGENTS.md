@@ -43,6 +43,13 @@ Last updated: 2026-08-02.
 
 ### Repository and deployment
 
+- **The pipeline runs on the owner's local Windows workstation, not in the cloud.** It needs
+  the local GPU (ASR, vision) and ffmpeg. InstaPods hosts the *static frontend only* and
+  knows nothing about the pipeline, the job queue or the orchestrator.
+- Because that machine sleeps and reboots, discovery is catch-up (watermark-based), never
+  tick-based, and every job is idempotent and resumable. Start everything with
+  `python -m src.orchestrator.cli daemon`. See `docs/RUNBOOK.md`.
+
 - Git is initialized. Remote: `https://github.com/Mulanger/riketTV.git`. Main branch: `main`.
 - Public web app: `https://rikettv.nbg1-3.instapods.app/`.
 - InstaPods pod: `rikettv`, static runtime, auto-deploys from `origin/main`.

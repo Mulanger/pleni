@@ -45,7 +45,7 @@ Verified against the repo on 2026-08-02, not assumed.
 | Area | Reality | Consequence |
 |---|---|---|
 | Pipeline | C0–C11 complete, 138 tests green | Content production is fine. Nothing here blocks the recommender. |
-| Orchestration | C12 queue + graph + CLI built; C13 metrics, runbook and drift alert built. **No discovery cron, and render is one job per debate** | `P1-2` … `P1-5`, `P1-7` closed. Supply still needs a human to enqueue. |
+| Orchestration | C12 queue + graph + CLI + **catch-up discovery daemon**; C13 metrics, runbook and drift alert. **Render is still one job per debate** | `P1-2` … `P1-5`, `P1-7` closed. Runs on the local workstation, not InstaPods — freshness is bounded by how often that machine is on. |
 | Inventory | 16 published clips, one debate (`HD10540`) | Far too thin for pool-based ranking. See `Q-5`. |
 | Migrations | `001` … `005`, all **applied** to the live project and recorded in the ledger | `python scripts/apply_migrations.py` is the runner. |
 | Migration runner | ~~hardcoded path~~ → `src/publish/migrations.py` does ordered discovery plus a `schema_migrations` ledger with checksums | `P0-3` **closed**. Applying twice is a no-op; an edited-after-apply migration fails loudly. |
