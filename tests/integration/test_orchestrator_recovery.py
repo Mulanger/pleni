@@ -30,7 +30,12 @@ from typing import Any
 import pytest
 
 from src.orchestrator.cli import Worker
-from src.orchestrator.jobs import STAGE_GRAPH, enqueue_debate, idempotency_key
+from src.orchestrator.jobs import (
+    STAGE_GRAPH,
+    enqueue_debate,
+    idempotency_key,
+    stage_for,
+)
 from src.orchestrator.queue import JobQueue
 
 DOKID = "HD10540"
@@ -78,6 +83,8 @@ class FakeJobsTable:
             return self._requeue(collapsed)
         if collapsed.startswith("select state, count(*)"):
             return self._counts()
+        if "count(*)::int as n" in collapsed and "parent_id =" in collapsed:
+            return self._incomplete_siblings(collapsed)
         if "where state = 'dead'" in collapsed:
             return self._dead()
         raise AssertionError(f"FakeJobsTable does not understand: {collapsed[:160]}")
@@ -195,6 +202,21 @@ class FakeJobsTable:
             row["last_error"] = row["last_error"] or "lease expired; worker presumed dead"
         return {"result": [{"id": r["id"]} for r in reaped]}
 
+    def _incomplete_siblings(self, sql: str) -> Mapping[str, Any]:
+        """C12b join barrier. `dead` counts as incomplete, as in the real query."""
+
+        parent = re.search(r"parent_id = (\d+)", sql)
+        kind = re.search(r"kind = '([^']+)'", sql)
+        assert parent and kind
+        n = sum(
+            1
+            for row in self.rows
+            if row["parent_id"] == int(parent.group(1))
+            and row["kind"] == kind.group(1)
+            and row["state"] != "complete"
+        )
+        return {"result": [{"n": n}]}
+
     def _counts(self) -> Mapping[str, Any]:
         counts: dict[str, int] = {}
         for row in self.rows:
@@ -282,9 +304,26 @@ class StageRecorder:
             raise RuntimeError(f"{kind} failed")
 
 
+CLIP_IDS = [f"{DOKID}_anf1_c{i:02d}" for i in range(1, 4)]
+
+
 @pytest.fixture
 def table() -> FakeJobsTable:
     return FakeJobsTable()
+
+
+@pytest.fixture(autouse=True)
+def stub_fan_out_units(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fan out over three clips without needing C7 artifacts on disk.
+
+    The unit list is C7's business and is tested there; what matters here is
+    that the orchestrator fans out over it and joins correctly afterwards.
+    """
+
+    monkeypatch.setattr(
+        "src.stages.render.selected_clip_ids",
+        lambda dokid, work_dir: list(CLIP_IDS),
+    )
 
 
 def _worker(
@@ -297,7 +336,14 @@ def _worker(
 ) -> Worker:
     queue = JobQueue(table, worker_id=worker_id, lease_s=3600)
     worker = Worker(queue, pool=pool, work_dir=tmp_path or Path("work"))
-    worker._execute = lambda job: recorder.run(job.kind)  # type: ignore[method-assign]
+
+    def execute(job: Any) -> None:
+        # Mirror the real _execute: a fan-out job runs no stage of its own.
+        if stage_for(job.kind).fans_out_to is not None:
+            return
+        recorder.run(job.kind)
+
+    worker._execute = execute  # type: ignore[method-assign]
     return worker
 
 
@@ -320,8 +366,18 @@ def test_a_debate_walks_the_whole_graph_exactly_once(table: FakeJobsTable) -> No
 
     _drain(table, recorder)
 
-    assert recorder.calls == [stage.kind for stage in STAGE_GRAPH]
+    # `render` fans out and runs no stage itself; `render_clip` runs once per clip.
+    expected = []
+    for stage in STAGE_GRAPH:
+        if stage.fans_out_to is not None:
+            continue
+        if stage.kind == "render_clip":
+            expected.extend([stage.kind] * len(CLIP_IDS))
+        else:
+            expected.append(stage.kind)
+    assert recorder.calls == expected
     assert all(row["state"] == "complete" for row in table.rows)
+    assert table.kinds.count("render_clip") == len(CLIP_IDS)
 
 
 def test_enqueuing_the_same_debate_twice_is_a_no_op(table: FakeJobsTable) -> None:
@@ -349,33 +405,50 @@ def test_worker_killed_mid_render_resumes_at_render_not_from_the_top(
     """
 
     recorder = StageRecorder()
-    recorder.crash_on = {"render"}
+    recorder.crash_on = {"render_clip"}
     queue = JobQueue(table, worker_id="seed")
     enqueue_debate(queue, DOKID)
 
-    # Run until the render job kills its worker.
+    # Run until the first per-clip render kills its worker.
     with pytest.raises(KeyboardInterrupt):
         _drain(table, recorder)
 
     completed_before_crash = list(recorder.calls)
-    assert completed_before_crash[-1] == "render"
-    assert table.state_of("render") == "running", "the dead worker still holds the lease"
+    assert completed_before_crash[-1] == "render_clip"
 
-    # A second worker starting immediately must NOT steal a live lease.
+    held = [row for row in table.rows if row["kind"] == "render_clip" and row["state"] == "running"]
+    assert len(held) == 1, "the dead worker still holds exactly one clip's lease"
+    held_clip = held[0]["entity_id"]
+
+    # A second worker may take the *other* clips immediately — that is the
+    # parallelism this fan-out exists for — but it must not steal the live
+    # lease on the clip the dead worker held.
+    recorder.crash_on = set()
     recovery = _worker(table, recorder, pool="cpu", worker_id="w2")
     assert recovery.queue.reap_expired_leases().total == 0
-    assert recovery.run_once().claimed is False
 
-    # Once the lease expires, the job comes back.
+    claimed_before_expiry = []
+    while True:
+        outcome = recovery.run_once()
+        if not outcome.claimed:
+            break
+        claimed_before_expiry.append(outcome.entity_id)
+
+    assert held_clip not in claimed_before_expiry, "stole a live lease"
+    assert sorted(claimed_before_expiry) == sorted(set(CLIP_IDS) - {held_clip})
+    assert "publish" not in table.kinds, "the barrier held: one clip is still outstanding"
+
+    # Once the lease expires, the abandoned clip comes back — and only it.
     table.advance(3601)
     assert recovery.queue.reap_expired_leases().requeued == 1
 
-    recorder.crash_on = set()
     _drain(table, recorder)
 
-    # Resumed at render. Nothing before it ran a second time.
     replayed = recorder.calls[len(completed_before_crash) :]
-    assert replayed == ["render", "publish"], replayed
+    assert replayed == ["render_clip"] * (len(CLIP_IDS) - 1) + ["render_clip", "publish"]
+    assert recorder.calls.count("render_clip") == len(CLIP_IDS) + 1, (
+        "only the abandoned clip was rendered twice"
+    )
     assert recorder.calls.count("transcribe") == 1
     assert recorder.calls.count("acquire") == 1
     assert all(row["state"] == "complete" for row in table.rows)

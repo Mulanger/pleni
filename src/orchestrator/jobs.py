@@ -39,10 +39,17 @@ GRAPH_VERSION = "v1"
 
 
 class StageCallable(Protocol):
-    """Every stage exposes this shape: `<verb>_dokid(dokid, *, work_dir)`."""
+    """A stage entrypoint.
 
-    def __call__(self, dokid: str, *, work_dir: Path | str) -> Any:
-        """Run one stage for one debate."""
+    Two shapes exist. Per-debate stages take `(dokid, *, work_dir)`; per-unit
+    stages created by a fan-out take `(dokid, unit_id, *, work_dir)` — see
+    `render_clip`. Positional args are left open rather than modelling both as
+    an overload, because the caller is a single dispatch in `Worker._execute`
+    that already branches on `joins_siblings`.
+    """
+
+    def __call__(self, *args: str, work_dir: Path | str) -> Any:
+        """Run one stage for one debate, or one unit of one debate."""
 
 
 @dataclass(frozen=True)
@@ -58,6 +65,26 @@ class StageJob:
     #: is not reaped out from under a healthy worker.
     lease_s: int
     description: str
+    #: When set, completing this job enqueues one child of this kind per unit
+    #: instead of running a stage — the C12b fan-out.
+    fans_out_to: str | None = None
+    #: Names the module attribute listing the units to fan out over. Called as
+    #: `fn(dokid, work_dir)` and expected to return a list of entity IDs.
+    fan_out_units: str | None = None
+    #: True for a child kind whose successor may only run once *every* sibling
+    #: has completed. The join barrier.
+    joins_siblings: bool = False
+
+    def resolve_units(self, dokid: str, work_dir: Any) -> list[str]:
+        """List the entity IDs this job should fan out over."""
+
+        if self.fan_out_units is None:
+            raise ConfigurationError(f"{self.kind} has no fan_out_units")
+        module = import_module(self.module)
+        lister = getattr(module, self.fan_out_units, None)
+        if lister is None:
+            raise ConfigurationError(f"{self.module} has no attribute {self.fan_out_units}")
+        return list(lister(dokid, work_dir))
 
     def resolve(self) -> StageCallable:
         """Import the stage entrypoint.
@@ -156,10 +183,24 @@ STAGE_GRAPH: tuple[StageJob, ...] = (
         module="src.stages.render",
         function="render_dokid",
         pool="cpu",
-        # The long pole. The architecture budgets 2-4h for 400 clips, and this
-        # runs them all in one job until the per-clip split lands.
-        lease_s=21600,
-        description="C10 — 540x960 render and thumbnails",
+        # Fans out and completes immediately, so the lease is short. The hours
+        # of work live in the children.
+        lease_s=600,
+        description="C10 — fan out one render job per selected clip",
+        fans_out_to="render_clip",
+        fan_out_units="selected_clip_ids",
+    ),
+    StageJob(
+        kind="render_clip",
+        module="src.stages.render",
+        function="render_clip",
+        pool="cpu",
+        # One 40-60s clip: seconds to a couple of minutes. Twenty minutes is
+        # generous and still short enough that a dead worker is noticed the
+        # same afternoon rather than six hours later.
+        lease_s=1200,
+        description="C10 — render one 540x960 clip and its thumbnail",
+        joins_siblings=True,
     ),
     StageJob(
         kind="publish",
@@ -282,3 +323,107 @@ def enqueue_successor(
         parent_id=parent_id,
     )
     return successor.kind
+
+
+class SiblingCounter(Protocol):
+    """The part of `JobQueue` the join barrier needs."""
+
+    def incomplete_siblings(self, *, parent_id: int, kind: str) -> int:
+        """Count sibling jobs of `kind` under `parent_id` that are not complete."""
+
+
+def fan_out(
+    enqueuer: Enqueuer,
+    *,
+    kind: str,
+    dokid: str,
+    parent_id: int,
+    work_dir: Any,
+    priority: int = 0,
+) -> list[str]:
+    """Enqueue one child job per unit. Returns the entity IDs enqueued (C12b).
+
+    Children carry `dokid` in their payload because their own `entity_id` is a
+    clip ID, while the job after the barrier — `publish` — is per debate.
+    Without it the barrier would have nothing to name.
+    """
+
+    stage = stage_for(kind)
+    if stage.fans_out_to is None:
+        raise ConfigurationError(f"{kind} does not fan out")
+    child = stage_for(stage.fans_out_to)
+
+    units = stage.resolve_units(dokid, work_dir)
+    for unit in units:
+        enqueuer.enqueue(
+            kind=child.kind,
+            entity_id=unit,
+            idempotency_key=idempotency_key(child.kind, unit),
+            pool=child.pool,
+            priority=priority,
+            payload={"dokid": dokid},
+            parent_id=parent_id,
+        )
+    return units
+
+
+def advance_after(
+    enqueuer: Enqueuer,
+    counter: SiblingCounter,
+    *,
+    kind: str,
+    entity_id: str,
+    job_id: int,
+    parent_id: int | None,
+    payload: Mapping[str, Any],
+    work_dir: Any,
+) -> str | None:
+    """Decide what runs next, now that this job has completed.
+
+    Three shapes:
+
+    - **Fan-out** — enqueue one child per unit instead of a single successor.
+    - **Join** — a child whose successor may only run once every sibling is
+      done. All but the last child return None.
+    - **Chain** — the ordinary case: enqueue the next stage.
+
+    The join is racy by construction and safe anyway. Two children finishing at
+    once both see zero outstanding siblings and both enqueue `publish`; the
+    idempotency key admits exactly one. Making it non-racy would need a lock,
+    which would cost more than the duplicate insert it prevents.
+
+    A **dead sibling counts as outstanding**, so a debate where one clip failed
+    does not publish 399 of 400 and call it done. It stops, shows up in
+    `pipeline status`, and waits for someone to retry the clip.
+    """
+
+    stage = stage_for(kind)
+
+    if stage.fans_out_to is not None:
+        units = fan_out(
+            enqueuer, kind=kind, dokid=entity_id, parent_id=job_id, work_dir=work_dir
+        )
+        return f"{stage.fans_out_to} x{len(units)}"
+
+    if stage.joins_siblings:
+        dokid = _dokid_of(payload, entity_id)
+        if parent_id is None:
+            # A child with no parent cannot be part of a batch. Chain rather
+            # than block forever.
+            return enqueue_successor(enqueuer, kind=kind, entity_id=dokid)
+        if counter.incomplete_siblings(parent_id=parent_id, kind=kind) > 0:
+            return None
+        return enqueue_successor(
+            enqueuer, kind=kind, entity_id=dokid, parent_id=parent_id
+        )
+
+    return enqueue_successor(
+        enqueuer, kind=kind, entity_id=entity_id, parent_id=job_id, payload=payload
+    )
+
+
+def _dokid_of(payload: Mapping[str, Any], fallback: str) -> str:
+    """The debate a per-unit job belongs to."""
+
+    dokid = payload.get("dokid")
+    return dokid if isinstance(dokid, str) and dokid else fallback

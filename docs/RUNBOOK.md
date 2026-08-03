@@ -56,9 +56,10 @@ already expired, so it cannot steal work from a healthy worker.
 thinking about it.
 
 **If `reap` returns 0 but the job has been running for hours:** the lease has not
-expired yet. Lease lengths are per stage in `src/orchestrator/jobs.py`; `render`
-is six hours because it encodes every clip of a debate in one job. Either wait,
-or — if you are certain the worker is gone — shorten the wait by hand:
+expired yet. Lease lengths are per stage in `src/orchestrator/jobs.py`. The
+longest is `transcribe` at two hours; `render_clip` is twenty minutes, because a
+single clip is a single encode. Either wait, or — if you are certain the worker
+is gone — shorten the wait by hand:
 
 ```sql
 update public.jobs set state = 'queued', locked_at = null, locked_by = null
@@ -66,9 +67,7 @@ where id = <job_id> and state = 'running';
 ```
 
 > **Do not do this while the worker might still be alive.** Two workers running
-> the same stage will both write to the same paths. If the render lease ever
-> becomes shorter than an actual render, this happens on its own — see
-> **Known sharp edges**.
+> the same stage will both write to the same paths.
 
 ---
 
@@ -226,6 +225,40 @@ same work. Raise the lease in `src/orchestrator/jobs.py` before that happens.
 
 ---
 
+## Rendering: many small jobs, not one big one
+
+`render` enqueues one `render_clip` job per selected clip and completes
+immediately. The clips render in parallel across whatever workers exist, and
+`publish` runs only once every one of them has completed.
+
+```bash
+python -m src.orchestrator.cli status --dokid <DOKID>
+```
+
+| Symptom | What it means |
+|---|---|
+| Many `render_clip` queued, few running | Normal. Start more workers to go faster. |
+| `publish` never appears | One clip is outstanding. A **dead** `render_clip` blocks the barrier deliberately — see below. |
+| A clip rendered twice | Should not happen. `render_clip` skips an output that already exists; only `--force` re-encodes. |
+
+**A dead clip blocks `publish` on purpose.** Shipping 399 of 400 clips and
+calling the debate done would be worse than stopping. Fix the clip, then:
+
+```bash
+python -m src.orchestrator.cli retry --kind render_clip --dokid <DOKID>
+```
+
+Retrying is cheap: already-rendered clips are skipped in milliseconds, so only
+the failed one actually encodes.
+
+To re-render one clip by hand:
+
+```bash
+python -m src.stages.render --dokid <DOKID> --clip-id <CLIP_ID> --force
+```
+
+---
+
 ## Content problems
 
 These are pipeline-quality issues, not outages. Every one is from the failure
@@ -290,11 +323,6 @@ Things that are true right now and will bite someone.
 - **Nothing runs while the workstation is off.** Discovery catches up on the next
   start, so nothing is lost, but freshness is bounded by how often the machine is
   on. This is inherent to running locally, not a bug.
-- **Render is one job per debate.** All 400 encodes run serially in one process,
-  so extra machines do not help, and a crash at clip 399 re-encodes all 400 —
-  there is no skip-if-exists check. At high volume the render can also exceed its
-  six-hour lease, at which point the reaper starts a *second* worker on the same
-  debate. The per-clip split is the fix and is not built.
 - **Freshness is measured from midnight.** `sources.debate_date` is a DATE, so the
   SLO overstates lag by up to a day. Fixing it needs Riksdagen's publication
   timestamp captured at C1.

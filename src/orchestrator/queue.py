@@ -335,6 +335,22 @@ class JobQueue:
                 counts[state] = int(row.get("n") or 0)
         return counts
 
+    def incomplete_siblings(self, *, parent_id: int, kind: str) -> int:
+        """Jobs of `kind` under `parent_id` that have not completed (C12b join).
+
+        `dead` counts as incomplete on purpose. A batch where one clip failed
+        must not advance to `publish` and ship 399 of 400 as if that were the
+        whole debate.
+        """
+
+        response = self.executor.execute_sql(
+            "select count(*)::int as n from public.jobs "
+            f"where parent_id = {int(parent_id)} and kind = {_text(kind)} "
+            "and state <> 'complete';"
+        )
+        rows = _rows(response)
+        return int(rows[0].get("n") or 0) if rows else 0
+
     def dead_jobs(self, *, limit: int = 50) -> list[Job]:
         """Dead-lettered jobs, newest first. The first thing to look at."""
 

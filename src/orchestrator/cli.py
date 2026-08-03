@@ -32,8 +32,8 @@ from src.orchestrator.discovery import (
 from src.orchestrator.jobs import (
     MAX_LEASE_S,
     STAGE_GRAPH,
+    advance_after,
     enqueue_debate,
-    enqueue_successor,
     stage_for,
 )
 from src.orchestrator.queue import Job, JobQueue
@@ -132,12 +132,17 @@ class Worker:
 
         self.queue.complete(job)
         result.outcome = "complete"
-        result.successor = enqueue_successor(
+        # Complete first, then decide what is next: the join barrier counts this
+        # job as done, so the last sibling through sees zero outstanding.
+        result.successor = advance_after(
+            self.queue,
             self.queue,
             kind=job.kind,
             entity_id=job.entity_id,
-            parent_id=job.id,
+            job_id=job.id,
+            parent_id=job.parent_id,
             payload=job.payload,
+            work_dir=self.work_dir,
         )
         self.logger.info(
             "job_complete",
@@ -167,7 +172,24 @@ class Worker:
 
     def _execute(self, job: Job) -> None:
         stage = stage_for(job.kind)
+
+        if stage.fans_out_to is not None:
+            # A fan-out job runs no stage of its own; `advance_after` enqueues
+            # its children once this returns.
+            return
+
         entrypoint = stage.resolve()
+        if stage.joins_siblings:
+            # A per-unit job: its entity_id is the unit, and the debate it
+            # belongs to travels in the payload.
+            dokid = job.payload.get("dokid")
+            if not isinstance(dokid, str) or not dokid:
+                raise ConfigurationError(
+                    f"{job.kind} job {job.id} has no dokid in its payload"
+                )
+            entrypoint(dokid, job.entity_id, work_dir=self.work_dir)
+            return
+
         entrypoint(job.entity_id, work_dir=self.work_dir)
 
 

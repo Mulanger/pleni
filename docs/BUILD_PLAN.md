@@ -319,6 +319,44 @@ This chunk is entirely deterministic given `08_track` + `02_scenes`. Test it lik
 
 ---
 
+## C12b — Per-clip render fan-out
+
+**Depends on:** C12. **Size:** medium.
+
+**Objective.** Make the pipeline's long pole parallel. `render` is 400 independent
+50-second encodes — the most parallelisable work in the project and the stage that
+dominates runtime — and C12 runs all of them serially in one job, so extra machines
+buy nothing and a crash at clip 399 re-encodes all 400.
+
+**Scope:** `src/stages/render.py` (per-clip entrypoint + skip-if-exists only),
+`src/orchestrator/{jobs,queue,cli}.py`, `tests/unit/test_orchestrator_fanout.py`,
+`tests/integration/test_orchestrator_recovery.py`, `docs/RUNBOOK.md`
+
+**Must not touch:** `src/contracts.py`, `src/render/renditions.py` (the encoder is
+already per-clip and correct), any other stage, `tests/fixtures/golden/*`.
+
+**Build:** `render_clip(dokid, clip_id, work_dir)` alongside the existing
+`render_dokid`, which keeps working for `run-fixture` and becomes a loop over it;
+skip-if-exists so a retry does not redo finished clips; a `fan_out` stage kind that
+enqueues one child job per selected clip; and a **join barrier** so `publish` runs
+only once every child has completed.
+
+**The barrier is the interesting part.** The C12 chain enqueues one successor on
+completion, which cannot express "after all 400 of these". Each child checks
+whether any sibling is still outstanding; the last one through enqueues `publish`.
+Two children finishing simultaneously both see zero and both enqueue — which is
+safe, because the idempotency key admits exactly one.
+
+**A dead child blocks `publish` by design.** Publishing 399 of 400 clips silently
+would be worse than stopping: the operator sees it in `pipeline status` and
+retries. Same rule as the rest of the chain.
+
+**Acceptance:** four workers render a debate in roughly a quarter of the serial
+time; killing a worker mid-fan-out re-renders only the clips it held; a rendered
+clip is never encoded twice; `publish` does not run until every child is complete.
+
+---
+
 ## C13 — Observability & runbook
 
 **Depends on:** C12. **Size:** medium.

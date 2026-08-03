@@ -860,3 +860,68 @@ ruff clean; mypy strict clean on 73 files. Live: 6 observability + 6 queue + 53 
 - The schema-drift workflow runs daily at 06:15 UTC and is the only early warning for the
   pipeline's least stable dependency. A red run means discovery is broken *silently* — the app
   keeps serving yesterday's clips and nothing reaches a user.
+
+## C12b — Per-clip render fan-out — DONE 2026-08-03
+
+**Built:** `src/stages/render.py` (`render_clip`, `selected_clip_ids`, skip-if-exists,
+`--clip-id`/`--force`), fan-out and join-barrier support in
+`src/orchestrator/{jobs,queue,cli}.py`, `tests/unit/test_orchestrator_fanout.py`,
+updates to `tests/integration/test_orchestrator_recovery.py`, `docs/BUILD_PLAN.md`
+(C12b scope entry), `docs/RUNBOOK.md`.
+**Tests:** `python tasks.py test lint typecheck` green — **235 passed** (was 219),
+67 deselected; ruff clean; mypy strict clean on 74 files.
+**Contracts touched:** none.
+
+**Measured against the real encoder** (fixture `HD01SfU35`, 2 clips):
+
+| Operation | Time |
+|---|---|
+| `render_clip` on a clip that already exists | **0 ms**, file untouched |
+| `render_dokid` over 2 already-rendered clips | **15 ms** |
+| `render_clip --force` (a real encode) | **7,015 ms** |
+
+At 400 clips a failed retry used to mean ~47 minutes of re-encoding. It is now
+milliseconds, and only the clip that actually failed is redone.
+
+**Decisions made:**
+- `render` became a **fan-out node**: it runs no stage of its own, enqueues one
+  `render_clip` per selected clip, and completes. Its lease dropped from 6 h to
+  10 minutes because the hours now live in the children. That also removes a latent
+  hazard: a render exceeding a 6 h lease would have been reaped mid-flight and a
+  second worker started on the same debate, both writing the same paths.
+- **The join barrier** is what the C12 chain could not express. Each `render_clip`
+  checks whether any sibling is still outstanding; the last one through enqueues
+  `publish`. Two children finishing simultaneously both see zero and both enqueue —
+  safe, because the idempotency key admits exactly one. A lock would cost more than
+  the duplicate insert it prevents.
+- **A dead child blocks `publish` deliberately.** Shipping 399 of 400 clips and
+  calling the debate done is worse than stopping. It surfaces in `pipeline status`
+  and waits for a retry — the same rule as everywhere else in the chain.
+- Children carry `dokid` in their payload because their own `entity_id` is a clip ID
+  while `publish` is per debate. Without it the barrier would have nothing to name.
+- `render_dokid` still exists and still works; it is now a loop over `render_clip`.
+  `run-fixture` and single-machine runs are unaffected.
+- `StageCallable` was widened to `(*args: str, work_dir=...)` rather than modelled as
+  an overload, because the only caller is one dispatch in `Worker._execute` that
+  already branches on `joins_siblings`.
+
+**Observations (not fixed, out of scope):**
+- The fan-out mechanism is generic (`fans_out_to` / `fan_out_units` / `joins_siblings`)
+  but only `render` uses it. C4/C5/C6 are per-speech and could fan out the same way;
+  that needs per-speech entrypoints on five more stages and a scope entry of its own.
+- Skip-if-exists checks existence and non-zero size, not integrity. A truncated MP4
+  from a killed ffmpeg would be skipped rather than re-encoded. `--force` is the
+  escape hatch; a checksum or a duration probe would be the real fix.
+
+**Blocked / needs a decision:**
+- `P0-9` — rotate the Supabase Management access token pasted into the transcript on
+  2026-08-02.
+- Whether to backfill Riksdagen's 2024-2025 archive (~50 debates) or start from now.
+  `pipeline discover --since now` opts out; doing nothing opts in.
+
+**Next agent should know:**
+- P1 is complete. `Q-1` (inventory) is now purely a function of running the daemon —
+  the machinery no longer stands in the way.
+- Four workers on four machines render a debate in roughly a quarter of the time.
+  On one workstation the win is smaller but the retry cost is the real prize.
+- `python -m src.stages.render --dokid X --clip-id Y --force` re-renders one clip.
