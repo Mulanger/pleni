@@ -84,12 +84,18 @@ class HaarFaceDetector:
         *,
         min_size_frac: float,
         inset: SignLanguageInset | None = None,
-        fallback: bool = True,
     ) -> tuple[ImageSize, tuple[DetectedFace, ...]]:
         """Detect faces in one analysis frame.
 
         Returned boxes are in analysis-frame coordinates. Use
         `scale_detections_to_media` before writing C8 contracts.
+
+        **A miss returns an empty tuple.** This used to synthesise a centred box
+        instead, which meant a detector failure entered the tracker as a stable,
+        centred, positive observation — 56% of the published clips' face samples
+        were that one constant. No downstream heuristic can recover the
+        distinction once fabricated observations are mixed in, so absence of
+        evidence is represented as absence. See ADR 010.
         """
 
         image = self._cv2.imread(str(frame_path))
@@ -109,8 +115,6 @@ class HaarFaceDetector:
         faces = _faces_from_cv_rows(cast(Any, raw_faces), image_size)
         if inset is not None:
             faces = tuple(face for face in faces if not intersects_inset(face, inset))
-        if not faces and fallback:
-            return image_size, (estimate_speaker_proxy(image_size),)
         return image_size, faces
 
 
@@ -120,18 +124,7 @@ def build_face_detector(backend: str) -> HaarFaceDetector:
     normalized = backend.casefold().strip()
     if normalized == "haar":
         return HaarFaceDetector()
-    if normalized == "proxy":
-        return HaarFaceDetector(cascade_name="haarcascade_frontalface_default.xml")
     raise ConfigurationError(f"Unsupported face detector backend: {backend}")
-
-
-def estimate_speaker_proxy(image_size: ImageSize) -> DetectedFace:
-    """Return a conservative center-podium face estimate for detector misses."""
-
-    box = max(18.0, min(float(image_size.width), float(image_size.height)) * 0.20)
-    x = (float(image_size.width) - box) / 2.0
-    y = float(image_size.height) * 0.18
-    return DetectedFace(x=x, y=y, w=box, h=box, score=0.05)
 
 
 def scale_detections_to_media(

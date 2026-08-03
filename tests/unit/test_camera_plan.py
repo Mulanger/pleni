@@ -5,7 +5,7 @@ from __future__ import annotations
 from itertools import pairwise
 
 from src.camera.plan import crop_size_for_media, plan_camera_for_clip
-from src.contracts import FaceSample, FaceTrack, MediaInfo, Scene, SelectedClip
+from src.contracts import CameraMode, FaceSample, FaceTrack, MediaInfo, Scene, SelectedClip
 
 
 def test_crop_size_uses_decided_720p_geometry() -> None:
@@ -75,7 +75,14 @@ def test_crossing_dead_zone_uses_bounded_velocity_pan() -> None:
         assert current.crop_x - prev.crop_x <= 40.0 * dt
 
 
-def test_missing_face_holds_center_crop() -> None:
+def test_no_face_produces_no_plan_rather_than_a_centre_crop() -> None:
+    """Until ADR 010 this asserted a centre crop, which is not a speaker.
+
+    Centre-cropping a 1280x720 chamber shot points the camera at whatever
+    happens to be mid-frame and publishes it under a named politician. An empty
+    keyframe list marks the clip unsupported, and C10 and C11 both refuse it.
+    """
+
     plan = plan_camera_for_clip(
         _clip(),
         FaceTrack(clip_id="clip-1", track_id="no-face", samples=()),
@@ -85,8 +92,8 @@ def test_missing_face_holds_center_crop() -> None:
         max_pan_px_s_1080=60.0,
     )
 
-    assert len(plan.keyframes) == 1
-    assert plan.keyframes[0].crop_x == (1280 - 406) / 2
+    assert plan.keyframes == ()
+    assert plan.mode is CameraMode.STATIC
 
 
 def _media() -> MediaInfo:

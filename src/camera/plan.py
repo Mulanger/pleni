@@ -41,7 +41,17 @@ def plan_camera_for_clip(
     dead_zone_frac: float,
     max_pan_px_s_1080: float,
 ) -> CameraPlan:
-    """Build a C9 camera plan for one selected clip."""
+    """Build a C9 camera plan for one selected clip.
+
+    A plan with **no keyframes** means the clip is unsupported: C8 found no face
+    it was willing to call the speaker. Centre-cropping in that situation does
+    not point the camera at anyone in particular, it just hides the failure, so
+    C10 refuses to render an empty plan and C11 refuses to publish it. See
+    ADR 010.
+    """
+
+    if not face_track.samples:
+        return CameraPlan(clip_id=clip.clip_id, keyframes=(), mode=CameraMode.STATIC)
 
     crop_width, _crop_height = crop_size_for_media(media_info)
     center_crop_x = clamp_crop_x(

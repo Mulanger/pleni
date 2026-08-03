@@ -120,7 +120,6 @@ def _frame_detections_for_clip(
             frame_path,
             min_size_frac=settings.face_min_size_frac,
             inset=None,
-            fallback=True,
         )
         inset = inset_from_fractions(
             image_size,
@@ -134,7 +133,6 @@ def _frame_detections_for_clip(
                 frame_path,
                 min_size_frac=settings.face_min_size_frac,
                 inset=inset,
-                fallback=True,
             )
         detections.append(
             FrameDetections(

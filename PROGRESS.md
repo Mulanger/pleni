@@ -1330,3 +1330,107 @@ re-rendered and visually confirmed by the owner.
 - `work/hd10540_track_before/` holds the pre-fix tracks for comparison. Delete
   when no longer useful; `work/` is gitignored.
 - Backfill is unblocked and this was the last thing gating it.
+
+## C8/C9/C10/C11 — Phase 0: the detector stops fabricating faces — DONE 2026-08-03
+
+**Built:** `estimate_speaker_proxy()` and the `fallback` parameter deleted from
+`src/vision/detect.py`; fail-closed gates through `src/vision/track.py`,
+`src/camera/plan.py`, `src/stages/render.py` and `src/stages/publish.py`;
+`docs/adr/010-fail-closed-speaker-evidence.md`.
+**Tests:** 270 passed (was 264) plus the slow e2e; ruff and mypy clean on 74 files.
+**Contracts touched:** none — see ADR 010. `render_clip()` returns `Path | None`.
+
+### What was actually wrong
+
+The owner reported clips following someone in the crowd. The cause was not a
+tuning problem. `HaarFaceDetector.detect()` ran with `fallback=True`, and on any
+frame where Haar found nothing it returned a **hardcoded box** — always exactly
+`x=568, y=129.6, w=144, h=144` in master coordinates.
+
+**1,133 of 2,032 selected face samples (56%) in the published clips were that one
+constant.** It is identical every frame, so it chains into a perfectly stable,
+perfectly centred track that beats real detections under any score rewarding
+size, centrality or persistence — real detections fragment when a speaker turns
+their head; the placeholder never does.
+
+It also destroyed measurement, which is the worse half. My own "16/16 plausible
+podium framing" from earlier this session was a geometric check the synthetic box
+satisfies **by construction**, and my scoring change in `8d95d1f` raised the
+synthetic share from 52% to 56% while appearing to improve things. Two committed
+artifacts had it baked in: `test_speaker_proxy_is_centered_and_positive` asserted
+the fabrication was centred and positive, and the golden
+`08_track_fixture_summary.json` recorded the proxy box as clip `c02`'s first
+observation, exact to three decimals.
+
+### The gate chain
+
+| Stage | Absence of evidence now means |
+|---|---|
+| C8 detect | `()` — no synthesised observation exists anywhere |
+| C8 select | no track clears `MIN_COVERAGE_FRAC` → `no-face` |
+| C9 plan | no samples → `CameraPlan(keyframes=())` |
+| C10 render | no keyframes → not rendered, returns `None` |
+| C11 publish | no keyframes → skipped, no upload, no row |
+
+A clip that *had* evidence but whose render is missing still raises
+`ArtifactError`. Fail-closed must not swallow real faults.
+
+### Measured result on HD10540
+
+| | Before | After |
+|---|---|---|
+| Synthetic samples in `08_track` | 1,133 / 2,032 | **0 / 982** |
+| Clips rejected as unverifiable | 0 | **4 / 16** |
+
+**I predicted 1 of 16 and was wrong.** I compared *frames containing any face*
+(14–84%, only one clip under 15%) against the coverage floor, but the floor
+applies to a **single track's** coverage, and real detections fragment across
+many tracks. The four rejects are the four lowest-detection clips — 14%, 32%,
+22%, 18% — where the best single track reaches only 5%, 15%, 9% and 10%.
+
+That comparison also sizes the next chunk of work: frame-level detection averages
+~68% but **median best-track coverage is only ~30%**, so roughly half of all real
+detections are lost to fragmentation. That is the prize for Phase 1.
+
+**Decisions made:**
+- No flagged or lower-weighted variant of the fallback survives. The value of the
+  rule is that no code path can produce a face nobody detected;
+  `test_the_synthetic_face_fallback_cannot_be_reintroduced` enforces it
+  structurally, including scanning the module source.
+- The unused `"proxy"` detector backend was removed — it advertised exactly the
+  behaviour being deleted and nothing referenced it.
+- The floor stays at `0.15`. Lowering it to recover the four clips would be
+  chasing the number again; the fix is better detection, not a lower bar.
+- `test_track_and_camera_stages_write_phase4_artifacts` asserted
+  `len(samples) >= 18` on **flat grey frames with two rectangles drawn on them**.
+  Haar never detected a face there — the assertion was checking the placeholder
+  worked, so C8/C9 integration had no genuine coverage. It now asserts `no-face`,
+  and a new positive-path test uses the committed `betankande` debate footage
+  (real faces in ~77% of sampled frames).
+
+**Observations (not fixed, out of scope):**
+- Nothing yet verifies the tracked face is the *right* face. A large, central,
+  persistent face that is not the speaker still wins. Phases 1–2 of
+  `speaker_verified_crop_design.md` address that.
+- The slow e2e hits the DeepSeek API because `.env` sets `RIKET_TITLE_BACKEND=api`.
+  Run it with `RIKET_TITLE_BACKEND=fallback` — titles are not in any golden, so
+  the call is pure cost and non-determinism.
+- `python tasks.py golden` runs `-m "not live and not slow"`, so it does **not**
+  regenerate `08_track_fixture_summary.json`, which lives in the slow e2e.
+  Regenerate with `UPDATE_GOLDEN=1 python -m pytest tests/e2e -m slow`.
+
+**Blocked / needs a decision:**
+- The 16 live clips were produced by the fabricating pipeline. Re-render and
+  republish, or leave until identity verification lands? Owner's call.
+- `P0-9` — rotate the Supabase token and the DeepSeek key. Still open.
+
+**Next agent should know:**
+- Verified the design doc's load-bearing external claims before acting on them:
+  Riksdagen portraits resolve by `intressent_id` (Strömmer 2069x2758px, and it
+  works for a *minister*), `cv2.FaceDetectorYN` and `cv2.FaceRecognizerSF` ship in
+  the pinned OpenCV 4.11, SFace's 0.363 cosine threshold is LFW-only, and YuNet
+  returns 5 landmarks with mouth *corners* but no lip aperture. Models are MIT
+  (YuNet) and Apache 2.0 (SFace).
+- **This machine has no GPU.** `torch` is `2.11.0+cpu`, `cuda.is_available()` is
+  False, contradicting `AGENTS.md`. Plan CPU-only.
+- Clips will look jumpier now. That is Haar's real behaviour, not a regression.

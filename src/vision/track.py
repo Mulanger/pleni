@@ -144,6 +144,8 @@ def select_active_track(
     if not tracks:
         return None
     eligible = _long_enough_to_be_a_speaker(tracks, total_frames=total_frames)
+    if not eligible:
+        return None
     scores = relative_scores(eligible, frame_width=frame_width, frame_height=frame_height)
     best = max(
         range(len(eligible)),
@@ -335,14 +337,16 @@ def _long_enough_to_be_a_speaker(
 ) -> tuple[TrackCandidate, ...]:
     """Drop candidates too brief to be the clip's speaker.
 
-    Falls back to the full set when nothing clears the floor, so a badly tracked
-    clip degrades to a best guess rather than to no face at all.
+    **Returns nothing when nothing qualifies.** An earlier version fell back to
+    the full candidate set so a badly tracked clip would still get a face. That
+    is the wrong default for this product: a guessed speaker published over a
+    real politician's face is worse than no clip, and source material is
+    abundant enough to reject. See ADR 010.
     """
 
     denominator = total_frames or max(track.coverage for track in tracks)
     floor = MIN_COVERAGE_FRAC * max(denominator, 1)
-    kept = tuple(track for track in tracks if track.coverage >= floor)
-    return kept or tuple(tracks)
+    return tuple(track for track in tracks if track.coverage >= floor)
 
 
 def _median_area(track: TrackCandidate) -> float:

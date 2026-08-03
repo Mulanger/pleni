@@ -233,8 +233,13 @@ def test_a_one_frame_false_positive_cannot_win_on_size() -> None:
     assert selected is speaker
 
 
-def test_the_coverage_floor_never_leaves_a_clip_with_no_face() -> None:
-    """If nothing clears the floor, fall back to a best guess, not to nothing."""
+def test_nothing_clears_the_floor_selects_nothing() -> None:
+    """Fail closed. This assertion was the other way round until ADR 010.
+
+    Falling back to a best guess meant a clip with one stray detection still got
+    a "speaker", and that guess was published under a named politician's byline.
+    Source material is abundant enough to reject instead.
+    """
 
     brief = build_face_tracks(
         (FrameDetections(t=0.0, faces=(DetectedFace(560.0, 180.0, 143.0, 144.0, 1.0),)),),
@@ -246,5 +251,25 @@ def test_the_coverage_floor_never_leaves_a_clip_with_no_face() -> None:
         select_active_track(
             (brief,), frame_width=1280.0, frame_height=720.0, total_frames=242
         )
-        is brief
+        is None
     )
+
+
+def test_a_clip_with_no_eligible_track_reports_no_face() -> None:
+    brief = build_face_tracks(
+        (FrameDetections(t=0.0, faces=(DetectedFace(560.0, 180.0, 143.0, 144.0, 1.0),)),),
+        iou_threshold=0.2,
+        max_gap_s=1.0,
+    )[0]
+
+    track = active_face_track(
+        "clip-1",
+        (brief,),
+        frame_width=1280.0,
+        frame_height=720.0,
+        expected_times=tuple(index * 0.2 for index in range(242)),
+        max_gap_s=1.0,
+    )
+
+    assert track.track_id == "no-face"
+    assert track.samples == ()

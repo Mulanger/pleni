@@ -6,8 +6,23 @@ import json
 from collections.abc import Mapping
 from datetime import date
 from pathlib import Path
+from typing import Any
 
-from src.contracts import Candidate, PublishResult, SelectedClip, SentenceSpan, Source, Speech, Word
+import pytest
+
+from src.contracts import (
+    CameraKeyframe,
+    CameraMode,
+    CameraPlan,
+    Candidate,
+    PublishResult,
+    SelectedClip,
+    SentenceSpan,
+    Source,
+    Speech,
+    Word,
+)
+from src.errors import ArtifactError
 from src.paths import work_paths
 from src.publish.bunny import BunnyUploadedObject
 from src.publish.migrations import discover_migrations
@@ -56,6 +71,126 @@ def test_remote_publish_uploads_then_writes_metadata(tmp_path: Path) -> None:
     dokid = "HDTEST"
     paths = work_paths(dokid, root=tmp_path)
     paths.ensure_directories()
+    selected, speech = _write_publish_fixture(paths, dokid)
+    paths.camera_json(selected.clip_id).write_text(
+        CameraPlan(
+            clip_id=selected.clip_id,
+            keyframes=(CameraKeyframe(t=20.0, crop_x=437.0),),
+            mode=CameraMode.STATIC,
+        ).model_dump_json(),
+        encoding="utf-8",
+    )
+    bunny = FakeBunnyUploader()
+    supabase = FakeSupabasePublisher()
+
+    artifacts = publish_dokid(
+        dokid,
+        work_dir=tmp_path,
+        backend="remote",
+        apply_migrations=True,
+        bunny_uploader=bunny,
+        supabase_publisher=supabase,
+    )
+
+    assert artifacts == [paths.publish_json(selected.clip_id)]
+    assert [upload[1] for upload in bunny.uploads] == [
+        f"clips/2026/08/{selected.clip_id}_540x960.mp4",
+        f"thumbs/2026/08/{selected.clip_id}.webp",
+    ]
+    # Every committed migration was applied against an empty ledger, and each
+    # one recorded a ledger row. Derived from the directory rather than a
+    # hardcoded list so adding migration 005 does not fail this test.
+    expected = discover_migrations()
+    ledger_writes = [s for s in supabase.statements if "insert into public.schema_migrations" in s]
+    assert len(ledger_writes) == len(expected)
+    for path in expected:
+        assert any(path.name in statement for statement in ledger_writes), path.name
+    payload = supabase.batches[0].to_payload()
+    assert payload["pipeline_run"]["idempotency_key"] == f"publish:{dokid}:v1"
+    assert payload["politicians"] == [
+        {
+            "intressent_id": "12345",
+            "name": speech.speaker_name,
+            "party": speech.party,
+            "constituency": None,
+            "role": "ledamot",
+            "avatar_url": None,
+        }
+    ]
+    assert len(payload["clip_features"]) == 2
+    clip_row = payload["clips"][0]
+    assert isinstance(clip_row, dict)
+    assert clip_row["url_540x960"].endswith("_540x960.mp4")
+    assert clip_row["thumb_url"].endswith(".webp")
+    assert clip_row["vtt_url"] is None
+    result = PublishResult.model_validate_json(artifacts[0].read_text(encoding="utf-8"))
+    assert result.supabase_row_id == selected.clip_id
+    assert result.cdn_urls["540x960"].startswith("https://cdn.example/")
+
+
+def test_an_unsupported_clip_is_skipped_not_published(tmp_path: Path) -> None:
+    """A clip C8 could not attribute to a speaker never reaches Bunny or Supabase.
+
+    Rejection is a normal outcome here, not an error: the pipeline is expected
+    to discard material it cannot verify rather than publish a guess under a
+    named politician's byline (ADR 010).
+    """
+
+    dokid = "HDSKIP"
+    paths = work_paths(dokid, root=tmp_path)
+    paths.ensure_directories()
+    selected, _speech = _write_publish_fixture(paths, dokid)
+    paths.camera_json(selected.clip_id).write_text(
+        CameraPlan(
+            clip_id=selected.clip_id, keyframes=(), mode=CameraMode.STATIC
+        ).model_dump_json(),
+        encoding="utf-8",
+    )
+    bunny = FakeBunnyUploader()
+    supabase = FakeSupabasePublisher()
+
+    artifacts = publish_dokid(
+        dokid,
+        work_dir=tmp_path,
+        backend="remote",
+        bunny_uploader=bunny,
+        supabase_publisher=supabase,
+    )
+
+    assert artifacts == []
+    assert bunny.uploads == [], "nothing may be uploaded for an unverified clip"
+    assert supabase.batches[0].to_payload()["clips"] == []
+
+
+def test_a_missing_render_still_fails_when_the_clip_had_evidence(tmp_path: Path) -> None:
+    """Rejection must not become a way to swallow real pipeline faults."""
+
+    dokid = "HDBROKEN"
+    paths = work_paths(dokid, root=tmp_path)
+    paths.ensure_directories()
+    selected, _speech = _write_publish_fixture(paths, dokid)
+    paths.camera_json(selected.clip_id).write_text(
+        CameraPlan(
+            clip_id=selected.clip_id,
+            keyframes=(CameraKeyframe(t=20.0, crop_x=437.0),),
+            mode=CameraMode.STATIC,
+        ).model_dump_json(),
+        encoding="utf-8",
+    )
+    paths.render_primary_mp4(selected.clip_id).unlink()
+
+    with pytest.raises(ArtifactError, match="render output is missing"):
+        publish_dokid(dokid, work_dir=tmp_path, backend="local")
+
+
+def _write_publish_fixture(paths: Any, dokid: str) -> tuple[SelectedClip, Speech]:
+    """Write every artifact C11 reads, except the C9 camera plan.
+
+    The plan is left to the caller because it is what decides whether a clip
+    is publishable at all: an empty keyframe list means C8 found no speaker
+    (ADR 010), and each test needs to choose that independently.
+    """
+
     source = Source(
         dokid=dokid,
         title="Debatt om lokal polis",
@@ -157,49 +292,4 @@ def test_remote_publish_uploads_then_writes_metadata(tmp_path: Path) -> None:
     )
     paths.render_primary_mp4(selected.clip_id).write_bytes(b"mp4")
     paths.render_thumb(selected.clip_id).write_bytes(b"webp")
-    bunny = FakeBunnyUploader()
-    supabase = FakeSupabasePublisher()
-
-    artifacts = publish_dokid(
-        dokid,
-        work_dir=tmp_path,
-        backend="remote",
-        apply_migrations=True,
-        bunny_uploader=bunny,
-        supabase_publisher=supabase,
-    )
-
-    assert artifacts == [paths.publish_json(selected.clip_id)]
-    assert [upload[1] for upload in bunny.uploads] == [
-        f"clips/2026/08/{selected.clip_id}_540x960.mp4",
-        f"thumbs/2026/08/{selected.clip_id}.webp",
-    ]
-    # Every committed migration was applied against an empty ledger, and each
-    # one recorded a ledger row. Derived from the directory rather than a
-    # hardcoded list so adding migration 005 does not fail this test.
-    expected = discover_migrations()
-    ledger_writes = [s for s in supabase.statements if "insert into public.schema_migrations" in s]
-    assert len(ledger_writes) == len(expected)
-    for path in expected:
-        assert any(path.name in statement for statement in ledger_writes), path.name
-    payload = supabase.batches[0].to_payload()
-    assert payload["pipeline_run"]["idempotency_key"] == f"publish:{dokid}:v1"
-    assert payload["politicians"] == [
-        {
-            "intressent_id": "12345",
-            "name": speech.speaker_name,
-            "party": speech.party,
-            "constituency": None,
-            "role": "ledamot",
-            "avatar_url": None,
-        }
-    ]
-    assert len(payload["clip_features"]) == 2
-    clip_row = payload["clips"][0]
-    assert isinstance(clip_row, dict)
-    assert clip_row["url_540x960"].endswith("_540x960.mp4")
-    assert clip_row["thumb_url"].endswith(".webp")
-    assert clip_row["vtt_url"] is None
-    result = PublishResult.model_validate_json(artifacts[0].read_text(encoding="utf-8"))
-    assert result.supabase_row_id == selected.clip_id
-    assert result.cdn_urls["540x960"].startswith("https://cdn.example/")
+    return selected, speech

@@ -10,7 +10,15 @@ from pathlib import Path
 from typing import Protocol
 
 from src.config import Settings, get_settings
-from src.contracts import Candidate, PublishResult, SelectedClip, Source, Speech, Transcript
+from src.contracts import (
+    CameraPlan,
+    Candidate,
+    PublishResult,
+    SelectedClip,
+    Source,
+    Speech,
+    Transcript,
+)
 from src.errors import ArtifactError, ConfigurationError, ContractValidationError
 from src.logging import configure_logging, stage_logger
 from src.paths import WorkPaths, work_paths
@@ -133,9 +141,38 @@ def main() -> None:
     print("\n".join(str(path) for path in artifacts))
 
 
+def _publishable(paths: WorkPaths, selected: list[SelectedClip]) -> list[SelectedClip]:
+    """Drop clips C8 could not attribute to a speaker.
+
+    A clip whose C9 plan has no keyframes is unsupported: C8 found no face it
+    would call the speaker, so publishing it would put a centre crop of the
+    chamber under a named politician's byline. Rejection is a normal outcome
+    here and must not read as a pipeline failure — a *missing* render for a clip
+    that does have evidence still raises, because that is a real fault. See
+    ADR 010.
+    """
+
+    logger = stage_logger("C11_publish", dokid="")
+    publishable: list[SelectedClip] = []
+    for clip in selected:
+        plan_path = paths.camera_json(clip.clip_id)
+        if not plan_path.exists():
+            raise ArtifactError(f"C9 camera artifact is missing: {plan_path}")
+        plan = read_model(plan_path, CameraPlan, "C9 camera artifact")
+        if not plan.keyframes:
+            logger.info(
+                "clip_rejected_not_published",
+                clip_id=clip.clip_id,
+                reason="no_verified_speaker_evidence",
+            )
+            continue
+        publishable.append(clip)
+    return publishable
+
+
 def _publish_local(paths: WorkPaths, selected: list[SelectedClip]) -> list[Path]:
     written: list[Path] = []
-    for clip in selected:
+    for clip in _publishable(paths, selected):
         rendered_path = paths.render_primary_mp4(clip.clip_id)
         if not rendered_path.exists():
             raise ArtifactError(f"C10 render output is missing: {rendered_path}")
@@ -160,22 +197,23 @@ def _publish_remote(
     source_payload = read_json_object(paths.source_json, "C1 source artifact")
     source = Source.model_validate(source_payload.get("source"))
     published_at = datetime.now(tz=UTC)
+    publishable = _publishable(paths, selected)
     uploaded_urls: dict[str, dict[str, str]] = {}
-    for clip in selected:
+    for clip in publishable:
         uploaded_urls[clip.clip_id] = _upload_clip_assets(paths, source, clip, uploader)
 
     batch = build_supabase_batch(
         paths,
         source_payload=source_payload,
         source=source,
-        selected=selected,
+        selected=publishable,
         uploaded_urls=uploaded_urls,
         published_at=published_at,
     )
     publisher.publish_batch(batch)
 
     written: list[Path] = []
-    for clip in selected:
+    for clip in publishable:
         result = PublishResult(
             clip_id=clip.clip_id,
             cdn_urls=uploaded_urls[clip.clip_id],
