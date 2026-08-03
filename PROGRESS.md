@@ -1057,3 +1057,67 @@ should not be relaxed without a deliberate decision recorded here.
   re-runs the comparison against any provider; `--model` and `--base-url` override.
 - Set `RIKET_TITLE_BACKEND=api` to use it in C7. Default stays `fallback` so no
   unattended run starts spending money by accident.
+
+## C7 titles — deepseek-v4-pro at 16/16, concurrency, open name decision — 2026-08-03
+
+**Tests:** 250 passed; ruff and mypy clean on 74 files.
+
+**Benchmark, 16 real HD10540 clips** (`scripts/benchmark_titles.py`):
+
+| Config | Accepted | Per clip | Per 1,000 clips |
+|---|---|---|---|
+| local qwen3:8b (baseline) | 4/16 (28%) | 5.9 s | GPU time |
+| deepseek-v4-flash | 7/16 (44%) | 2.6 s | $0.08 |
+| **deepseek-v4-pro** | **16/16 (100%)** | 44 s serial, ~21 s at 6-way | **$0.88** |
+| deepseek-v4-pro, no names | 9/16 and 11/16 | — | $1.80 |
+
+**I measured Pro wrong twice before getting it right.** `max_tokens` was 200, then
+3,000; Pro spends ~2,200 tokens reasoning before emitting any content, so both
+truncated it mid-thought and returned empty strings. Truncation is
+indistinguishable from a model that cannot follow instructions — it read as
+"the expensive model is worse" when it was the best of the three. `DEFAULT_MAX_TOKENS`
+is now 16,000 and there is a regression test asserting it stays clear of that.
+
+**Run-to-run variance is real.** Two runs of the identical no-name config gave
+9/16 and 11/16 at temperature 0.15. Differences under about 3 clips are sampling
+noise, not signal. Re-run twice before believing a comparison.
+
+**Decisions made:**
+- Titles are generated concurrently, order preserved (`RIKET_TITLE_CONCURRENCY`,
+  default 4). Each title is an independent HTTP call; serially a reasoning model
+  would spend 44 minutes on a 60-clip debate and dominate the pipeline.
+- `TokenUsage` is lock-guarded and now reports reasoning tokens, which are billed
+  as output and dominate the bill on a reasoning model.
+- Backend is generic OpenAI-compatible, so MiniMax or z.ai is an env change.
+
+**OPEN DECISION — speaker names in titles.**
+The owner wants titles without "Strömmer:" prefixes, because the feed already
+shows speaker and party directly beneath the title, and the prefix costs ~10 of
+60 characters.
+
+Removing it from the prompt alone was tried and **reverted**, because it is
+half a change: `title_validation_errors` still enforces
+`confront_title_missing_attribution`, so the prompt forbade what the fact-checker
+demanded. Four of the seven extra rejections were exactly that contradiction.
+
+Doing it properly needs, in one change:
+1. Drop `confront_title_missing_attribution` from the validator.
+2. Add a same-debate duplicate check — without the speaker as a differentiator
+   the model converged on the same number twice (clips 1 and 3 both became
+   "Beräknas anslagen till polisen öka med 43 procent").
+3. Re-benchmark **twice** given the variance above.
+
+The counter-argument, which the owner should weigh: clip 8 is Tegnér attacking
+Strömmer. Without attribution it reads, under a "Gunnar Strömmer" label, as
+Strömmer criticising his own party. Rare, but it is the case the rule exists for.
+
+**Blocked / needs a decision:**
+- The name question above.
+- `P0-9` — rotate the Supabase token *and* the DeepSeek key; both are in chat
+  transcripts.
+
+**Next agent should know:**
+- Default is still `RIKET_TITLE_BACKEND=fallback`, so nothing spends money
+  unattended. Set `api` plus `RIKET_TITLE_MODEL=deepseek-v4-pro` to enable.
+- $4 of DeepSeek credit is roughly 4,500 clips at Pro pricing. March 2026 alone
+  is 64 debates.

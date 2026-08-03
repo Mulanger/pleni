@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import structlog
@@ -186,8 +187,9 @@ def _generate_titles(
     generator: TitleGenerator,
     logger: structlog.BoundLogger,
 ) -> list[SelectedClip]:
-    titled: list[SelectedClip] = []
-    for clip in clips:
+    def title_one(clip: SelectedClip) -> SelectedClip:
+        """Generate one title, or keep the deterministic fallback."""
+
         try:
             generated = generator.generate(
                 clip=clip,
@@ -201,16 +203,24 @@ def _generate_titles(
                 clip_id=clip.clip_id,
                 reason=str(exc),
             )
-            titled.append(clip)
-            continue
+            return clip
         logger.info(
             "title_generated",
             speech_id=speech.speech_id,
             clip_id=clip.clip_id,
             attempts=generated.attempts,
         )
-        titled.append(clip.model_copy(update={"title": generated.title}))
-    return titled
+        return clip.model_copy(update={"title": generated.title})
+
+    # One independent HTTP call per clip, so they run concurrently. A reasoning
+    # model spends ~44s on a title; serially that is 44 minutes for a 60-clip
+    # debate, which would dominate the whole pipeline. `map` preserves order,
+    # which matters because `rank` is positional.
+    workers = max(1, min(get_settings().title_concurrency, len(clips)))
+    if workers == 1:
+        return [title_one(clip) for clip in clips]
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(title_one, clips))
 
 
 if __name__ == "__main__":

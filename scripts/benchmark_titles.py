@@ -25,6 +25,7 @@ import argparse
 import json
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +52,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base-url", default=None, help="Defaults to RIKET_TITLE_API_BASE_URL")
     parser.add_argument("--limit", type=int, default=0, help="Only the first N clips")
     parser.add_argument("--json-out", type=Path, default=None)
+    parser.add_argument(
+        "--concurrency", type=int, default=None,
+        help="Parallel requests. Defaults to RIKET_TITLE_CONCURRENCY.",
+    )
     args = parser.parse_args(argv)
 
     settings = get_settings()
@@ -96,10 +101,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"endpoint   {base_url}")
     print(f"clips      {len(clips)}  ({source.title})\n")
 
-    results: list[dict[str, object]] = []
     started = time.monotonic()
 
-    for index, clip in enumerate(clips, start=1):
+    def run_one(indexed: tuple[int, SelectedClip]) -> dict[str, object]:
+        index, clip = indexed
         speech = speeches[clip.speech_id]
         fallback = clip.title
         clip_started = time.monotonic()
@@ -108,40 +113,51 @@ def main(argv: list[str] | None = None) -> int:
                 clip=clip, speech=speech, debate_title=source.title or args.dokid
             )
         except PipelineError as error:
-            reason = str(error).split(": ", 2)[-1][:70]
-            print(f"{index:2}. REJECTED  {reason}")
-            print(f"    keeps:  {fallback}")
-            results.append(
-                {"clip_id": clip.clip_id, "accepted": False, "reason": reason,
-                 "fallback": fallback}
-            )
-            continue
-
-        elapsed = time.monotonic() - clip_started
-        print(f'{index:2}. ACCEPTED  "{generated.title}"')
-        print(f"    was:    {fallback}")
-        print(f"    attempts {generated.attempts}, {elapsed:.1f}s")
-        results.append(
-            {
+            return {
+                "index": index,
                 "clip_id": clip.clip_id,
-                "accepted": True,
-                "title": generated.title,
+                "accepted": False,
+                "reason": str(error).split(": ", 2)[-1][:70],
                 "fallback": fallback,
-                "attempts": generated.attempts,
-                "evidence": generated.supporting_span[:160],
-                # Re-run the validator on the accepted title as a self-check:
-                # if this is ever non-empty, the loop let something through.
-                "revalidation": list(
-                    title_validation_errors(
-                        generated.title,
-                        generated.supporting_span,
-                        transcript=clip.transcript,
-                        speaker_name=speech.speaker_name,
-                        archetype=clip.archetype,
-                    )
-                ),
             }
+        return {
+            "index": index,
+            "clip_id": clip.clip_id,
+            "accepted": True,
+            "title": generated.title,
+            "fallback": fallback,
+            "attempts": generated.attempts,
+            "seconds": round(time.monotonic() - clip_started, 1),
+            "evidence": generated.supporting_span[:160],
+            # Re-run the validator on the accepted title as a self-check: if this
+            # is ever non-empty, the generation loop let something through.
+            "revalidation": list(
+                title_validation_errors(
+                    generated.title,
+                    generated.supporting_span,
+                    transcript=clip.transcript,
+                    speaker_name=speeches[clip.speech_id].speaker_name,
+                    archetype=clip.archetype,
+                )
+            ),
+        }
+
+    workers = max(1, min(args.concurrency or settings.title_concurrency, len(clips)))
+    print(f"concurrency {workers}\n")
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        results = sorted(
+            pool.map(run_one, enumerate(clips, start=1)),
+            key=lambda r: int(r["index"]),  # type: ignore[arg-type]
         )
+
+    for r in results:
+        if r["accepted"]:
+            print(f'{r["index"]:2}. ACCEPTED  "{r["title"]}"')
+            print(f'    was:    {r["fallback"]}')
+            print(f'    attempts {r["attempts"]}, {r["seconds"]}s')
+        else:
+            print(f'{r["index"]:2}. REJECTED  {r["reason"]}')
+            print(f'    keeps:  {r["fallback"]}')
 
     wall = time.monotonic() - started
     accepted = [r for r in results if r["accepted"]]
@@ -163,6 +179,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"tokens          {usage.prompt_tokens:,} in "
         f"({usage.cached_tokens:,} cached), {usage.completion_tokens:,} out"
+        + (f" ({usage.reasoning_tokens:,} reasoning)" if usage.reasoning_tokens else "")
     )
     print(f"cost            ${cost:.5f}  (${cost / len(results):.6f} per clip)")
     print(f"per 1,000 clips ${cost / len(results) * 1000:.2f}")
@@ -179,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
                     "clips": len(results),
                     "accepted": len(accepted),
                     "cost_usd": round(cost, 6),
-                    "usage": usage.__dict__,
+                    "usage": usage.to_dict(),
                     "results": results,
                 },
                 indent=2,

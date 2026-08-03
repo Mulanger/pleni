@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     title_api_output_per_m: float = Field(default=0.28, ge=0.0)
     title_timeout_s: float = Field(default=240.0, gt=0.0)
     title_max_attempts: int = Field(default=3, ge=1, le=3)
+    # Titles are independent HTTP calls, so they run concurrently. A
+    # reasoning model spends ~44s per clip; serially that is 44 minutes for a
+    # 60-clip debate. Kept modest to stay a polite API client.
+    title_concurrency: int = Field(default=4, ge=1, le=16)
     output_width: int = Field(default=OUTPUT_WIDTH, gt=0)
     output_height: int = Field(default=OUTPUT_HEIGHT, gt=0)
     crop_width: int = Field(default=CROP_WIDTH, gt=0)

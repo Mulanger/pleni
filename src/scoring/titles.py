@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import unicodedata
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
-from typing import Protocol
+from dataclasses import dataclass, field
+from typing import Any, Protocol
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -19,6 +20,15 @@ from src.errors import ExternalServiceError
 MIN_TITLE_CHARS = 28
 MAX_TITLE_CHARS = 60
 DEFAULT_MAX_ATTEMPTS = 3
+#: Output budget per request. A title is ~40 tokens, but a reasoning model
+#: spends its thinking in the same budget and emits `content` only afterwards.
+#: Capping this at 200 made deepseek-v4-pro return empty content on all 16
+#: benchmark clips, and 3,000 still truncated 11 of them — reasoning length
+#: varies from ~900 to well past 3,000 tokens on the same task. Truncation
+#: looks exactly like a model that cannot follow instructions, so the budget
+#: is set well clear of it. This is a ceiling, not an allocation: a
+#: non-reasoning model stops after ~40 tokens and is billed for those.
+DEFAULT_MAX_TOKENS = 16000
 TOKEN_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
 NUMBER_RE = re.compile(r"\d+(?:[,.]\d+)?")
 ALLOWED_PUNCTUATION = frozenset(" -\u2013\u2014:,.%()'\u2019")
@@ -296,6 +306,7 @@ class OpenAICompatibleTitleGenerator:
         timeout_s: float,
         max_attempts: int = DEFAULT_MAX_ATTEMPTS,
         temperature: float = 0.15,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
         transport: AuthedJsonTransport | None = None,
     ) -> None:
         if max_attempts < 1:
@@ -308,6 +319,7 @@ class OpenAICompatibleTitleGenerator:
         self._timeout_s = timeout_s
         self._max_attempts = max_attempts
         self._temperature = temperature
+        self._max_tokens = max_tokens
         self._transport = transport or _post_json_authed
         self.usage = TokenUsage()
 
@@ -347,7 +359,7 @@ class OpenAICompatibleTitleGenerator:
                     # stop this class being generic, and the Pydantic model
                     # rejects a bad shape anyway.
                     "response_format": {"type": "json_object"},
-                    "max_tokens": 200,
+                    "max_tokens": self._max_tokens,
                 },
                 self._timeout_s,
             )
@@ -386,23 +398,46 @@ class TokenUsage:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cached_tokens: int = 0
+    reasoning_tokens: int = 0
     requests: int = 0
+    #: Titles are generated concurrently (one HTTP call per clip), so the
+    #: accumulator is shared across threads.
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def add(self, usage: object) -> None:
         """Fold in one response's `usage` block, tolerating a missing one."""
 
         if not isinstance(usage, Mapping):
             return
+        with self._lock:
+            self._add_locked(usage)
+
+    def _add_locked(self, usage: Mapping[str, Any]) -> None:
         self.requests += 1
         self.prompt_tokens += _as_int(usage.get("prompt_tokens"))
         self.completion_tokens += _as_int(usage.get("completion_tokens"))
         # DeepSeek reports cache hits here; they are billed at ~2% of the
         # miss price, and the 1,553-char system prompt is identical on every
         # call, so this number should climb steeply after the first few clips.
+        completion_details = usage.get("completion_tokens_details")
+        if isinstance(completion_details, Mapping):
+            # Billed as output, and on a reasoning model they dominate it.
+            self.reasoning_tokens += _as_int(completion_details.get("reasoning_tokens"))
         details = usage.get("prompt_tokens_details")
         if isinstance(details, Mapping):
             self.cached_tokens += _as_int(details.get("cached_tokens"))
         self.cached_tokens += _as_int(usage.get("prompt_cache_hit_tokens"))
+
+    def to_dict(self) -> dict[str, int]:
+        """Serialisable counters. Excludes the lock, which is not JSON."""
+
+        return {
+            "requests": self.requests,
+            "prompt_tokens": self.prompt_tokens,
+            "cached_tokens": self.cached_tokens,
+            "completion_tokens": self.completion_tokens,
+            "reasoning_tokens": self.reasoning_tokens,
+        }
 
     def cost_usd(self, *, input_per_m: float, output_per_m: float, cached_per_m: float) -> float:
         """Cost in USD for the accumulated usage."""

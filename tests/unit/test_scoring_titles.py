@@ -339,3 +339,48 @@ def test_a_missing_api_key_fails_before_any_request() -> None:
         OpenAICompatibleTitleGenerator(
             base_url="https://api.example.com/v1", api_key="", model="m", timeout_s=1.0
         )
+
+
+def test_the_output_budget_leaves_room_for_a_reasoning_model() -> None:
+    """Regression for a real benchmark failure.
+
+    `deepseek-v4-pro` emits `reasoning_content` before `content`, and both are
+    drawn from the same `max_tokens` budget. A 200-token cap truncated it
+    mid-thought on all 16 clips, producing empty content — which is
+    indistinguishable from a model that simply cannot follow instructions, and
+    would have been read as "the expensive model is worse".
+    """
+
+    from src.scoring.titles import DEFAULT_MAX_TOKENS
+
+    assert DEFAULT_MAX_TOKENS >= 2000
+
+
+def test_reasoning_tokens_are_counted_because_they_are_billed_as_output() -> None:
+    """On a reasoning model they dominate the bill, so hiding them hides the cost."""
+
+    clip, speech = _api_clip()
+
+    def transport(
+        url: str, key: str, payload: Mapping[str, object], timeout: float
+    ) -> Mapping[str, object]:
+        return _completion(
+            "Strömmer: Antalet poliser har ökat med drygt 600",
+            usage={
+                "prompt_tokens": 700,
+                "completion_tokens": 640,
+                "completion_tokens_details": {"reasoning_tokens": 600},
+            },
+        )
+
+    generator = OpenAICompatibleTitleGenerator(
+        base_url="https://api.example.com/v1",
+        api_key="sk-test",
+        model="reasoner",
+        timeout_s=30.0,
+        transport=transport,
+    )
+    generator.generate(clip=clip, speech=speech, debate_title="D")
+
+    assert generator.usage.reasoning_tokens == 600
+    assert generator.usage.completion_tokens == 640
