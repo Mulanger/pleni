@@ -10,8 +10,11 @@ import pytest
 from src.contracts import SelectedClip, Speech
 from src.errors import ExternalServiceError
 from src.scoring.titles import (
+    ModelPrice,
     OllamaTitleGenerator,
     OpenAICompatibleTitleGenerator,
+    price_for,
+    speaker_surname,
     title_validation_errors,
 )
 
@@ -47,21 +50,133 @@ def test_title_validation_rejects_ungrounded_or_corrupt_output() -> None:
     assert "missing_qualifiers:vantas" in errors
 
 
-def test_title_validation_rejects_reordered_claim_roles() -> None:
+def test_role_inversion_is_a_known_accepted_gap() -> None:
+    """Reordering is no longer blocked. This is the case that costs us.
+
+    The evidence says the *appropriation to the police* grows. The title says
+    the *police* grow the appropriation — subject and object swapped, while
+    every word is grounded and every number is real.
+    `title_words_out_of_evidence_order` used to catch this by requiring title
+    words to appear in the evidence's own order.
+
+    That rule was removed deliberately on 2026-08-03: it caused 21 of the
+    rejections across the August benchmarks, it forced deletion-only extraction,
+    and that in turn forced a reasoning model at 34x the price of a flash one
+    for no measured gain in title quality. The owner accepted the trade knowing
+    this case reopens.
+
+    What still protects the reader: `ungrounded_title_words` (no invented
+    words), `unsupported_numbers` (no invented figures) and `missing_qualifiers`
+    (no dropped hedges) — plus a human reading the output, which at $0.08 per
+    1,000 clips is now affordable to do often.
+
+    This test pins the gap so it stays visible. A session that finds a targeted
+    inversion check should flip this assertion, not delete the test.
+    """
+
     evidence = (
-        "Under åren 2023\u20132028 beräknas anslagen till polisen öka från 37 till "
+        "Under åren 2023-2028 beräknas anslagen till polisen öka från 37 till "
         "53 miljarder, det vill säga en ökning med 43 procent."
     )
 
     errors = title_validation_errors(
-        "Strömmer: Polisen beräknas öka anslagen med 43 procent",
+        "Polisen beräknas öka anslagen med 43 procent",
         evidence,
         transcript=evidence,
         speaker_name="Gunnar Strömmer (M)",
         archetype="EXPLAIN",
     )
 
-    assert "title_words_out_of_evidence_order" in errors
+    assert errors == (), "known gap: role inversion is not detected"
+
+
+def test_swedish_inflection_is_not_a_hallucination() -> None:
+    """`polistatheten` against evidence saying `polistathet` is the same word.
+
+    Exact token matching made this a top rejection cause in the August
+    benchmarks, and it is unfixable by the model: Swedish definite forms mean a
+    grammatical title can rarely reuse the evidence's exact surface forms.
+    """
+
+    evidence = "Regeringen vill att polistäthet ska nå EU:s genomsnitt."
+
+    assert (
+        title_validation_errors(
+            "Polistätheten ska nå EU:s genomsnitt",
+            evidence,
+            transcript=evidence,
+            speaker_name="Gunnar Strömmer (M)",
+            archetype="EXPLAIN",
+        )
+        == ()
+    )
+
+
+def test_inflection_matching_does_not_admit_a_different_word() -> None:
+    """The allowance is bounded, so a compound is still ungrounded."""
+
+    evidence = "Regeringen vill se fler poliser i tjänst."
+
+    errors = title_validation_errors(
+        "Regeringen vill se fler polisstationer nu",
+        evidence,
+        transcript=evidence,
+        speaker_name="Gunnar Strömmer (M)",
+        archetype="EXPLAIN",
+    )
+
+    assert any(error.startswith("ungrounded_title_words:") for error in errors)
+
+
+def test_naming_another_member_requires_attribution() -> None:
+    """The clip-8 case: Tegnér's title naming Strömmer must say whose view it is."""
+
+    evidence = "Även om inte statsrådet Strömmer var där så var Moderaterna där."
+    common = dict(
+        transcript=evidence,
+        speaker_name="Mathias Tegnér (S)",
+        archetype="CONFRONT",
+        debate_surnames=frozenset({"Tegnér", "Strömmer"}),
+    )
+
+    unattributed = title_validation_errors(
+        "Strömmer var inte där men Moderaterna var där",
+        evidence,
+        **common,  # type: ignore[arg-type]
+    )
+    assert any(
+        error.startswith("title_names_other_speaker_without_attribution:")
+        for error in unattributed
+    )
+
+    assert (
+        title_validation_errors("Strömmer: Moderaterna var där", evidence, **common)  # type: ignore[arg-type]
+        == ()
+    )
+
+
+def test_the_speakers_own_name_is_never_required() -> None:
+    """The feed already renders speaker and party beneath the title."""
+
+    evidence = "Det har inte skett några ytterligare stängningar av stationer."
+
+    assert (
+        title_validation_errors(
+            "Det har inte skett några ytterligare stängningar",
+            evidence,
+            transcript=evidence,
+            speaker_name="Justitieministern Gunnar Strömmer (M)",
+            archetype="CONFRONT",
+            debate_surnames=frozenset({"Strömmer", "Tegnér"}),
+        )
+        == ()
+    ), "a CONFRONT title no longer has to carry the speaker's own surname"
+
+
+def test_surname_ignores_office_title_and_party() -> None:
+    assert speaker_surname("Justitieministern Gunnar Strömmer (M)") == "Strömmer"
+    assert speaker_surname("Mathias Tegnér (S)") == "Tegnér"
+    assert speaker_surname("") == ""
 
 
 def test_ollama_generator_retries_validation_failure() -> None:
@@ -332,6 +447,54 @@ def test_usage_is_accumulated_across_attempts_including_cache_hits() -> None:
     # Cached input is billed at a fraction, so it must not be double-counted.
     cost = generator.usage.cost_usd(input_per_m=0.14, output_per_m=0.28, cached_per_m=0.014)
     assert cost == pytest.approx((750 * 0.14 + 1350 * 0.014 + 90 * 0.28) / 1_000_000)
+
+
+def test_cache_hits_reported_in_both_fields_are_counted_once() -> None:
+    """DeepSeek returns the same cache-hit count twice. Summing them is a bug.
+
+    It made `cached_tokens` exceed `prompt_tokens` across the August benchmark
+    runs, which clamped billed input to zero in `cost_usd` and hid real spend.
+    """
+
+    clip, speech = _api_clip()
+
+    def transport(
+        url: str, key: str, payload: Mapping[str, object], timeout: float
+    ) -> Mapping[str, object]:
+        return _completion(
+            "x" * 95,
+            usage={
+                "prompt_tokens": 700,
+                "completion_tokens": 30,
+                "prompt_cache_hit_tokens": 450,
+                "prompt_tokens_details": {"cached_tokens": 450},
+            },
+        )
+
+    generator = OpenAICompatibleTitleGenerator(
+        base_url="https://api.example.com/v1",
+        api_key="sk-test",
+        model="m",
+        timeout_s=30.0,
+        max_attempts=1,
+        transport=transport,
+    )
+    with pytest.raises(ExternalServiceError):
+        generator.generate(clip=clip, speech=speech, debate_title="D")
+
+    assert generator.usage.cached_tokens == 450, "counted once, not 900"
+    assert generator.usage.cached_tokens <= generator.usage.prompt_tokens
+
+
+def test_a_reasoning_model_is_priced_higher_than_a_flash_one() -> None:
+    """A single global price silently understated every Pro benchmark by 3.1x."""
+
+    fallback = ModelPrice(0.14, 0.0028, 0.28)
+    pro = price_for("deepseek-v4-pro", fallback)
+    flash = price_for("deepseek-v4-flash", fallback)
+
+    assert pro.output_per_m > flash.output_per_m
+    assert price_for("some-unlisted-provider/model", fallback) is fallback
 
 
 def test_a_missing_api_key_fails_before_any_request() -> None:

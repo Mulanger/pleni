@@ -115,9 +115,9 @@ Arbeta i denna ordning:
 RUBRIKREGLER:
 - 28-60 tecken. Normal svensk meningskapitalisering.
 - Välj den starkaste konkreta konflikten, konsekvensen, siffran eller formuleringen i hela klippet.
-- Rubrikens innehållsord ska finnas exakt i de valda meningarna. Endast talarens namn och neutrala attributord som säger, menar, varnar, kräver och frågar får läggas till.
-- Lägg aldrig till eller förstärk uppgifter. Bevara kan, väntas, beräknas, riskerar, nästan, över och andra viktiga förbehåll.
-- Tillskriv anklagelser, prognoser och politiska värderingar med talarens efternamn och kolon.
+- Rubriken ska bygga på ord som står i den valda meningen. Du får böja orden och ändra ordföljden så att rubriken blir god svenska. Neutrala attributord som säger, menar, varnar, kräver och frågar får läggas till.
+- Lägg aldrig till eller förstärk uppgifter. Hitta aldrig på ord som inte har stöd i meningen. Varje siffra måste stå i klippet. Bevara kan, väntas, beräknas, riskerar, nästan, över och andra viktiga förbehåll.
+- Skriv INTE talarens eget namn i rubriken — appen visar redan talare och parti under rubriken. Nämner rubriken en ANNAN riksdagsledamot, inled med den personens efternamn och kolon.
 - Ingen punkt mitt i rubriken. Rubriken ska vara en enda komplett fras och får inte sluta med en preposition eller konjunktion.
 - Ingen all caps, emoji, vag lockfras, onödig partibeteckning eller avhugget ord.
 - För CONFRONT: prioritera den specifika motsättningen.
@@ -130,9 +130,13 @@ EXEMPEL:
 evidence_indices: [1]
 title: "Kommunerna får 12 miljarder extra till vården"
 
-[1] Däremot ägnar ministern sig åt siffertrixande.
+[1] Under åren 2023-2028 beräknas anslagen till polisen öka med 43 procent.
 evidence_indices: [1]
-title: "Andersson: Ministern ägnar sig åt siffertrixande"""  # noqa: E501
+title: "Anslagen till polisen beräknas öka med 43 procent"
+
+[1] Även om inte statsrådet Strömmer var där så var Moderaterna där.
+evidence_indices: [1]
+title: "Strömmer: Moderaterna var där"""  # noqa: E501
 
 
 class _TitleResponse(BaseModel):
@@ -160,6 +164,7 @@ class TitleGenerator(Protocol):
         clip: SelectedClip,
         speech: Speech,
         debate_title: str,
+        debate_surnames: frozenset[str] = frozenset(),
     ) -> GeneratedTitle:
         """Generate one validated title or raise an expected pipeline error."""
 
@@ -194,6 +199,7 @@ class OllamaTitleGenerator:
         clip: SelectedClip,
         speech: Speech,
         debate_title: str,
+        debate_surnames: frozenset[str] = frozenset(),
     ) -> GeneratedTitle:
         evidence_sentences = _title_sentences(clip.transcript)
         messages = [
@@ -257,6 +263,7 @@ class OllamaTitleGenerator:
                         transcript=clip.transcript,
                         speaker_name=speech.speaker_name,
                         archetype=clip.archetype,
+                        debate_surnames=debate_surnames,
                     )
                 if not last_errors:
                     return GeneratedTitle(
@@ -329,6 +336,7 @@ class OpenAICompatibleTitleGenerator:
         clip: SelectedClip,
         speech: Speech,
         debate_title: str,
+        debate_surnames: frozenset[str] = frozenset(),
     ) -> GeneratedTitle:
         evidence_sentences = _title_sentences(clip.transcript)
         messages: list[dict[str, object]] = [
@@ -372,6 +380,7 @@ class OpenAICompatibleTitleGenerator:
                 clip=clip,
                 speech=speech,
                 attempt_number=attempt_number,
+                debate_surnames=debate_surnames,
             )
             if generated is not None:
                 return generated
@@ -389,6 +398,35 @@ class OpenAICompatibleTitleGenerator:
             f"{self._model} returned no grounded title after "
             f"{self._max_attempts} attempts: {', '.join(last_errors)}"
         )
+
+
+@dataclass(frozen=True)
+class ModelPrice:
+    """Published price in USD per million tokens."""
+
+    input_per_m: float
+    cached_per_m: float
+    output_per_m: float
+
+
+#: Per-model published prices, verified against api-docs.deepseek.com 2026-08-03.
+#:
+#: This table exists because a single global price is wrong the moment the
+#: model is swappable, and it was: `src/config.py` carried Flash's $0.28/M
+#: output for every backend, so the August `deepseek-v4-pro` benchmarks all
+#: reported about a third of what they actually cost. Pro is 3.1x Flash on
+#: both input and output.
+MODEL_PRICES: Mapping[str, ModelPrice] = {
+    "deepseek-v4-pro": ModelPrice(0.435, 0.003625, 0.87),
+    "deepseek-v4-flash": ModelPrice(0.14, 0.0028, 0.28),
+    "deepseek-chat": ModelPrice(0.14, 0.0028, 0.28),
+}
+
+
+def price_for(model: str, fallback: ModelPrice) -> ModelPrice:
+    """Published price for `model`, or `fallback` for an unlisted provider."""
+
+    return MODEL_PRICES.get(model, fallback)
 
 
 @dataclass
@@ -416,17 +454,19 @@ class TokenUsage:
         self.requests += 1
         self.prompt_tokens += _as_int(usage.get("prompt_tokens"))
         self.completion_tokens += _as_int(usage.get("completion_tokens"))
-        # DeepSeek reports cache hits here; they are billed at ~2% of the
-        # miss price, and the 1,553-char system prompt is identical on every
-        # call, so this number should climb steeply after the first few clips.
         completion_details = usage.get("completion_tokens_details")
         if isinstance(completion_details, Mapping):
             # Billed as output, and on a reasoning model they dominate it.
             self.reasoning_tokens += _as_int(completion_details.get("reasoning_tokens"))
+        # DeepSeek reports the *same* cache-hit count twice: once as
+        # `prompt_cache_hit_tokens` and once as `prompt_tokens_details.cached_tokens`.
+        # Summing them made cached exceed prompt_tokens (350k vs 222k over the
+        # August benchmark runs), which clamped billed input to zero in
+        # `cost_usd`. Take the larger, so a provider reporting only one field
+        # still works.
         details = usage.get("prompt_tokens_details")
-        if isinstance(details, Mapping):
-            self.cached_tokens += _as_int(details.get("cached_tokens"))
-        self.cached_tokens += _as_int(usage.get("prompt_cache_hit_tokens"))
+        nested = _as_int(details.get("cached_tokens")) if isinstance(details, Mapping) else 0
+        self.cached_tokens += max(nested, _as_int(usage.get("prompt_cache_hit_tokens")))
 
     def to_dict(self) -> dict[str, int]:
         """Serialisable counters. Excludes the lock, which is not JSON."""
@@ -457,6 +497,7 @@ def _evaluate_title_response(
     clip: SelectedClip,
     speech: Speech,
     attempt_number: int,
+    debate_surnames: frozenset[str] = frozenset(),
 ) -> tuple[tuple[str, ...], GeneratedTitle | None]:
     """Validate one model response. Shared by every backend.
 
@@ -489,6 +530,7 @@ def _evaluate_title_response(
         transcript=clip.transcript,
         speaker_name=speech.speaker_name,
         archetype=clip.archetype,
+        debate_surnames=debate_surnames,
     )
     if errors:
         return errors, None
@@ -506,8 +548,21 @@ def title_validation_errors(
     transcript: str,
     speaker_name: str,
     archetype: str,
+    debate_surnames: frozenset[str] = frozenset(),
 ) -> tuple[str, ...]:
-    """Return deterministic reasons why a generated title is unsafe to publish."""
+    """Return deterministic reasons why a generated title is unsafe to publish.
+
+    This is a **safety floor, not a quality bar.** It certifies that a headline
+    is safe to print over a real politician's face — no invented statistic, no
+    dropped qualifier, no word the speaker did not say. It cannot tell a good
+    headline from a bad one: a deterministic script that just deletes words from
+    a sentence scores 100% here while producing unreadable Swedish. Judge
+    quality by reading the output; use this only to catch what would be a
+    correction if published.
+
+    `archetype` no longer changes the outcome. It is kept because callers pass
+    it and a future rule may well be archetype-specific.
+    """
 
     errors: list[str] = []
     clean_title = title.strip()
@@ -547,26 +602,12 @@ def title_validation_errors(
             if len(token) >= 4
             and token not in STOP_WORDS
             and token not in ALLOWED_ATTRIBUTION_WORDS
-            and token not in evidence_tokens
             and token not in speaker_tokens
+            and not _is_grounded(token, evidence_tokens)
         }
     )
     if ungrounded:
         errors.append(f"ungrounded_title_words:{'|'.join(ungrounded)}")
-
-    semantic_title_tokens = [
-        token
-        for token in title_tokens
-        if len(token) >= 2
-        and token not in STOP_WORDS
-        and token not in ALLOWED_ATTRIBUTION_WORDS
-        and token not in speaker_tokens
-    ]
-    if semantic_title_tokens and not _is_subsequence(
-        semantic_title_tokens,
-        _normalized_tokens(clean_span),
-    ):
-        errors.append("title_words_out_of_evidence_order")
 
     title_token_set = set(title_tokens)
     if title_tokens and title_tokens[-1] in DANGLING_TITLE_ENDINGS:
@@ -577,8 +618,19 @@ def title_validation_errors(
     missing_qualifiers = sorted(required_qualifiers - title_token_set)
     if missing_qualifiers:
         errors.append(f"missing_qualifiers:{'|'.join(missing_qualifiers)}")
-    if archetype.casefold() == "confront" and ":" not in clean_title:
-        errors.append("confront_title_missing_attribution")
+
+    # The feed renders speaker and party directly beneath the title, so naming
+    # the speaker again wastes ~10 of 60 characters. It only has to be said when
+    # the title names someone *else*: "Moderaterna var där ändå" under a
+    # "Mathias Tegnér" label reads as Tegnér's own position unless the title
+    # says whose it is. Surnames come from the debate's own speech list, so this
+    # needs no name recognition.
+    named_others = sorted(
+        (set(title_tokens) & {_normalize_word(name) for name in debate_surnames})
+        - speaker_tokens
+    )
+    if named_others and ":" not in clean_title:
+        errors.append(f"title_names_other_speaker_without_attribution:{'|'.join(named_others)}")
     return tuple(errors)
 
 
@@ -625,10 +677,10 @@ def _correction_prompt(errors: tuple[str, ...]) -> str:
         f"Rubriken MÅSTE vara mellan {MIN_TITLE_CHARS} och {MAX_TITLE_CHARS} tecken — "
         "räkna tecknen innan du svarar och korta ned genom att ta bort ord, "
         "inte genom att hugga av mitt i en fras. "
-        "Välj exakt ett giltigt evidence_index. Använd innehållsord "
-        "som står exakt i de valda meningarna, förutom talarens namn och neutrala "
-        "attributord, och behåll innehållsorden i samma ordning som i meningen. Bevara alla "
-        "viktiga förbehåll. Skriv en enda komplett fras utan punkt."
+        "Välj exakt ett giltigt evidence_index. Bygg rubriken på ord som står i "
+        "den valda meningen — du får böja dem och ändra ordföljden, men hitta "
+        "inte på nya ord. Bevara alla viktiga förbehåll. Skriv en enda komplett "
+        "fras utan punkt."
     )
 
 
@@ -724,6 +776,23 @@ def _post_json(
     return decoded
 
 
+PARTY_SUFFIX_RE = re.compile(r"\s*\([^)]*\)\s*$")
+
+
+def speaker_surname(speaker_name: str) -> str:
+    """Surname from a Riksdagen display name, or `""`.
+
+    Names arrive as `"Justitieministern Gunnar Strömmer (M)"` — an office title,
+    a given name, a surname and a party. Taking the last token naively yields
+    `"(M)"`, so the party is stripped first. The office prefix is exactly the
+    part that changes when someone is promoted, which is why `Q-2` wants
+    `politician_id` rather than a name slug downstream.
+    """
+
+    parts = PARTY_SUFFIX_RE.sub("", speaker_name).split()
+    return parts[-1] if parts else ""
+
+
 def _compact_whitespace(value: str) -> str:
     return " ".join(value.split())
 
@@ -753,11 +822,30 @@ def _normalize_word(value: str) -> str:
     return "".join(char for char in decomposed if not unicodedata.combining(char))
 
 
-def _is_subsequence(needles: list[str], haystack: list[str]) -> bool:
-    needle_index = 0
-    for token in haystack:
-        if token == needles[needle_index]:
-            needle_index += 1
-            if needle_index == len(needles):
-                return True
-    return False
+#: Longest suffix a Swedish inflection is allowed to add or drop before two
+#: tokens stop counting as the same word. Covers the definite and plural forms
+#: that dominate the language: anslag/anslagen, polis/polisen,
+#: polistäthet/polistätheten, regering/regeringen.
+MAX_INFLECTION_DELTA = 3
+
+
+def _is_grounded(token: str, evidence_tokens: set[str]) -> bool:
+    """Is `token` the same word as something in the evidence, allowing inflection?
+
+    Exact matching rejected `polistätheten` against an evidence sentence saying
+    `polistäthet` — a false hallucination alarm, and one of the top rejection
+    causes in the August benchmarks. Swedish inflects heavily, so a title cannot
+    be written in grammatical Swedish under an exact-match rule.
+
+    Deliberately conservative: prefix-only and bounded, so `polis` never matches
+    `polisstationen`. It admits inflections, not derivations.
+    """
+
+    if token in evidence_tokens:
+        return True
+    return any(
+        (token.startswith(other) or other.startswith(token))
+        and abs(len(token) - len(other)) <= MAX_INFLECTION_DELTA
+        and min(len(token), len(other)) >= 4
+        for other in evidence_tokens
+    )

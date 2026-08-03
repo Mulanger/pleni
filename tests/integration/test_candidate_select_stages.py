@@ -6,6 +6,8 @@ import json
 from datetime import date
 from pathlib import Path
 
+import structlog
+
 from src.contracts import (
     AudioFeatures,
     Candidate,
@@ -22,7 +24,7 @@ from src.paths import WorkPaths, work_paths
 from src.scoring.text_features import title_from_candidate_text
 from src.scoring.titles import GeneratedTitle
 from src.stages.candidates import generate_candidates_dokid
-from src.stages.select import select_dokid
+from src.stages.select import _generate_titles, select_dokid
 
 
 def test_candidate_stage_writes_passing_and_rejected_candidates(tmp_path: Path) -> None:
@@ -241,10 +243,12 @@ class _FixedTitleGenerator:
         clip: SelectedClip,
         speech: Speech,
         debate_title: str,
+        debate_surnames: frozenset[str] = frozenset(),
     ) -> GeneratedTitle:
         assert clip.transcript
         assert speech.speaker_name == "Anna Andersson"
         assert debate_title == "Testdebatt"
+        assert "Andersson" in debate_surnames, "C7 passes the debate's speaker roster"
         return GeneratedTitle(
             title="Andersson: Regeringen måste svara på frågan",
             supporting_span="Men regeringen måste svara på frågan.",
@@ -259,5 +263,44 @@ class _FailingTitleGenerator:
         clip: SelectedClip,
         speech: Speech,
         debate_title: str,
+        debate_surnames: frozenset[str] = frozenset(),
     ) -> GeneratedTitle:
         raise ExternalServiceError("test title failure")
+
+
+def test_two_clips_in_one_debate_cannot_share_a_title() -> None:
+    """Without the speaker's name to differentiate them, titles converge.
+
+    In the August benchmark, clips 1 and 3 of HD10540 both became
+    "Beräknas anslagen till polisen öka med 43 procent". Two identical
+    headlines in one feed is worse than one plain headline, so the loser keeps
+    its deterministic fallback.
+    """
+
+    speech = _speech("rankfixture")
+    clips = [
+        SelectedClip(
+            clip_id=f"{speech.speech_id}_c{index:02d}",
+            speech_id=speech.speech_id,
+            rank=index,
+            start_s=float(index * 40),
+            end_s=float(index * 40 + 38),
+            archetype="CONFRONT",
+            title=f"fallback {index}",
+            transcript="Men regeringen måste svara på frågan.",
+        )
+        for index in (1, 2)
+    ]
+
+    titled = _generate_titles(
+        clips,
+        speech=speech,
+        debate_title="Testdebatt",
+        generator=_FixedTitleGenerator(),
+        logger=structlog.get_logger(),
+        debate_surnames=frozenset({"Andersson"}),
+        seen_titles=set(),
+    )
+
+    assert titled[0].title == "Andersson: Regeringen måste svara på frågan"
+    assert titled[1].title == "fallback 2", "the second clip keeps its deterministic title"

@@ -1121,3 +1121,116 @@ Strömmer criticising his own party. Rare, but it is the case the rule exists fo
   unattended. Set `api` plus `RIKET_TITLE_MODEL=deepseek-v4-pro` to enable.
 - $4 of DeepSeek credit is roughly 4,500 clips at Pro pricing. March 2026 alone
   is 64 debates.
+
+## C7 titles — the 16/16 score was measuring the wrong thing — DONE 2026-08-03
+
+**Built:** relaxed `title_validation_errors`, `_is_grounded` inflection matching,
+`speaker_surname`, `MODEL_PRICES`/`price_for` in `src/scoring/titles.py`;
+debate-wide duplicate suppression and speaker-roster threading in
+`src/stages/select.py`; per-model pricing in `scripts/benchmark_titles.py`.
+**Tests:** 258 passed (was 250); ruff and mypy clean on 74 files.
+**Contracts touched:** none. `TitleGenerator.generate` gained a defaulted
+`debate_surnames` keyword — that protocol lives in `src/scoring/titles.py`, not
+`src/contracts.py`, so rule 1 does not apply.
+
+### Why the last session cost $0.43
+
+Answered from `work/title_bench_*.json`, which recorded the provider's own usage
+blocks. No new API calls were needed to establish any of this.
+
+- **98% of the output tokens paid for were reasoning, not writing** — 455,164 of
+  464,529 across 226 captured requests. Each call spent 2,000–5,400 tokens
+  thinking to emit a ~40-token headline.
+- **`src/config.py` billed every model at Flash's price.** Verified against
+  api-docs.deepseek.com: Pro is `$0.435 / $0.87` per 1M in/out, **3.1x** Flash's
+  `$0.14 / $0.28`. Every Pro benchmark reported about a third of its true cost.
+- **`TokenUsage` double-counted cache hits.** DeepSeek returns the same figure as
+  both `prompt_cache_hit_tokens` and `prompt_tokens_details.cached_tokens`; the
+  accumulator added both. Cached (350k) exceeded prompt (222k) — impossible — and
+  `cost_usd` then clamped billed input to zero.
+
+Recomputed correctly the eight saved runs cost **$0.32**; scaling 226 captured
+requests to the ~285 the owner was billed for gives **$0.40** against an actual
+$0.43. **The previous entry's "$0.88 per 1,000 clips" for Pro is really $2.70.**
+
+### The finding that matters: 16/16 was not a quality measurement
+
+A ~100-line script that picks a sentence and searches contiguous word spans — no
+LLM, no API, **$0.00** — also scores **16/16** against the old validator. Its
+titles are unreadable (`(M): Som snabbt kan gripa in när det krävs och som
+erbjuder`). Pro's 16/16 titles were genuinely good. **Both score 100%.**
+
+So the number the last session spent $0.43 hill-climbing certifies that a title
+is *legal*, never that it is *good*. Worse, the rule doing most of the work —
+`title_words_out_of_evidence_order`, 21 of the rejections — reduced the task to
+deletion-only compression, a constraint search. That is precisely what the
+reasoning tokens were buying. The expensive model was brute-forcing a puzzle the
+validator invented.
+
+### What changed, and the evidence for it
+
+Owner decided both, 2026-08-03. Rejection counts are across all 226 requests.
+
+| Rule | Fires | Change |
+|---|---:|---|
+| `title_words_out_of_evidence_order` | 21 | **Removed.** Style rule, not safety. |
+| `confront_title_missing_attribution` | 12 | **Replaced** by `title_names_other_speaker_without_attribution`. |
+| `ungrounded_title_words` | 10 | **Kept, stemming added.** `polistätheten` vs `polistäthet` was a false alarm. |
+| `unsupported_numbers`, `missing_qualifiers`, length, caps, chars, full stop, dangling | ≤3 | **Kept unchanged — this is the real safety floor.** |
+
+Attribution is now required only when a title names *another* member of the same
+debate. The roster comes from the debate's own `03_speeches.json`, so it needs no
+name recognition. This is what finally unblocks the owner's "no speaker names"
+preference, which had been reverted last session for being half a change.
+
+### Benchmark on the relaxed validator, same 16 HD10540 clips
+
+| Model | Accepted | After dedupe | Wall clock | Reasoning tokens | Per 1,000 clips |
+|---|---|---|---|---|---|
+| **`deepseek-chat`** | **13/16** | **12/16** | **8.5 s** | **0** | **$0.09** |
+| `deepseek-v4-flash` | 16/16 | 14/16 | 202.7 s | 90,722 of 91,388 out | $1.70 |
+| `deepseek-v4-pro` (strict, previous) | 16/16 | — | ~700 s | 47,667 | $2.70 |
+
+`deepseek-chat` was 7/16 under the old rules and is 13/16 under these — same
+model, same clips. **`deepseek-v4-flash` is also a reasoning model**, 99% of its
+output tokens; the name does not mean cheap. `deepseek-chat` is the only one of
+the three that does not think, and it is **30x cheaper and 24x faster than Pro**
+for titles a human reads as comparable:
+
+- `Polisreformen 2015 blev en massdöd av polisstationer`
+- `Sverige riskerar att hamna i EU:s underskottsförfarande`
+- `Strömmer: S ska förhandla med V och MP efter valet`
+
+Its 3 rejections are the safety floor working: `styret` and `botten` are words
+nobody said, and clip 15 dropped the hedge `prognoser`. Those keep their
+deterministic first-sentence titles, which is correct.
+
+**Decisions made:**
+- Dropping the speaker's own name makes two clips from one debate converge — 1 of
+  16 pairs on `deepseek-chat`, 2 on flash, exactly as predicted last session. The
+  loser keeps its deterministic title rather than retrying, matching every other
+  failure path. If collisions get common, retry-on-duplicate inside the generator
+  is the better fix.
+- `benchmark_titles.py`'s docstring no longer calls acceptance "the number that
+  matters". It now says to read the titles, and records why.
+
+**Observations (not fixed, out of scope):**
+- Role inversion is now undetectable — pinned by
+  `test_role_inversion_is_a_known_accepted_gap`, which asserts the current
+  (permissive) behaviour and explains what to do about it. Flip that assertion,
+  do not delete the test.
+- `deepseek-chat` sometimes still writes the speaker's own surname (clip 7). The
+  prompt asks it not to; it is allowed, just wasteful. Not worth a rule.
+
+**Blocked / needs a decision:**
+- `P0-9` — rotate the Supabase token *and* the DeepSeek key; both are in chat
+  transcripts. Carried over, still open.
+
+**Next agent should know:**
+- `.env` is already correct: `RIKET_TITLE_BACKEND=api`,
+  `RIKET_TITLE_MODEL=deepseek-chat`. **Do not switch to `deepseek-v4-pro`** — the
+  previous handoff recommended it on a 3x-understated cost figure.
+- A full 16-clip benchmark now costs $0.0014 and 8.5 seconds. Run it and *read
+  the output* whenever the prompt or validator changes. Do not chase acceptance.
+- At $0.09 per 1,000 clips the whole ~15,000-clip archive is about $1.40.
+- Backfill is unblocked. `P1-6` is the next open item.

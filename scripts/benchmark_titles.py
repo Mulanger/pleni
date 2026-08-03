@@ -2,21 +2,29 @@
 
     python scripts/benchmark_titles.py --work-dir work/local_test_hd10540 --dokid HD10540
 
-Decides a model choice with evidence rather than opinion. Reports, per backend:
+Reports, per backend:
 
-- **acceptance rate** — how often the model produced a title the deterministic
-  validator would actually publish. This is the number that matters. A model
-  that writes beautiful headlines the fact-checker rejects is worth nothing.
+- **acceptance rate** — how often the model cleared the deterministic validator.
 - **attempts per accepted title** — how much correction it needed.
-- **real token cost**, from the provider's own usage block, not an estimate.
+- **real token cost**, from the provider's own usage block, priced per model.
 
-The baseline to beat is the local `qwen3:8b` run recorded in `PROGRESS.md`:
-**4 of 16 accepted**, 94.8 seconds.
+**Read the titles. Do not optimise the acceptance rate.** It is a safety floor,
+not a quality bar: on 2026-08-03 a ~100-line script that just deletes words from
+a sentence also scored 16/16 here, while producing unreadable Swedish. Two
+configurations can both score 100% and differ enormously in whether a human
+would publish them.
 
-Rejected titles are not a failure of the pipeline — C7 keeps its deterministic
+That mistake is expensive. The August session spent $0.43 over 226 requests
+hill-climbing this number, ending on a reasoning model at 34x the price of a
+flash one, with no measured quality difference — 98% of the output tokens paid
+for were the model thinking, not writing.
+
+Run variance is real: two runs of one config gave 9/16 and 11/16. Differences
+under about 3 clips are noise.
+
+Rejected titles are not a pipeline failure — C7 keeps its deterministic
 first-sentence title when validation fails, which is the correct conservative
-behaviour. A low acceptance rate means paying for a model that mostly changes
-nothing.
+behaviour.
 """
 
 from __future__ import annotations
@@ -37,7 +45,10 @@ from src.contracts import SelectedClip, Source, Speech  # noqa: E402
 from src.errors import ConfigurationError, PipelineError  # noqa: E402
 from src.paths import work_paths  # noqa: E402
 from src.scoring.titles import (  # noqa: E402
+    ModelPrice,
     OpenAICompatibleTitleGenerator,
+    price_for,
+    speaker_surname,
     title_validation_errors,
 )
 
@@ -89,6 +100,12 @@ def main(argv: list[str] | None = None) -> int:
     if not clips:
         raise ConfigurationError(f"No selected clips under {args.work_dir}")
 
+    debate_surnames = frozenset(
+        name
+        for name in (speaker_surname(s.speaker_name) for s in speeches.values())
+        if name
+    )
+
     generator = OpenAICompatibleTitleGenerator(
         base_url=base_url,
         api_key=settings.title_api_key,
@@ -110,7 +127,10 @@ def main(argv: list[str] | None = None) -> int:
         clip_started = time.monotonic()
         try:
             generated = generator.generate(
-                clip=clip, speech=speech, debate_title=source.title or args.dokid
+                clip=clip,
+                speech=speech,
+                debate_title=source.title or args.dokid,
+                debate_surnames=debate_surnames,
             )
         except PipelineError as error:
             return {
@@ -138,6 +158,7 @@ def main(argv: list[str] | None = None) -> int:
                     transcript=clip.transcript,
                     speaker_name=speeches[clip.speech_id].speaker_name,
                     archetype=clip.archetype,
+                    debate_surnames=debate_surnames,
                 )
             ),
         }
@@ -162,10 +183,21 @@ def main(argv: list[str] | None = None) -> int:
     wall = time.monotonic() - started
     accepted = [r for r in results if r["accepted"]]
     usage = generator.usage
+    # Price by model, not by one global setting: a reasoning model costs 3.1x a
+    # flash one, and billing every backend at flash rates understated the
+    # August Pro runs by exactly that factor.
+    price = price_for(
+        model,
+        ModelPrice(
+            settings.title_api_input_per_m,
+            settings.title_api_cached_per_m,
+            settings.title_api_output_per_m,
+        ),
+    )
     cost = usage.cost_usd(
-        input_per_m=settings.title_api_input_per_m,
-        output_per_m=settings.title_api_output_per_m,
-        cached_per_m=settings.title_api_cached_per_m,
+        input_per_m=price.input_per_m,
+        output_per_m=price.output_per_m,
+        cached_per_m=price.cached_per_m,
     )
 
     print("\n" + "=" * 64)

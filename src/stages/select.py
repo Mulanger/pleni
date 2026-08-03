@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -20,6 +21,7 @@ from src.scoring.titles import (
     OllamaTitleGenerator,
     OpenAICompatibleTitleGenerator,
     TitleGenerator,
+    speaker_surname,
 )
 from src.stages._io import read_json_object, read_model, read_model_list, write_json
 
@@ -47,6 +49,18 @@ def select_dokid(
     debate_title = _debate_title(paths.source_json, dokid) if generator is not None else dokid
     logger = stage_logger("C7_select", dokid=dokid)
     speeches = read_model_list(paths.speeches_json, Speech, "C3 speeches artifact")
+    # Titles no longer carry the speaker's own name, so two clips from the same
+    # debate can converge on the same sentence — in the August benchmark, clips
+    # 1 and 3 both became "Beräknas anslagen till polisen öka med 43 procent".
+    # The set spans the whole debate, not one speech.
+    seen_titles: set[str] = set()
+    # The debate's own speech list is an exact roster of the people a title is
+    # likely to name, so the attribution rule needs no name recognition.
+    debate_surnames = frozenset(
+        surname
+        for surname in (speaker_surname(other.speaker_name) for other in speeches)
+        if surname
+    )
     written: list[Path] = []
     for speech in speeches:
         candidates_path = paths.candidates_json(speech.speech_id)
@@ -85,6 +99,8 @@ def select_dokid(
                 debate_title=debate_title,
                 generator=generator,
                 logger=logger,
+                debate_surnames=debate_surnames,
+                seen_titles=seen_titles,
             )
         artifact = paths.selected_json(speech.speech_id)
         write_json(artifact, [clip.model_dump(mode="json") for clip in selected])
@@ -186,7 +202,22 @@ def _generate_titles(
     debate_title: str,
     generator: TitleGenerator,
     logger: structlog.BoundLogger,
+    debate_surnames: frozenset[str] = frozenset(),
+    seen_titles: set[str] | None = None,
 ) -> list[SelectedClip]:
+    claimed = seen_titles if seen_titles is not None else set()
+    claim_lock = threading.Lock()
+
+    def claim(title: str) -> bool:
+        """Reserve `title` for this debate. False if another clip has it."""
+
+        key = " ".join(title.casefold().split())
+        with claim_lock:
+            if key in claimed:
+                return False
+            claimed.add(key)
+            return True
+
     def title_one(clip: SelectedClip) -> SelectedClip:
         """Generate one title, or keep the deterministic fallback."""
 
@@ -195,6 +226,7 @@ def _generate_titles(
                 clip=clip,
                 speech=speech,
                 debate_title=debate_title,
+                debate_surnames=debate_surnames,
             )
         except ExternalServiceError as exc:
             logger.warning(
@@ -202,6 +234,17 @@ def _generate_titles(
                 speech_id=speech.speech_id,
                 clip_id=clip.clip_id,
                 reason=str(exc),
+            )
+            return clip
+        if not claim(generated.title):
+            # Two clips landing on one headline is worse than one plain
+            # headline, so the loser keeps its deterministic title — the same
+            # conservative fallback every other failure takes.
+            logger.warning(
+                "title_duplicate_in_debate",
+                speech_id=speech.speech_id,
+                clip_id=clip.clip_id,
+                title=generated.title,
             )
             return clip
         logger.info(
