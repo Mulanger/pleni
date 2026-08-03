@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     face_min_size_frac: float = Field(default=0.045, gt=0.0, lt=1.0)
     face_track_iou_threshold: float = Field(default=0.18, ge=0.0, le=1.0)
     face_track_max_gap_s: float = Field(default=1.0, gt=0.0)
+    # Track stitching. A speaker who turns their head stops being detected for
+    # longer than `face_track_max_gap_s`, which opens a new track and splits one
+    # person into fragments. These two rejoin them: 4 s covers a normal glance
+    # down at notes, and requiring 0.30 IoU at the seam means a cut to a
+    # different shot is not stitched in, because a new framing moves the box.
+    face_track_merge_gap_s: float = Field(default=4.0, gt=0.0)
+    face_track_merge_iou: float = Field(default=0.30, ge=0.0, le=1.0)
     sign_language_inset_x_frac: float | None = Field(default=None, ge=0.0, le=1.0)
     sign_language_inset_y_frac: float | None = Field(default=None, ge=0.0, le=1.0)
     sign_language_inset_w_frac: float | None = Field(default=None, ge=0.0, le=1.0)

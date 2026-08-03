@@ -1234,3 +1234,99 @@ deterministic first-sentence titles, which is correct.
   the output* whenever the prompt or validator changes. Do not chase acceptance.
 - At $0.09 per 1,000 clips the whole ~15,000-clip archive is about $1.40.
 - Backfill is unblocked. `P1-6` is the next open item.
+
+## C8 — active-speaker selection was a persistence vote — DONE 2026-08-03
+
+**Built:** `merge_fragmented_tracks`, `relative_scores`, `MIN_COVERAGE_FRAC`
+floor and weighted scoring in `src/vision/track.py`; merge step and
+`face_track_merge_*` settings wired through `src/stages/track.py` and
+`src/config.py`.
+**Tests:** 264 passed (was 258); ruff and mypy clean on 74 files.
+**Contracts touched:** none.
+
+### The bug
+
+Reported by the owner: some clips follow a person in the crowd instead of the
+speaker, and some are not centred on anyone.
+
+`_track_score` was:
+
+```python
+persistence * 2.0 + area_frac * 100.0 + center_score * 3.0 + track.mean_score
+```
+
+`persistence` was a **raw frame count**. On a 48-second clip that is ~480 points
+against 2.2 for size and 3.0 for centring, so **~99% of the decision was "which
+face was detected in the most frames"**. The docstring claimed "largest, most
+centered, most persistent"; arithmetically it was persistence alone.
+
+Haar is a frontal-face detector. A speaker who turns to address the chamber or
+looks down at notes stops being detected, and any dropout longer than
+`face_track_max_gap_s` (1.0 s) opens a *new* track — so one speaker arrived as
+several short fragments while a motionless face in the gallery arrived as one
+long one, and won.
+
+### Two failure modes, one root cause
+
+The off-centre complaint is the same bug's consequence. C9 only moves the crop
+where it has face samples; on a track covering 20% of frames it holds the last
+known crop through every gap, so a speaker who moved during a dropout ends up
+off-centre. Measured before the fix: **11 of 16 tracks covered less than half
+the clip**, worst 42 of 215.
+
+### Fix, in three parts
+
+1. **Stitch fragments** (`merge_fragmented_tracks`). Tracks that do not overlap
+   in time, are separated by ≤ 4 s, and still overlap ≥ 0.30 IoU at the seam are
+   rejoined. Requiring real overlap is what stops a cut to another shot being
+   stitched in — a new framing moves the box and IoU collapses.
+2. **Normalise the score.** Every component in `[0, 1]` relative to the best
+   candidate in the same clip: 0.45 area, 0.30 coverage, 0.20 centring, 0.05
+   detector confidence. Size leads because Riksdagen's feed is directed — the
+   mixer frames whoever is speaking large.
+3. **Floor the coverage** (`MIN_COVERAGE_FRAC = 0.15`). **This one is not
+   optional and I found it the hard way.** Weighting size without a floor just
+   swaps one failure for another: Haar fires on torsos and chamber fittings for
+   a frame or two and those false positives are *large* (19–27% of frame width
+   against the podium's steady 11%). A single 27%-wide detection in 1 frame of
+   242 outscored a speaker tracked in 226. Across the five worst clips every
+   genuine podium track sits at ≥19% coverage and every artifact below 11%.
+
+### Result, same 16 HD10540 clips, C8 + C9 re-run
+
+| | Before | After |
+|---|---|---|
+| Plausible podium framing | 14/16 | **16/16** |
+| Mean tracked coverage | 47% | **55%** |
+| Clips gaining coverage | — | 8 (+6 to +82 frames) |
+| Regressions | — | **0** |
+
+The two reported clips both fixed: tracked face width went 6.9% → 11.9% and
+6.2% → 11.7% of frame, i.e. from a distant face to podium framing. Both
+re-rendered and visually confirmed by the owner.
+
+**Decisions made:**
+- Scoring is relative to the other candidates in the clip rather than against a
+  tuned reference size, so nothing needs re-tuning per debate type or framing.
+- `relative_scores` returns positionally, not keyed by `track_id`. Ids are only
+  unique within one `build_face_tracks` call; a dict keyed on them silently
+  collapsed two candidates into one, and a test caught it.
+- The coverage floor falls back to the full candidate set when nothing clears
+  it, so a badly tracked clip degrades to a best guess, never to no-face.
+
+**Observations (not fixed, out of scope):**
+- Haar remains the real ceiling. It cannot see a profile, which is why coverage
+  is 55% and not 90%. A modern detector (YOLOv8-face, SCRFD) is the next
+  meaningful step and the GPU is already there for ASR. TalkNet ASD is the tier
+  above that; `src/vision/asd.py` already has the `ActiveSpeakerBackend` seam.
+- `sign_language_inset_*` all default to `None`, so interpreter faces are not
+  excluded on any debate that has an interpreter inset. Not seen on HD10540.
+
+**Blocked / needs a decision:**
+- `P0-9` — rotate the Supabase token *and* the DeepSeek key. Still open.
+
+**Next agent should know:**
+- C8 over 16 clips is ~2m15s; a single clip re-render is ~17s.
+- `work/hd10540_track_before/` holds the pre-fix tracks for comparison. Delete
+  when no longer useful; `work/` is gitignored.
+- Backfill is unblocked and this was the last thing gating it.

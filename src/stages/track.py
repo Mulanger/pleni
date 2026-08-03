@@ -21,7 +21,7 @@ from src.vision.detect import (
     inset_from_fractions,
     scale_detections_to_media,
 )
-from src.vision.track import build_face_tracks, frame_times
+from src.vision.track import build_face_tracks, frame_times, merge_fragmented_tracks
 
 
 def track_dokid(dokid: str, *, work_dir: Path | str) -> list[Path]:
@@ -68,6 +68,12 @@ def build_track_for_clip(
         detections,
         iou_threshold=settings.face_track_iou_threshold,
         max_gap_s=settings.face_track_max_gap_s,
+    )
+    # Rejoin one speaker's fragments before anything votes on coverage.
+    tracks = merge_fragmented_tracks(
+        tracks,
+        max_gap_s=settings.face_track_merge_gap_s,
+        min_iou=settings.face_track_merge_iou,
     )
     return HeuristicActiveSpeakerBackend().select(
         clip.clip_id,
