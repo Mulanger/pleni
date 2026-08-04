@@ -130,6 +130,31 @@ only mean three terminals to forget about.
 Leave it running. Stop it with Ctrl-C — an interrupted job is reclaimed by the
 lease reaper on the next start.
 
+### If you run bare workers instead, nothing reaps
+
+`run --pool <pool>` does **not** reap expired leases; only `daemon` does. A worker
+that dies mid-job leaves its row in `running`, locked by a PID that no longer
+exists, and no other worker will touch it. Nothing errors and nothing retries —
+the job simply stops existing as far as the queue is concerned.
+
+That is quiet on its own, and loud in its consequences when the stalled job is a
+`render_clip`: the render fan-out has a **join barrier**, so `publish` is never
+enqueued until every sibling clip completes. One orphaned clip silently holds
+back a whole debate.
+
+Seen on the March 2026 backfill: two jobs sat locked by dead PIDs for five and
+six hours, and two debates never published. `status` showed `dead 0` throughout,
+because they were not dead — they were leased.
+
+```bash
+# Who is stuck, and is the lease actually stale?
+python -c "..."   # or check public.jobs where state='running'
+python -m src.orchestrator.cli reap     # requeue expired leases
+```
+
+**If you run bare workers for a long batch, run `reap` on a timer**, or use the
+daemon and let it do the job it exists to do.
+
 **To start it automatically at logon** (run this yourself; it changes a system
 setting):
 
