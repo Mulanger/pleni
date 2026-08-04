@@ -3,6 +3,29 @@ export type FeedMode = "fordig" | "senaste";
 
 export type PartyCode = "S" | "M" | "SD" | "C" | "V" | "KD" | "MP" | "L" | "NONE";
 
+/** Consent purposes, kept separate because `C-4` requires it. */
+export interface ConsentState {
+  personal: boolean;
+  analytics: boolean;
+  email: boolean;
+}
+
+/**
+ * Answers from the onboarding flow. Device-local only until `F1` — see
+ * `onboarding-store.ts`.
+ *
+ * `leaning` is 0 (left) to 100 (right), 50 being centre. It is a self-declared
+ * political opinion, so it is Article 9 special-category data and the most
+ * sensitive field the app holds.
+ */
+export interface OnboardingState {
+  leaning: number;
+  parties: PartyCode[];
+  consent: ConsentState;
+  acceptedTerms: boolean;
+  completedAt: string | null;
+}
+
 export interface PartyProfile {
   abbr: PartyCode;
   name: string;

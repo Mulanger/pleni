@@ -14,6 +14,7 @@ import {
   Search,
   Share2,
   ShieldCheck,
+  Sliders,
   Trash2,
   UserRound,
   Users,
@@ -32,9 +33,19 @@ import {
 } from "@clerk/react";
 import { clerkEnabled } from "./clerk";
 import { initials, PARTIES, partyInk, partyTint, PEOPLE, PERSON_CLIPS, TRENDING } from "./data";
+import { Onboarding } from "./onboarding";
+import { EMPTY_ONBOARDING, readOnboarding, writeOnboarding } from "./onboarding-store";
 import { checkClerkSupabaseLink, loadPublishedClips } from "./supabase";
 import type { ClerkSupabaseLinkStatus } from "./supabase";
-import type { ClipItem, ClipSource, FeedMode, PartyCode, PersonProfile, Tab } from "./types";
+import type {
+  ClipItem,
+  ClipSource,
+  FeedMode,
+  OnboardingState,
+  PartyCode,
+  PersonProfile,
+  Tab
+} from "./types";
 
 type BooleanMap = Record<string, boolean>;
 type NumberMap = Record<string, number>;
@@ -84,9 +95,29 @@ function App() {
     L: false,
     NONE: false
   });
-  // Consent defaults to off. These switches are still in-memory only and do not
-  // yet gate any server-side processing — see docs/RECOMMENDATION_PREREQUISITES.md C-5.
-  const [consent, setConsent] = useState({ personal: false, analytics: false, email: false });
+  // Onboarding answers and consent live together because the flow collects
+  // both. Defaults are off and everything stays on the device until F1 gives it
+  // somewhere lawful to go (C-1, C-2, C-5).
+  const [onboarding, setOnboarding] = useState<OnboardingState>(EMPTY_ONBOARDING);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const consent = onboarding.consent;
+
+  useEffect(() => {
+    const stored = readOnboarding();
+    setOnboarding(stored);
+    // First run only. Skipping counts as answered so it does not nag; Profil
+    // has a row to reopen it.
+    setShowOnboarding(stored.completedAt === null);
+  }, []);
+
+  const saveOnboarding = (next: OnboardingState) => {
+    setOnboarding(next);
+    writeOnboarding(next);
+  };
+
+  const setConsent = (
+    update: (current: OnboardingState["consent"]) => OnboardingState["consent"]
+  ) => saveOnboarding({ ...onboarding, consent: update(onboarding.consent) });
 
   useEffect(() => {
     let mounted = true;
@@ -134,6 +165,20 @@ function App() {
   return (
     <>
       <WideScreenMessage />
+      {showOnboarding && (
+        <Onboarding
+          initial={onboarding}
+          onComplete={(next) => saveOnboarding(next)}
+          onSkip={() => {
+            setShowOnboarding(false);
+            // A skip is an answer. Stamping it stops the flow reappearing on
+            // every load; Profil has a row to reopen it deliberately.
+            if (onboarding.completedAt === null) {
+              saveOnboarding({ ...onboarding, completedAt: new Date().toISOString() });
+            }
+          }}
+        />
+      )}
       <main className="mobile-app" aria-label="Riket TV">
         {visiblePerson ? (
           <PersonScreen
@@ -192,6 +237,8 @@ function App() {
             {tab === "profil" && (
               <ProfileScreen
                 consent={consent}
+                selectedParties={onboarding.parties.length}
+                onEditInterests={() => setShowOnboarding(true)}
                 onToggleConsent={(key) => setConsent((state) => ({ ...state, [key]: !state[key] }))}
               />
             )}
@@ -919,9 +966,13 @@ function SearchScreen({
 
 function ProfileScreen({
   consent,
+  selectedParties,
+  onEditInterests,
   onToggleConsent
 }: {
   consent: { personal: boolean; analytics: boolean; email: boolean };
+  selectedParties: number;
+  onEditInterests: () => void;
   onToggleConsent: (key: keyof typeof consent) => void;
 }) {
   const consentRows = [
@@ -941,6 +992,19 @@ function ProfileScreen({
           <ListRow title="Sparade klipp" chevron />
           <ListRow title="Aviseringar" chevron />
           <ListRow title="Följda ämnen" chevron />
+        </Group>
+        <Group title="Mina intressen">
+          <ListRow
+            title="Redigera mina intressen"
+            subtitle={
+              selectedParties > 0
+                ? `${selectedParties} partier valda · sparas bara på den här enheten`
+                : "Inga partier valda ännu"
+            }
+            icon={<Sliders size={18} />}
+            onClick={onEditInterests}
+            chevron
+          />
         </Group>
         <Group title="Integritet & data">
           {consentRows.map((row) => (
@@ -1244,8 +1308,9 @@ function ListRow({
   chevron?: boolean;
   onClick?: () => void;
 }) {
-  return (
-    <div className={tone === "danger" ? "list-row danger" : "list-row"} onClick={onClick}>
+  const className = tone === "danger" ? "list-row danger" : "list-row";
+  const body = (
+    <>
       {avatar}
       {icon && <span className="row-icon">{icon}</span>}
       {eyebrow && <span className="eyebrow">{eyebrow}</span>}
@@ -1255,8 +1320,21 @@ function ListRow({
       </div>
       {action}
       {chevron && <ChevronRight className="chevron" size={17} />}
-    </div>
+    </>
   );
+
+  // A row that does something must be a button, or it is unreachable by
+  // keyboard and invisible to a screen reader. Rows without a handler stay
+  // divs: the consent rows put a real <button> in `action`, and nesting one
+  // button inside another is invalid HTML.
+  if (onClick) {
+    return (
+      <button type="button" className={`${className} list-row--button`} onClick={onClick}>
+        {body}
+      </button>
+    );
+  }
+  return <div className={className}>{body}</div>;
 }
 
 function Switch({ checked, onChange }: { checked: boolean; onChange: () => void }) {
