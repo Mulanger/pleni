@@ -1434,3 +1434,90 @@ detections are lost to fragmentation. That is the prize for Phase 1.
 - **This machine has no GPU.** `torch` is `2.11.0+cpu`, `cuda.is_available()` is
   False, contradicting `AGENTS.md`. Plan CPU-only.
 - Clips will look jumpier now. That is Haar's real behaviour, not a regression.
+
+## March 2026 backfill — 997 clips live on Bunny + Supabase — DONE 2026-08-04
+
+**Built:** `politician_linkage` metric (`src/observability/metrics.py`,
+`scripts/pipeline_report.py`), worker resilience in `src/orchestrator/cli.py`,
+`docs/adr/011-official-text-timing-over-asr.md`, RUNBOOK sections on the
+watermark and lease reaping.
+**Tests:** 273 passed; ruff and mypy clean on 74 files.
+**Contracts touched:** none.
+
+### Result
+
+| | |
+|---|---|
+| Clips published | **997** |
+| Debates | 48 sources, 47 backfilled |
+| Speeches / politicians | 598 / 129 |
+| Clips missing a URL | 0 |
+| Debates with missing rows | 0 of 47 |
+| Supabase size | **82 MB** of the 500 MB free tier |
+| Bunny | 10.3 GB, ~$0.10/month, upload free |
+
+Wall clock: ~2h40m processing (10 workers), ~35 min publishing. Zero dead jobs,
+`max_attempts: 1` throughout. CDN spot-checks return HTTP 200 with real byte
+counts. **My earlier estimate of 150–250 MB for Supabase was 2-3x too high.**
+
+### ASR has never run (ADR 011)
+
+`transcribe_dokid` selects `transcriber or OfficialTextTranscriber()` and the
+orchestrator passes none, so `AutoSpeechTranscriber` — which would use
+faster-whisper — is never chosen. Found because transcribe finished in
+**1,688 ms for 20.6 minutes of audio**.
+
+Now a recorded decision rather than an accident. The text is Riksdagen's own
+authoritative transcript, better than ASR for a service printing words under a
+politician's face. What is approximate is sub-speech timing: words are spread
+evenly (0.4119 s apart in HD10367), so cut points drift by a word or two. Speech
+windows are real, from C3's VAD at ~0.84 confidence. Keeps a debate at ~9 minutes
+instead of hours on a box with no GPU.
+
+### Three failure modes that were silent, now fixed
+
+1. **A transport timeout killed the worker.** `run_forever` did not catch
+   `ExternalServiceError` from `claim()`, so one curl timeout ended a worker
+   permanently. Fired **19 times** during the run — without the fix, workers
+   would have died 19 times overnight.
+2. **A timeout while recording success discarded finished work.** The fix for (1)
+   was too broad: it wrapped the bookkeeping *after* the stage ran. A clip
+   rendered its MP4 and thumbnail, `complete` timed out, and the row sat
+   `running` behind a 20-minute lease. The render fan-out's join barrier then
+   held back the whole debate. `complete`/`fail`/`skip`/`advance_after` now retry.
+3. **`RIKET_SUPABASE_SECRET_KEY` absent silently downgrades publishing.**
+   `_supabase_publisher_from_settings` falls back to the Management API, which
+   embeds the payload in a SQL string and returns **HTTP 413** on any debate over
+   ~4 MB of metadata — 14 of 47 here. With the key set it uses the REST RPC
+   (JSON body, no size cap). Both paths already existed; only the config was
+   missing. A 13-clip test passed precisely because it was small enough to hide
+   the limit.
+
+**Blocked / needs a decision:**
+- **Ministers who are not sitting MPs have no `intressent_id`.** 6 speeches (1%)
+  are unlinked, all Jessica Rosencrantz, EU-minister, in `HDC120260326fs`.
+  Riksdagen's `anforandelista` omits the id; the Talman in the *same* debate has
+  one, and Strömmer had one because he is also a sitting MP. The id **is**
+  recoverable: `personlista?fnamn=Jessica&enamn=Rosencrantz&rdlstatus=samtliga`
+  returns `0992420223820` — the default query omits non-sitting members. A
+  name-based fallback in C1 would close this, but name matching can misattribute
+  a statement in political content, so it wants its own scoped chunk and a test.
+  Expect this to grow as more ministers appear.
+- `P0-9` — **four** credentials are now in chat transcripts: Supabase access
+  token, DeepSeek key, Bunny storage password, Supabase secret key. Rotate all.
+
+**Next agent should know:**
+- Work dir is `D:/riketvideos` (49 GB for March). **Moving `RIKET_WORK_DIR`
+  orphans the discovery watermark**, which lives inside it — the daemon then
+  treats itself as a first run and walks the 2002 archive. Only
+  `--max-enqueue` (25) contained it. See RUNBOOK.
+- **`run --pool` does not reap expired leases; only `daemon` does.** Two jobs sat
+  locked by dead PIDs for 5-6 hours and two debates never published, with
+  `dead 0` reported throughout.
+- The `gpu` pool has no GPU (`torch 2.11.0+cpu`). It was the throughput
+  bottleneck at 1 worker because `transcribe` and `track` both sit in it; 4
+  workers roughly halved the run.
+- Publishing skips debates already fully in the DB — rebuild the todo list by
+  comparing `10_render/*.mp4` counts against `public.clips`.
+- Beware CRLF on this box: Python's `write_text` emits `\r\n`, and a `\r` in a
+  bash-read dokid produced 27 instant failures whose error message looked normal.
