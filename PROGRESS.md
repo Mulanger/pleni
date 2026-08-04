@@ -1521,3 +1521,96 @@ instead of hours on a box with no GPU.
   comparing `10_render/*.mp4` counts against `public.clips`.
 - Beware CRLF on this box: Python's `write_text` emits `\r\n`, and a `\r` in a
   bash-read dokid produced 27 instant failures whose error message looked normal.
+
+## February 2026 backfill + onboarding UI — DONE 2026-08-04
+
+**Built:** `web/src/onboarding.tsx`, `web/src/onboarding-store.ts`, onboarding
+styles and `ListRow` button semantics in `web/src/App.tsx`; phantom-speaker fix
+in `src/riksdagen/parser.py`.
+**Tests:** 273 passed; ruff and mypy clean; web typecheck and build clean.
+**Contracts touched:** none. `web/src/types.ts` gained `OnboardingState` and
+`ConsentState` (frontend types, not `src/contracts.py`).
+
+### Catalogue after two months
+
+| | |
+|---|---|
+| Clips | **1,762** (997 → 1,762, +765) |
+| Sources / speeches / politicians | 88 / 1,057 / 181 |
+| Clips missing a URL | 0 |
+| Unlinked speeches | 8 (0.76%) |
+| Supabase | **136 MB** of the 500 MB free tier |
+| Dead jobs at finish | 0 |
+
+CDN spot-checks return HTTP 200 with real byte counts. `Q-1` wants ~2,000 clips;
+at 1,762 one more month clears it.
+
+Wall clock ~4h20m for 51 debates (39 clippable, 11 skipped, 1 recovered).
+
+### C1: Riksdagen emits phantom zero-length speakers
+
+`HD10342` dead-lettered the entire debate. Riksdagen returned a duplicate
+speaker with `speechSeconds` 0 at the **same** `startPosition` as the real one:
+
+```
+[5] start=1236 secs=0    next=1236 derived=0
+[6] start=1236 secs=254  next=1490 derived=254
+```
+
+Both duration fallbacks fail on that shape, so the parser raised and took ~22
+clips with it. Zero-length entries are now skipped; a duration that cannot be
+derived at all still raises, so real feed drift stays loud. Retried after the
+fix and HD10342 published 22 clips — the count went 1,740 → 1,762.
+
+**Workers cache the parser per process**, so the fix did not reach the running
+backfill. Restarting workers before the retry was necessary.
+
+### The cpu pool is the bottleneck, not io or gpu
+
+Mid-run, 74 jobs were queued on `cpu` with 3 workers while 4 `gpu` workers held
+2 jobs and 3 `io` workers had none. `render_clip` is cpu-only and by far the most
+numerous job in the graph. Doubling cpu to 6 roughly doubled throughput.
+
+**Start the next month at 2 io / 6 cpu / 2 gpu** rather than the 3/3/4 used here.
+
+The 10-minute `reap` loop ran throughout and there was no repeat of the stalled
+leases that cost two debates in March.
+
+### Onboarding (frontend)
+
+Three-step flow from the supplied design — political leaning, party selection,
+terms and consent — shown once and reopenable from a new row in Profil.
+**Device-local only**; `onboarding-store.ts` is deliberately the sole writer so
+"is any of this transmitted?" is answerable from one file. `C-5` permits exactly
+this; `C-1`, `C-2` and the F0 documents are still open GATEs.
+
+Three departures from the design, all required:
+- **`C-4`**: the single "godkänner villkoren" checkbox became accepting terms
+  plus three independent switches, all defaulting off.
+- **`A-9`**: the design gated the app behind accepting terms. Consent as the
+  price of entry is not freely given, so onboarding is skippable.
+- **No confirmation dialog on decline.** EDPB Guidelines 03/2022 name
+  "questioning a refusal to grant consent" as continuous prompting. The
+  consequence is stated once, above both buttons, before the choice.
+
+"Slå på allt" and "Fortsätt utan" are identical 239x48 boxes — the accept path
+must not be easier to reach than the refusal. Personalisation grants the
+personalised feed **on its own**; requiring all three would breach `C-4`
+granularity and Article 7(4).
+
+**Blocked / needs a decision:**
+- **Non-sitting ministers still have no `intressent_id`.** Now 8 speeches across
+  two people: Jessica Rosencrantz (EU-minister, 6) and Daniel Vencu Velasquez
+  Castro (2). Recoverable via `personlista?...&rdlstatus=samtliga`, which the
+  default query omits. Wants its own chunk — name matching can misattribute a
+  statement in political content.
+- `P0-9` — **five** credentials are now in chat transcripts: Supabase access
+  token, DeepSeek key, Bunny storage password, Supabase secret key, and the
+  rotated Bunny password. Rotate all.
+
+**Next agent should know:**
+- Disk on `D:/riketvideos` is ~100 GB for two months. Nothing prunes masters
+  (~550 MB each); the full archive would be ~550 GB.
+- A third month puts Supabase near 190 MB, still inside the free tier.
+- The onboarding flow writes nothing to the server. Wiring it to
+  `private.consent_records` is F1 work and must not happen before F0.
