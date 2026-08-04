@@ -1751,7 +1751,10 @@ a {
   gap: 8px;
   padding: 13px 18px;
   border-radius: 999px;
-  border: none;
+  /* Transparent rather than none: the ghost variant has a real border, and the
+     two must compute to identical boxes. Equal prominence is the requirement,
+     not an aesthetic preference. */
+  border: 1px solid transparent;
   background: var(--ink);
   color: #fff;
   font-size: 15px;
@@ -1809,3 +1812,27 @@ a {
   outline: 2px solid var(--ink);
   outline-offset: -2px;
 }
+
+/* Consent choice: two buttons of equal weight. Regulators have been firm since
+   the cookie-banner enforcement that the accept path must not be easier to
+   reach than the refusal, so these share a size and differ only in fill. */
+.consent-choice { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.consent-choice .onboarding-primary { width: 100%; }
+.onboarding-primary--ghost {
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.onboarding-primary--ghost:disabled { background: #fff; color: var(--muted-2); }
+
+.consent-consequence {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.consent-consequence strong { color: var(--ink); }

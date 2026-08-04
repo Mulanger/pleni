@@ -70,8 +70,28 @@ export function Onboarding({
       current.includes(party) ? current.filter((p) => p !== party) : [...current, party]
     );
 
-  const finish = () => {
-    onComplete({ leaning, parties, consent, acceptedTerms, completedAt: new Date().toISOString() });
+  const anyConsent = consent.personal || consent.analytics || consent.email;
+
+  /**
+   * `granted` is passed explicitly so "Slå på allt" is a single affirmative act
+   * rather than a pre-set state. The distinction is the whole legal test: a
+   * switch already on when the screen loads is not consent, because the user
+   * did nothing; a button they press that turns three switches on is.
+   *
+   * Nothing here is bundled. Personalisation is granted on its own and gives
+   * the personalised feed on its own — `C-4` requires the four purposes to be
+   * independent, and Article 7(4) treats consent to unrelated processing as a
+   * condition of service as a strong sign it was not freely given.
+   */
+  const finish = (granted: OnboardingState["consent"]) => {
+    onComplete({
+      leaning,
+      parties,
+      consent: granted,
+      acceptedTerms,
+      completedAt: new Date().toISOString()
+    });
+    setConsent(granted);
     setDone(true);
   };
 
@@ -84,9 +104,9 @@ export function Onboarding({
           </div>
           <h2>Välkommen till Kammaren</h2>
           <p>
-            {parties.length > 0
-              ? "Dina val sparas bara på den här enheten tills du väljer att slå på personalisering."
-              : "Du kan när som helst välja partier under Profil."}
+            {consent.personal
+              ? "Ditt flöde anpassas efter dina val. Du kan stänga av det när som helst under Profil."
+              : "Du ser Senaste — alla klipp, senaste först. Slå på personalisering under Profil när du vill."}
           </p>
           <button className="onboarding-primary" onClick={onSkip}>
             Börja titta
@@ -222,6 +242,18 @@ export function Onboarding({
                 />
               </label>
 
+              {/* The consequence is stated here, beside both choices, rather
+                  than in a dialog after someone declines. EDPB Guidelines
+                  03/2022 name "questioning a refusal to grant consent" as a
+                  deceptive pattern — continuous prompting — because a user may
+                  simply give in to the second ask. Saying it once, up front and
+                  neutrally, is the informed half of informed consent; saying it
+                  again afterwards is pressure. */}
+              <p className="consent-consequence">
+                Personaliserat flöde kräver att du slår på personalisering. Utan den ser du{" "}
+                <strong>Senaste</strong> — alla klipp, senaste först.
+              </p>
+
               <div className="consent-list">
                 {CONSENT_PURPOSES.map((purpose) => (
                   <label key={purpose.key} className="consent-row">
@@ -247,8 +279,8 @@ export function Onboarding({
               </div>
 
               <p className="onboarding-fineprint">
-                Du kan säga nej till allt och ändå använda Senaste. Inget skickas till våra
-                servrar än.
+                Personalisering fungerar på egen hand — analys och e-post är frivilliga och
+                påverkar inte ditt flöde. Inget skickas till våra servrar än.
               </p>
             </div>
           )}
@@ -273,14 +305,28 @@ export function Onboarding({
                 Nästa steg <ArrowRight size={16} />
               </button>
             ) : (
-              <button
-                type="button"
-                className="onboarding-primary"
-                disabled={!acceptedTerms}
-                onClick={finish}
-              >
-                Spara och börja
-              </button>
+              // Two buttons of equal weight. Regulators have been consistent
+              // since the cookie-banner enforcement that "accept all" must not
+              // be easier to reach than the refusal, so these share a class and
+              // differ only in fill.
+              <div className="consent-choice">
+                <button
+                  type="button"
+                  className="onboarding-primary"
+                  disabled={!acceptedTerms}
+                  onClick={() => finish({ personal: true, analytics: true, email: true })}
+                >
+                  Slå på allt
+                </button>
+                <button
+                  type="button"
+                  className="onboarding-primary onboarding-primary--ghost"
+                  disabled={!acceptedTerms}
+                  onClick={() => finish(consent)}
+                >
+                  {anyConsent ? "Spara mina val" : "Fortsätt utan"}
+                </button>
+              </div>
             )}
           </div>
 
