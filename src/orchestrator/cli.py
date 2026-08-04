@@ -15,9 +15,11 @@ from __future__ import annotations
 
 import argparse
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import TypeVar
 
 from src.config import Settings, get_settings
 from src.errors import (
@@ -58,6 +60,11 @@ IDLE_POLL_S = 5.0
 #: wasted requests rather than thousands, short enough that a 64-debate
 #: backfill resumes on its own within a minute of the API coming back.
 MAX_POLL_BACKOFF_S = 60.0
+#: How hard to try to record a finished job before falling back to the lease
+#: reaper. The work is already done at that point, so this is worth retrying.
+PERSIST_ATTEMPTS = 6
+
+_T = TypeVar("_T")
 
 
 @dataclass
@@ -87,6 +94,38 @@ class Worker:
         self.work_dir = work_dir
         self.logger = stage_logger("C12_worker", pool=pool, worker=queue.worker_id)
 
+    def _persist(self, what: str, action: Callable[[], _T]) -> _T:
+        """Record a job outcome, retrying transport failures.
+
+        The stage has already run by the time this is called, so giving up here
+        throws away completed work: the row stays `running` behind a lease
+        nobody will reclaim for twenty minutes, and because the render fan-out
+        has a join barrier, one such row silently holds back a whole debate.
+
+        Seen on the March 2026 backfill — a clip rendered its MP4 and thumbnail
+        successfully, then the `complete` call timed out and the job sat stuck.
+        Nineteen transport timeouts over ~1,500 jobs is a rate that would orphan
+        roughly 190 jobs across the full archive, so this retries hard before
+        letting the lease reaper be the safety net.
+        """
+
+        delay = 1.0
+        for attempt in range(1, PERSIST_ATTEMPTS + 1):
+            try:
+                return action()
+            except ExternalServiceError as error:
+                if attempt == PERSIST_ATTEMPTS:
+                    raise
+                self.logger.warning(
+                    "job_outcome_persist_retry",
+                    what=what,
+                    attempt=attempt,
+                    error=str(error)[:160],
+                )
+                time.sleep(delay)
+                delay = min(delay * 2, MAX_POLL_BACKOFF_S)
+        raise AssertionError("unreachable")
+
     def run_once(self) -> WorkerResult:
         """Claim and run at most one job."""
 
@@ -110,7 +149,10 @@ class Worker:
             self._execute(job)
         except NotClippableError as error:
             # Nothing to do, and no amount of retrying will change that.
-            self.queue.skip(job, str(error))
+            # Bind the message now: `error` is unbound once the block exits, and
+            # the lambda outlives it.
+            reason = str(error)
+            self._persist("skip", lambda: self.queue.skip(job, reason))
             result.outcome = "skipped"
             self.logger.info(
                 "job_skipped",
@@ -123,7 +165,8 @@ class Worker:
             return result
         except PipelineError as error:
             # Expected pipeline failures: retryable, and the message is useful.
-            result.outcome = self.queue.fail(job, f"{type(error).__name__}: {error}")
+            reason = f"{type(error).__name__}: {error}"
+            result.outcome = self._persist("fail", lambda: self.queue.fail(job, reason))
             result.error = str(error)
             self.logger.warning(
                 "job_failed",
@@ -140,7 +183,8 @@ class Worker:
             # Unexpected: still record it rather than losing the job to a
             # crashed process. The lease would eventually reap it, but an hour
             # later and without the traceback.
-            result.outcome = self.queue.fail(job, f"{type(error).__name__}: {error}")
+            reason = f"{type(error).__name__}: {error}"
+            result.outcome = self._persist("fail", lambda: self.queue.fail(job, reason))
             result.error = str(error)
             self.logger.error(
                 "job_crashed",
@@ -153,19 +197,22 @@ class Worker:
             )
             return result
 
-        self.queue.complete(job)
+        self._persist("complete", lambda: self.queue.complete(job))
         result.outcome = "complete"
         # Complete first, then decide what is next: the join barrier counts this
         # job as done, so the last sibling through sees zero outstanding.
-        result.successor = advance_after(
-            self.queue,
-            self.queue,
-            kind=job.kind,
-            entity_id=job.entity_id,
-            job_id=job.id,
-            parent_id=job.parent_id,
-            payload=job.payload,
-            work_dir=self.work_dir,
+        result.successor = self._persist(
+            "advance",
+            lambda: advance_after(
+                self.queue,
+                self.queue,
+                kind=job.kind,
+                entity_id=job.entity_id,
+                job_id=job.id,
+                parent_id=job.parent_id,
+                payload=job.payload,
+                work_dir=self.work_dir,
+            ),
         )
         self.logger.info(
             "job_complete",

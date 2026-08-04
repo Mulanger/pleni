@@ -611,3 +611,38 @@ def test_a_transient_queue_poll_failure_does_not_kill_the_worker(
         worker.run_forever()
 
     assert calls["n"] > 3, "the worker kept polling after the transport failures"
+
+
+def test_a_timeout_while_recording_success_does_not_lose_the_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The stage already ran. Giving up here throws away completed work.
+
+    On the March 2026 backfill a clip rendered its MP4 and thumbnail, then the
+    `complete` call timed out. The row stayed `running` behind a 20-minute
+    lease, and because the render fan-out has a join barrier, that one clip held
+    back its whole debate with no error anywhere.
+    """
+
+    table = FakeJobsTable()
+    recorder = StageRecorder()
+    enqueue_debate(JobQueue(table, worker_id="seed"), DOKID)
+    worker = _worker(table, recorder, pool="io")
+
+    real_complete = worker.queue.complete
+    calls = {"n": 0}
+
+    def flaky_complete(job: Any) -> None:
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise ExternalServiceError("curl: (28) Operation timed out")
+        real_complete(job)
+
+    monkeypatch.setattr(worker.queue, "complete", flaky_complete)
+    monkeypatch.setattr("src.orchestrator.cli.time.sleep", lambda _s: None)
+
+    result = worker.run_once()
+
+    assert result.outcome == "complete", "the retry recorded the finished job"
+    assert calls["n"] == 3, "it retried rather than abandoning completed work"
+    assert not [r for r in table.rows if r["state"] == "running"], "no orphaned lease"
