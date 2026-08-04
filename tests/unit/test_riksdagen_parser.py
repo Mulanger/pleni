@@ -160,6 +160,53 @@ def test_parse_rejects_unusable_duration() -> None:
         parse_video_response(payload)
 
 
+def test_parse_drops_a_phantom_zero_length_speaker() -> None:
+    """Riksdagen duplicates a speaker at the same start with speechSeconds 0.
+
+    HD10342 (2026-02) carried one at 1236 s, alongside the genuine
+    254-second speech beginning at the same instant. The derived duration is
+    then `1236 - 1236 = 0`, which used to fail the whole debate — roughly 21
+    clips lost to a duplicate row. A zero-length speech is not a speech, so it
+    is dropped and the real one is kept.
+    """
+
+    payload = {
+        "pageProps": {
+            "contentApiData": {
+                "documentId": "HD10342",
+                "title": "T",
+                "date": "2026-02-01",
+                "speakers": [
+                    {
+                        "speaker": "A",
+                        "startPosition": 978,
+                        "speechSeconds": 258,
+                        "speechNumber": 1,
+                    },
+                    # The phantom: same start as the next entry, zero length.
+                    {
+                        "speaker": "B",
+                        "startPosition": 1236,
+                        "speechSeconds": 0,
+                        "speechNumber": 2,
+                    },
+                    {
+                        "speaker": "B",
+                        "startPosition": 1236,
+                        "speechSeconds": 254,
+                        "speechNumber": 3,
+                    },
+                ],
+            }
+        }
+    }
+
+    result = parse_video_response(payload)
+
+    assert [s.start_s for s in result.speaker_entries] == [978.0, 1236.0]
+    assert [s.duration_s for s in result.speaker_entries] == [258.0, 254.0]
+
+
 def test_parse_anforandelista_response() -> None:
     payload = {
         "anforandelista": {

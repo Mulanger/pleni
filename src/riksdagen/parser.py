@@ -279,7 +279,19 @@ def _parse_speaker_entries(
             duration = starts[index + 1] - start_s
         if duration is None and duration_s is not None:
             duration = duration_s - start_s
-        if duration is None or duration <= 0:
+
+        # Riksdagen sometimes emits a phantom speaker: `speechSeconds` of 0 at
+        # the *same* `startPosition` as the following real entry, so the derived
+        # duration is also 0. HD10342 (2026-02) had one at 1236 s, duplicating
+        # the genuine 254-second speech that starts there.
+        #
+        # A zero-length speech is not a speech, and it is the only thing that
+        # can produce this shape. Dropping it costs nothing; raising costs the
+        # whole debate — about 21 clips — over a duplicate row. Anything else
+        # unparseable still raises, so real drift in the feed stays loud.
+        if duration is not None and duration <= 0:
+            continue
+        if duration is None:
             raise RiksdagenParseError("speaker duration was missing and could not be derived")
 
         entries.append(
