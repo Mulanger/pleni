@@ -55,8 +55,14 @@ Last updated: 2026-08-02.
   tick-based, and every job is idempotent and resumable. Start everything with
   `python -m src.orchestrator.cli daemon`. See `docs/RUNBOOK.md`.
 
-- Git is initialized. Remote: `https://github.com/Mulanger/riketTV.git`. Main branch: `main`.
-- Public web app: `https://rikettv.nbg1-3.instapods.app/`.
+- **The project is called Pleni.** "Riket" / "Riket TV" is the old name. It survives in
+  infrastructure identifiers that are deliberately *not* renamed — the Bunny zone
+  `riketnlooigm`, the InstaPods pod `rikettv`, the `RIKET_` env prefix and the
+  `riket.*` localStorage keys. See `docs/RENAME_TO_PLENI.md` for why each one stays.
+- Git is initialized. Remote: `https://github.com/Mulanger/pleni.git`. Main branch: `main`.
+- Public web app: `https://pleni.se/` (also `https://www.pleni.se/`). The pod hostname
+  `https://rikettv.nbg1-3.instapods.app/` still works and is the DNS target, but it is no
+  longer the address to give anyone.
 - InstaPods pod: `rikettv`, static runtime, auto-deploys from `origin/main`.
 - Latest known deployed frontend polish commit: `0d67e66` (`frontend: polish mobile player controls`).
 - The React app lives in `web/`, but the InstaPods Git deploy currently runs from the repo root. Its working settings are:
