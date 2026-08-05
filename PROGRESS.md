@@ -1614,3 +1614,301 @@ granularity and Article 7(4).
 - A third month puts Supabase near 190 MB, still inside the free tier.
 - The onboarding flow writes nothing to the server. Wiring it to
   `private.consent_records` is F1 work and must not happen before F0.
+
+## Q2 — Stable politician identity in the feed DTO — DONE 2026-08-04
+
+**Built:** `politician_id` + embedded `politicians` row in `web/src/supabase.ts`;
+`politicianId`/`politicianName`/`politicianRole` on `ClipItem` in
+`web/src/types.ts`; identity, follow keying and profile derivation rewritten in
+`web/src/App.tsx`; sample-clip ids and dead-data notices in `web/src/data.ts`;
+Q2 chunk entry in `docs/BUILD_PLAN.md`.
+**Tests:** `python tasks.py test lint typecheck` green — **274 passed**, 67
+deselected, 1 pre-existing `audioop` warning; ruff clean; mypy strict clean on
+74 files. No Python file was touched, so that count is unchanged by this chunk.
+`tsc --noEmit` green; `vite build` green (418.27 kB, 121.00 kB gzipped — +40
+bytes).
+**Contracts touched:** none. `ClipItem` is a frontend DTO in `web/src/types.ts`,
+not `src/contracts.py`.
+
+### The bug was already live, not a future risk
+
+`Q-2` describes a name slug that "breaks the moment a title changes". Measured
+against the live catalogue first, it had already broken. `personForClip()`
+stripped `(…)` and four hardcoded title prefixes —
+`Justitieministern|Statsministern|Ministern|Ledamoten`, exactly the set present
+in the 16-clip HD10540 batch it was written against — then slugified the rest.
+Every other ministerial title fell through:
+
+| | |
+|---|---|
+| Real politicians with clips | 165 |
+| Distinct identities the UI rendered | **171** |
+| Politicians split across two identities | **5** |
+| Clips affected | **380, 21.6% of the catalogue** |
+
+The five were the five most-clipped ministers — Andreas Carlson (151 clips),
+Anna Tenje (82), Benjamin Dousa (55), Elisabet Lann (49), Erik Slottner (43) —
+because a minister is precisely the person whose display name carries a title.
+The bug was concentrated on the highest-volume speakers, which is the worst
+place for it and the reason it stayed invisible: each half looked like a
+plausible person.
+
+### Why no migration was needed
+
+`politicians.intressent_id` is `unique` and is the `on conflict` target of the
+C11 upsert, so `politicians.id` is already stable across a title change — the
+row's `name` and `role` update in place and the uuid does not move.
+`politicians_public_read` is `using (true)` and migration 004 kept `select` for
+`anon`, so the embed works on the publishable key. Verified from outside with
+the browser's own key: `HTTP 200`, 200 rows, an embedded politician on every one.
+
+### Verified in the browser, not asserted
+
+Dev server at 375x812 against the live catalogue:
+
+| Check | Result |
+|---|---|
+| Identities in a 60-clip page | 23, **all uuids**, zero slug fallbacks |
+| Follow one Anna Tenje clip | all **9** of her clips flip to `Följer` |
+| Effect on the other 51 clips | **none** |
+| Unlinked speaker (forced through the real path) | follow + profile disabled, `aria-pressed` absent, title explains why |
+| Unlinked clip content | title, debate date and source link all still render |
+
+`data-politician-id` is now on each feed article, mirroring `data-clip-id`, so
+the identity a follow keys on is checkable from outside without reading React
+state. That is what made the table above measurable.
+
+**Decisions made:**
+- **An unlinked speaker is not followable.** 10 clips (0.57%), 2 people —
+  ministers who are not sitting MPs, whom Riksdagen's `anforandelista` omits.
+  They get `politicianId: null` and inert controls, not a name-derived fallback.
+  A name-keyed follow would silently detach the day the `intressent_id` is
+  recovered, and the viewer's follow list would rot with no symptom. Refusing a
+  follow we cannot keep is the honest failure.
+- `aria-pressed` is **absent** rather than `"false"` on a disabled follow.
+  `false` would tell a screen reader this is a toggle that happens to be off.
+- The politician row wins over `speeches.party` for party, because the row is
+  the person's current affiliation while the speech column is what Riksdagen
+  printed that day.
+- `slugify()` was **deleted**, not left unused. A dead identity-slug helper in
+  the file is an invitation for the next session to reach for it. `cleanName()`
+  survives for display and now carries a docstring saying it must never key
+  anything.
+- Sample clips carry `demo-politician-…` ids rather than the real uuids those
+  speakers have, so a demo row can never be mistaken for a catalogue row and a
+  live uuid cannot rot inside committed demo data.
+
+**Consequence worth reviewing: the profile screen lost three sections.**
+Not a drive-by — replacing the identity source is what made them unbackable:
+
+- **"Följare 16 800"** came from the hardcoded demo `PEOPLE` list, which
+  `personForClip()` matched real clips against *by name*. A genuine Strömmer
+  clip rendered a demo profile's invented follower count as fact. Nothing counts
+  followers, so the stat is gone rather than zeroed (FE-2).
+- **The clip grid** was `PERSON_CLIPS`: six hardcoded rows with invented view
+  counts ("48 t"), rendered on *every* politician's page regardless of who they
+  were.
+- **"Om" and "Utskott"** had no data source; `bio` was being filled with a
+  random clip transcript.
+
+What remains is counted: `Klipp i flödet` and `Anföranden i flödet` — 9 and 3
+for Anna Tenje, matching the DOM exactly. Small numbers, but counted rather than
+invented, which is the property that matters on political content. The honest
+replacement for the clip grid is that person's real clips, which needs a
+per-politician query the app does not have.
+
+**Observations (not fixed, out of scope):**
+- `PEOPLE` and `PERSON_CLIPS` in `web/src/data.ts` are now **dead** — nothing
+  imports them. Both carry fabricated figures. Left in place with a docstring
+  explaining why, because deleting demo data is a product call, not a Q-2 one.
+- `PARTIES[].clips` in `data.ts` is still fabricated and still rendered
+  (`S: 1240`, `M: 1108`; real is `S: 600`, `M: 442`). Same FE-2 family, and it
+  is live on the Följer screen.
+- `cleanName()` still leaves most ministerial titles in the *displayed* name —
+  "Äldre- och socialförsäkringsministern Anna Tenje" is what the overlay shows.
+  Cosmetic now that identity does not depend on it. Fixing it properly means
+  taking a clean name from Riksdagen rather than regexing the display string.
+- `docs/BUILD_PLAN.md` F1 scope named `migrations/004_private_schema` and
+  `005_consent_ledger`. **Both numbers are taken and applied**
+  (`004_revoke_default_table_grants`, `005_fix_auth_probe_role_columns`) and the
+  tree is at `008`. Corrected to `009`/`010` in place with a note — reusing an
+  applied number would have failed the `schema_migrations` checksum on F1's
+  first run.
+- `docs/RECOMMENDATION_PREREQUISITES.md` §1 is badly stale: it still says
+  "16 published clips, one debate". Live is 1,762 clips / 88 debates / 165
+  politicians with clips. Several items marked open there are in fact done
+  (`P1-6`; `N-1` is substantively covered by ADR 005). Only the `Q-2` line was
+  updated this session.
+
+**Blocked / needs a decision:**
+- Whether the profile screen stays sparse or gets a real per-politician clip
+  query. Product call.
+- `P0-9` — **five** credentials remain in chat transcripts: Supabase access
+  token, Supabase secret key, DeepSeek key, Bunny storage password and the
+  rotated Bunny password. Carried since 2026-08-02, still open, still the only
+  live risk in the prerequisite list.
+
+**Next agent should know:**
+- **F1 must key every private table on `clip.politicianId` / `politicians.id`**,
+  never on a name. That was the whole point of doing this before F1.
+- The measurement harness is worth re-running after any feed change:
+  `[...document.querySelectorAll('article.feed-item')]` grouped by
+  `data-politician-id`, asserting every value is a uuid. A regression here is
+  silent — it surfaces as a follow that quietly stops working.
+- `web/` has **no JS test runner**. The verification above was done by driving
+  the real dev server, because there is nowhere to put a unit test. If F1 adds
+  Deno targets per `O-4`, a frontend runner is worth adding at the same time.
+
+## UI1 — Navigation tabs on real data — DONE 2026-08-04
+
+**Built:** `web/src/library-store.ts` (new); politician search, per-politician
+and by-id clip reads in `web/src/supabase.ts`; `Politician` and `LibraryState`
+in `web/src/types.ts`; Sök, Följer, Profil, `PersonScreen` and a scoped
+`CollectionScreen` in `web/src/App.tsx`; grid/collection/empty/placeholder
+surfaces in `web/src/styles.css`; UI1 chunk entry in `docs/BUILD_PLAN.md`.
+**Tests:** `python tasks.py test lint typecheck` green — **274 passed**, 67
+deselected; ruff clean; mypy strict clean on 74 files. No Python touched.
+`tsc --noEmit` green; `vite build` green (425.85 kB, 122.81 kB gzipped, +7.6 kB
+raw over Q2).
+**Contracts touched:** none. `Politician` and `LibraryState` are frontend DTOs.
+
+### What was actually wrong
+
+Sök, Följer and the person page were all rendered from
+`mergePeopleFromClips(clips)` — the *loaded feed*. That is 60 clips containing
+**23 people, out of 165 with published clips.** So:
+
+- searching for almost anyone returned nothing. Verified before the change:
+  "strömmer" → 0 results, though he has 65 published clips;
+- a person you followed last week vanished from Följer as soon as they left the
+  recent feed;
+- the person page showed six hardcoded demo tiles with invented view counts.
+
+Everything now reads `public.politicians` and `public.clips` directly. Every
+query runs on the publishable key under existing RLS — **no migration, no new
+grant.** All six were verified against the live project before any UI was
+written.
+
+### Verified in the browser at 375x812, against the live catalogue
+
+| Check | Result |
+|---|---|
+| Search "strömmer" (not in the feed) | 1 träff → opens his page |
+| His page | **65 Klipp** — matches the DB exactly — 60 tiles with thumbnails |
+| Search "busch" → her page | **40 Klipp** — matches the DB exactly |
+| Tap tile 5 in the grid | scoped feed opens **on that exact clip** |
+| Follow, then reload | survives; Följer resolves him from the stored uuid |
+| Save 3 clips, then reload | survives; archive opens in newest-saved order (c03, c02, c01) |
+| Profil | "3 klipp · sparas bara på den här enheten", "1 personer" |
+| Console errors | **0** |
+
+### Decisions made
+
+- **Device-local, single writer.** `library-store.ts` is the only module that
+  writes follows, saves and likes, so "does any of this leave the device?" is
+  answerable from one file. It does not. `C-9` wants these server-side; that
+  needs the private schema, the consent ledger and the F0 documents, all open
+  GATEs. A list of politicians someone follows reveals political opinion just
+  as the onboarding leaning slider does — it is Article 9 data and it is
+  treated the same way. When F1 lands the ledger becomes the source of truth
+  and this store becomes its cache.
+- **One player, not two.** A scoped feed — a politician's clips or the saved
+  archive — renders through the existing `FeedScreen` with a different header.
+  Everything the feed has earned (FE-4 dwell activation, FE-3 explicit loop,
+  FE-5 blocked-vs-paused) applies for free and cannot drift out of sync.
+- **The exact clip total comes from `Content-Range`,** not from counting the
+  page. `Prefer: count=exact` with a one-row window makes the total independent
+  of how many rows were fetched — hence "65 Klipp / 60 Visas här" rather than a
+  single ambiguous 60. A missing header yields `null`, which renders as absent;
+  "we could not count" must not display as `0`.
+- **The person page orders by `published_at` but the grid labels `debate_date`,**
+  and every tile shows that date (`Q-8`).
+- **Search is debounced 220 ms and aborts in flight.** Eight requests for a
+  surname can return out of order; the same stale-response rule `FE-7` states
+  for the feed.
+- Library lists are **capped** on read (500 follows, 500 saves, 2000 likes).
+  Not tidiness: the saved list becomes an `id=in.(…)` query string, and an
+  unbounded array from hand-edited `localStorage` would build a URL the gateway
+  rejects — breaking the whole archive rather than one row.
+
+### Two bugs found while verifying
+
+1. **Nested `<button>` inside `<button>`.** `ListRow` renders as a button when
+   given `onClick`, and Följer also passes a button in `action`. React logged
+   "cannot contain a nested button" and only the outer control was
+   keyboard-reachable. The existing comment in `ListRow` had anticipated
+   exactly this and the new screen walked into it anyway. Fixed structurally: a
+   row with *both* now makes only the lead half a button and leaves the action
+   as its sibling. Verified `document.querySelectorAll('button button').length
+   === 0` and that tapping "Följer" unfollows without opening the profile.
+2. **Avatar initials read "JG" for Gunnar Strömmer** — `Avatar` was given the
+   raw `politicians.name`, so it initialled "Justitieministern Gunnar". Now
+   given the cleaned name.
+
+### `cleanName()` improved — measured against all 23 titled names
+
+Q2 left this as a cosmetic observation; Sök and Följer made it prominent
+("ÄO" as initials for Anna Tenje). Surveyed the real data rather than guessing:
+23 of 181 politician rows carry a title.
+
+The rule is `/^.*ministern\s+/i` — **greedy and deliberately without `\b`**:
+
+- greedy, so a compound portfolio collapses in one step. "Gymnasie-, högskole-
+  och forskningsministern Lotta Edholm" ends its title at the *last* segment; a
+  lazy match leaves "och forskningsministern".
+- no `\b`, because "Finansmarknadsministern" has no word boundary before
+  "ministern" — `\bministern` matches neither it nor most compounds.
+- **definite form only**, so "Minister för civilt försvar Carl-Oskar Bohlin"
+  is left whole rather than mangled into "för civilt försvar Carl-Oskar
+  Bohlin".
+
+Result: 19 of 23 resolve to a clean personal name, including
+"Arbetsmarknadsminister och vikarierande klimat- och miljöministern Johan
+Britz" → "Johan Britz". The four unchanged are the indefinite-form minister and
+the three `TALMANNEN` chair rows, all of which read correctly as they are.
+
+Still display-only. It must never key anything durable — that is
+`clip.politicianId`.
+
+### Demo data kept, at the owner's request
+
+`TRENDING` and the recent-search chips stay in Sök as a reminder of what to
+build. Both are now **labelled** — an "exempel" tag on the chips and
+"Exempeldata — popularitet mäts inte ännu" above the trending list. The chips
+are not the viewer's search history and the trending figures are invented;
+a label is what separates a mockup from a claim, and this is political content.
+
+### Observations (not fixed, out of scope)
+
+- `PARTIES[].clips` in `data.ts` is still fabricated and still rendered
+  (`S: 1240` against a real 600). Same FE-2 family. It no longer appears in
+  Följer, but it is still live elsewhere.
+- The person page loads at most 60 of a politician's clips with no pagination —
+  Ebba Busch shows 40 of 40, Strömmer 60 of 65. `FE-9` (cursor pagination that
+  appends without resetting) is the real fix and is F2/F4 work.
+- Search matches `politicians.name` only. Searching a party name or a topic
+  finds nothing, and the party chips are the only way to browse by party.
+- `TALMANNEN`, `ANDRE VICE TALMANNEN` and `TREDJE VICE TALMANNEN` have their own
+  `politicians` rows and 20 clips between them. They are the chair, not people
+  to follow. Nothing hides them from search.
+- The "Aviseringar" and "Följda ämnen" rows are gone from Profil; "Ladda ner
+  mina data", "Samtycken & cookies" and "Radera konto" are still placeholders
+  with no handler (`C-10` — real workflows, F1).
+
+### Blocked / needs a decision
+
+- `P0-9` — **five** credentials in chat transcripts: Supabase access token,
+  Supabase secret key, DeepSeek key, Bunny storage password, rotated Bunny
+  password. Carried since 2026-08-02. Still the only live risk in the list.
+
+### Next agent should know
+
+- **The library is device-local and F1 must migrate it, not ignore it.** Anyone
+  who used the app has follows and saves in `riket.library.v1`; the consent
+  ledger landing must not silently orphan them.
+- Every read added here is in `web/src/supabase.ts` and each carries the query
+  it runs. `countClipsForPolitician` is the only one that reads a response
+  *header* rather than a body — do not "simplify" it into a row count.
+- The scoped-feed mechanism (`ClipCollection` + `CollectionScreen`) is the
+  place to hang any future "clips from this debate" or "clips you liked" view.
+  It costs one state field and no new player.

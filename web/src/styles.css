@@ -1091,34 +1091,142 @@ a {
 
 .mini-clip {
   position: relative;
-  aspect-ratio: 9 / 16;
+  display: block;
+  padding: 0;
   overflow: hidden;
+  aspect-ratio: 9 / 16;
   border: 1px solid #e2e2dc;
   border-radius: 12px;
   background:
     repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.03) 0 1px, transparent 1px 9px),
     linear-gradient(158deg, #f4f4f1, #dcdcd7);
+  cursor: pointer;
+  text-align: left;
 }
 
-.mini-clip span {
+.mini-clip img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mini-clip-copy {
   position: absolute;
-  top: 6px;
-  left: 6px;
-  color: #8c8c86;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 7px 7px;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.82), transparent);
+  color: #fff;
+}
+
+.mini-clip-copy b {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.mini-clip-copy small {
+  color: rgba(255, 255, 255, 0.72);
   font-size: 9px;
 }
 
-.mini-clip div {
+/* Header of a scoped feed — one politician's clips, or the saved archive.
+   Sits where the För dig / Senaste tabs sit in the main feed. */
+.collection-bar {
   position: absolute;
-  right: 6px;
-  bottom: 6px;
-  left: 6px;
+  top: calc(12px + env(safe-area-inset-top));
+  right: 12px;
+  left: 12px;
+  z-index: 20;
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.42);
+  color: #fff;
+  backdrop-filter: blur(16px);
+}
+
+.collection-bar button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  place-items: center;
+}
+
+.collection-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.collection-copy strong {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-copy small {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 11px;
+}
+
+/* Honest empty state inside a panel screen (FE-12). */
+.panel-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 28px 18px;
   color: #5e5e58;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 9.5px;
+  text-align: center;
+}
+
+.panel-empty strong {
+  color: #23231f;
+  font-size: 14px;
+}
+
+.panel-empty span {
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* Marks a surface as mockup rather than measurement. Kept deliberately
+   (owner's request) as a reminder of what to build; the label is what stops
+   invented figures reading as fact on political content. */
+.placeholder-tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #ecece7;
+  color: #8c8c86;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.placeholder-note {
+  padding: 0 16px 8px;
+  color: #8c8c86;
+  font-size: 11px;
 }
 
 @media (min-width: 700px) {
@@ -1809,6 +1917,34 @@ a {
   cursor: pointer;
 }
 .list-row--button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+
+/* A row with both a tap target and its own action button: only the lead half
+   is a button, so the two controls are siblings rather than nested. */
+.list-row--split {
+  padding-right: 14px;
+  padding-left: 0;
+  cursor: default;
+}
+
+.list-row-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  padding: 0 0 0 14px;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.list-row-main:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: -2px;
 }

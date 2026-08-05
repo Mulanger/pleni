@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import {
   ArrowUpRight,
   Bookmark,
@@ -16,6 +17,7 @@ import {
   ShieldCheck,
   Sliders,
   Trash2,
+  UserPlus,
   UserRound,
   Users,
   Volume2,
@@ -32,24 +34,47 @@ import {
   useUser
 } from "@clerk/react";
 import { clerkEnabled } from "./clerk";
-import { initials, PARTIES, partyInk, partyTint, PEOPLE, PERSON_CLIPS, TRENDING } from "./data";
+import { initials, PARTIES, partyInk, partyTint, TRENDING } from "./data";
 import { Onboarding } from "./onboarding";
 import { EMPTY_ONBOARDING, readOnboarding, writeOnboarding } from "./onboarding-store";
-import { checkClerkSupabaseLink, loadPublishedClips } from "./supabase";
+import { EMPTY_LIBRARY, readLibrary, toggleInList, writeLibrary } from "./library-store";
+import {
+  checkClerkSupabaseLink,
+  loadClipsByIds,
+  loadClipsForPolitician,
+  loadPolitician,
+  loadPoliticiansByIds,
+  loadPublishedClips,
+  searchPoliticians
+} from "./supabase";
 import type { ClerkSupabaseLinkStatus } from "./supabase";
 import type {
   ClipItem,
   ClipSource,
   FeedMode,
+  LibraryState,
   OnboardingState,
   PartyCode,
-  PersonProfile,
+  Politician,
   Tab
 } from "./types";
 
 type BooleanMap = Record<string, boolean>;
 type NumberMap = Record<string, number>;
 type PlaybackFlash = { clipId: string; icon: "play" | "pause"; nonce: number };
+
+/**
+ * A feed scoped to something other than the catalogue: one politician's clips,
+ * or the saved archive. Rendered through the same `FeedScreen` as the main
+ * feed so there is exactly one player implementation.
+ */
+type ClipCollection = {
+  title: string;
+  subtitle: string;
+  clips: ClipItem[];
+  /** Clip to open on, when the viewer tapped a specific one in a grid. */
+  startId: string | null;
+};
 
 const partyCodes = Object.keys(PARTIES).filter((code) => code !== "NONE") as PartyCode[];
 
@@ -80,21 +105,18 @@ function App() {
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [partyFilter, setPartyFilter] = useState<PartyCode | null>(null);
-  const [liked, setLiked] = useState<BooleanMap>({});
-  const [saved, setSaved] = useState<BooleanMap>({});
   const [muted, setMuted] = useState(false);
-  const [following, setFollowing] = useState<BooleanMap>({});
-  const [followedParties, setFollowedParties] = useState<Record<PartyCode, boolean>>({
-    S: false,
-    M: false,
-    V: false,
-    SD: false,
-    C: false,
-    KD: false,
-    MP: false,
-    L: false,
-    NONE: false
-  });
+  // Follows, saves and likes now survive a reload. Device-local only — see
+  // `library-store.ts` for why this is not a server call yet (C-1, C-2, C-6).
+  const [library, setLibrary] = useState<LibraryState>(EMPTY_LIBRARY);
+  // A scoped feed: one politician's clips, or the saved archive. Rendering it
+  // through the same `FeedScreen` reuses the player, the FE-4 dwell activation
+  // and the FE-3 loop instrumentation rather than growing a second one.
+  const [collection, setCollection] = useState<ClipCollection | null>(null);
+  const [person, setPerson] = useState<Politician | null>(null);
+  const [personClips, setPersonClips] = useState<ClipItem[]>([]);
+  const [personLoading, setPersonLoading] = useState(false);
+  const [savedLoading, setSavedLoading] = useState(false);
   // Onboarding answers and consent live together because the flow collects
   // both. Defaults are off and everything stays on the device until F1 gives it
   // somewhere lawful to go (C-1, C-2, C-5).
@@ -108,7 +130,64 @@ function App() {
     // First run only. Skipping counts as answered so it does not nag; Profil
     // has a row to reopen it.
     setShowOnboarding(stored.completedAt === null);
+    setLibrary(readLibrary());
   }, []);
+
+  const updateLibrary = (update: (current: LibraryState) => LibraryState) => {
+    setLibrary((current) => {
+      const next = update(current);
+      writeLibrary(next);
+      return next;
+    });
+  };
+
+  const toggleFollowPolitician = (politicianId: string) =>
+    updateLibrary((current) => ({
+      ...current,
+      followedPoliticians: toggleInList(current.followedPoliticians, politicianId)
+    }));
+
+  const toggleFollowParty = (party: PartyCode) =>
+    updateLibrary((current) => ({
+      ...current,
+      followedParties: toggleInList(current.followedParties, party)
+    }));
+
+  const toggleSaveClip = (clipId: string) =>
+    updateLibrary((current) => ({
+      ...current,
+      // Newest save first, so the archive reads like a stack rather than a log.
+      savedClips: current.savedClips.includes(clipId)
+        ? current.savedClips.filter((id) => id !== clipId)
+        : [clipId, ...current.savedClips]
+    }));
+
+  const toggleLikeClip = (clipId: string) =>
+    updateLibrary((current) => ({
+      ...current,
+      likedClips: toggleInList(current.likedClips, clipId)
+    }));
+
+  // Lookup maps, so the render path does not run `Array.includes` per clip.
+  const liked = useMemo(
+    () => Object.fromEntries(library.likedClips.map((id) => [id, true])),
+    [library.likedClips]
+  );
+  const saved = useMemo(
+    () => Object.fromEntries(library.savedClips.map((id) => [id, true])),
+    [library.savedClips]
+  );
+  const following = useMemo(
+    () => Object.fromEntries(library.followedPoliticians.map((id) => [id, true])),
+    [library.followedPoliticians]
+  );
+  const followedParties = useMemo(
+    () => Object.fromEntries(library.followedParties.map((code) => [code, true])) as Record<
+      PartyCode,
+      boolean
+    >,
+    [library.followedParties]
+  );
 
   const saveOnboarding = (next: OnboardingState) => {
     setOnboarding(next);
@@ -145,14 +224,51 @@ function App() {
     };
   }, []);
 
-  const selectedPerson = useMemo(
-    () => PEOPLE.find((person) => person.id === selectedPersonId) ?? null,
-    [selectedPersonId]
-  );
-
-  const people = useMemo(() => mergePeopleFromClips(clips), [clips]);
+  /**
+   * The open person page, loaded from `public.politicians` rather than derived
+   * from the feed.
+   *
+   * A politician the viewer searched for or follows is usually *not* among the
+   * 60 most recent clips, so deriving them from the loaded feed — as this used
+   * to — meant most people simply could not be opened.
+   */
+  useEffect(() => {
+    if (selectedPersonId === null) {
+      setPerson(null);
+      setPersonClips([]);
+      return;
+    }
+    let active = true;
+    setPersonLoading(true);
+    setPerson(null);
+    setPersonClips([]);
+    Promise.all([loadPolitician(selectedPersonId), loadClipsForPolitician(selectedPersonId)])
+      .then(([politician, personClips]) => {
+        if (active) {
+          setPerson(politician);
+          setPersonClips(personClips);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setPerson(null);
+          setPersonClips([]);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setPersonLoading(false);
+        }
+      });
+    return () => {
+      // A fast tap through several people must not let a slow first response
+      // overwrite a newer one.
+      active = false;
+    };
+  }, [selectedPersonId]);
 
   const openPerson = (personId: string) => {
+    setCollection(null);
     setSelectedPersonId(personId);
   };
 
@@ -160,7 +276,42 @@ function App() {
     setSelectedPersonId(null);
   };
 
-  const visiblePerson = selectedPerson ?? people.find((person) => person.id === selectedPersonId) ?? null;
+  /** Play a politician's clips, optionally starting on one the viewer tapped. */
+  const openPersonClips = (startId: string | null) => {
+    if (person === null || personClips.length === 0) {
+      return;
+    }
+    setCollection({
+      title: cleanName(person.name) || person.name,
+      subtitle: `${personClips.length} klipp`,
+      clips: personClips,
+      startId
+    });
+  };
+
+  const openSavedArchive = () => {
+    setSelectedPersonId(null);
+    setSavedLoading(true);
+    setCollection({ title: "Sparade klipp", subtitle: "Laddar…", clips: [], startId: null });
+    loadClipsByIds(library.savedClips)
+      .then((savedClips) => {
+        setCollection({
+          title: "Sparade klipp",
+          subtitle: `${savedClips.length} klipp · sparas bara på den här enheten`,
+          clips: savedClips,
+          startId: null
+        });
+      })
+      .catch(() => {
+        setCollection({
+          title: "Sparade klipp",
+          subtitle: "Klippen kunde inte hämtas",
+          clips: [],
+          startId: null
+        });
+      })
+      .finally(() => setSavedLoading(false));
+  };
 
   return (
     <>
@@ -180,12 +331,29 @@ function App() {
         />
       )}
       <main className="mobile-app" aria-label="Riket TV">
-        {visiblePerson ? (
+        {collection ? (
+          <CollectionScreen
+            collection={collection}
+            onBack={() => setCollection(null)}
+            muted={muted}
+            setMuted={setMuted}
+            liked={liked}
+            saved={saved}
+            following={following}
+            onLike={toggleLikeClip}
+            onSave={toggleSaveClip}
+            onToggleFollow={toggleFollowPolitician}
+            onOpenPerson={openPerson}
+          />
+        ) : selectedPersonId !== null ? (
           <PersonScreen
-            person={visiblePerson}
+            person={person}
+            clips={personClips}
+            loading={personLoading}
             onBack={closePerson}
-            following={!!following[visiblePerson.id]}
-            onToggleFollow={() => setFollowing((state) => ({ ...state, [visiblePerson.id]: !state[visiblePerson.id] }))}
+            following={!!following[selectedPersonId]}
+            onToggleFollow={() => toggleFollowPolitician(selectedPersonId)}
+            onPlayClip={openPersonClips}
           />
         ) : (
           <>
@@ -202,31 +370,23 @@ function App() {
                 loading={loading}
                 clipSource={clipSource}
                 feedError={feedError}
-                onLike={(clipId) => setLiked((state) => ({ ...state, [clipId]: !state[clipId] }))}
-                onSave={(clipId) => setSaved((state) => ({ ...state, [clipId]: !state[clipId] }))}
-                onToggleFollow={(personId) =>
-                  setFollowing((state) => ({ ...state, [personId]: !state[personId] }))
-                }
+                onLike={toggleLikeClip}
+                onSave={toggleSaveClip}
+                onToggleFollow={toggleFollowPolitician}
                 onOpenPerson={openPerson}
               />
             )}
             {tab === "foljer" && (
               <FollowingScreen
-                people={people}
-                following={following}
-                followedParties={followedParties}
+                followedPoliticians={library.followedPoliticians}
+                followedParties={library.followedParties}
                 onOpenPerson={openPerson}
-                onTogglePerson={(personId) =>
-                  setFollowing((state) => ({ ...state, [personId]: !state[personId] }))
-                }
-                onToggleParty={(party) =>
-                  setFollowedParties((state) => ({ ...state, [party]: !state[party] }))
-                }
+                onTogglePerson={toggleFollowPolitician}
+                onToggleParty={toggleFollowParty}
               />
             )}
             {tab === "sok" && (
               <SearchScreen
-                people={people}
                 query={query}
                 setQuery={setQuery}
                 partyFilter={partyFilter}
@@ -238,6 +398,10 @@ function App() {
               <ProfileScreen
                 consent={consent}
                 selectedParties={onboarding.parties.length}
+                savedCount={library.savedClips.length}
+                followedCount={library.followedPoliticians.length}
+                savedLoading={savedLoading}
+                onOpenSaved={openSavedArchive}
                 onEditInterests={() => setShowOnboarding(true)}
                 onToggleConsent={(key) => setConsent((state) => ({ ...state, [key]: !state[key] }))}
               />
@@ -277,7 +441,10 @@ function FeedScreen({
   onLike,
   onSave,
   onToggleFollow,
-  onOpenPerson
+  onOpenPerson,
+  header,
+  initialClipId = null,
+  emptyMessage
 }: {
   clips: ClipItem[];
   feedMode: FeedMode;
@@ -294,8 +461,13 @@ function FeedScreen({
   onSave: (clipId: string) => void;
   onToggleFollow: (personId: string) => void;
   onOpenPerson: (personId: string) => void;
+  /** Replaces the `För dig` / `Senaste` tabs — used by a scoped collection. */
+  header?: ReactNode;
+  /** Clip to open on, when the viewer tapped a specific one in a grid. */
+  initialClipId?: string | null;
+  emptyMessage?: string;
 }) {
-  const [activeId, setActiveId] = useState(clips[0]?.id ?? "");
+  const [activeId, setActiveId] = useState(initialClipId ?? clips[0]?.id ?? "");
   const [paused, setPaused] = useState<BooleanMap>({});
   /**
    * FE-5. Autoplay blocked by browser policy is not a user pause. Conflating
@@ -318,14 +490,29 @@ function FeedScreen({
   const loopCounts = useRef<Record<string, number>>({});
 
   useEffect(() => {
-    setActiveId(clips[0]?.id ?? "");
+    // A collection opened from a grid starts on the clip that was tapped, not
+    // at the top; falling back to the first clip if that id is not in the set.
+    const wanted = initialClipId && clips.some((clip) => clip.id === initialClipId)
+      ? initialClipId
+      : clips[0]?.id ?? "";
+    setActiveId(wanted);
     setPaused({});
     setBlocked({});
     setCurrentTimes({});
     setDurations({});
     setPlaybackFlash(null);
     loopCounts.current = {};
-  }, [clips]);
+  }, [clips, initialClipId]);
+
+  // Scroll the opening clip into view once, so the feed does not start at the
+  // top and then jump.
+  useEffect(() => {
+    if (!initialClipId) {
+      return;
+    }
+    const node = document.querySelector(`article[data-clip-id="${CSS.escape(initialClipId)}"]`);
+    node?.scrollIntoView({ block: "start" });
+  }, [initialClipId, clips]);
 
   /**
    * FE-3. Explicit loop rather than the `loop` attribute. The clip restarts
@@ -504,14 +691,16 @@ function FeedScreen({
 
   return (
     <section className="feed-screen">
-      <div className="feed-tabs" role="tablist" aria-label="Flöde">
-        <button className={feedMode === "fordig" ? "active" : ""} onClick={() => setFeedMode("fordig")}>
-          För dig
-        </button>
-        <button className={feedMode === "senaste" ? "active" : ""} onClick={() => setFeedMode("senaste")}>
-          Senaste
-        </button>
-      </div>
+      {header ?? (
+        <div className="feed-tabs" role="tablist" aria-label="Flöde">
+          <button className={feedMode === "fordig" ? "active" : ""} onClick={() => setFeedMode("fordig")}>
+            För dig
+          </button>
+          <button className={feedMode === "senaste" ? "active" : ""} onClick={() => setFeedMode("senaste")}>
+            Senaste
+          </button>
+        </div>
+      )}
 
       {loading && <div className="loading-chip">Hämtar klipp</div>}
 
@@ -521,7 +710,7 @@ function FeedScreen({
           for a failed or empty catalogue read. */}
       {!loading && clips.length === 0 && (
         <div className="feed-empty" role="status">
-          <strong>Inga klipp att visa</strong>
+          <strong>{emptyMessage ?? "Inga klipp att visa"}</strong>
           <span>{feedError ? "Klippen kunde inte hämtas just nu." : "Kom tillbaka snart."}</span>
         </div>
       )}
@@ -531,13 +720,18 @@ function FeedScreen({
           const person = personForClip(clip);
           const isLiked = !!liked[clip.id];
           const isSaved = !!saved[clip.id];
-          const isFollowing = !!following[person.id];
+          const isFollowing = person !== null && !!following[person.id];
           const flashIcon = playbackFlash?.clipId === clip.id ? playbackFlash.icon : null;
           const flashNonce = playbackFlash?.clipId === clip.id ? playbackFlash.nonce : null;
           return (
             <article
               className="feed-item"
               data-clip-id={clip.id}
+              /* Q-2 QA hook, same purpose as `data-clip-id` for the FE-4
+                 activation harness: the identity a follow keys on has to be
+                 checkable from outside without reading React state. Empty
+                 string means the speaker has no stable id. */
+              data-politician-id={clip.politicianId ?? ""}
               key={clip.id}
               onClick={() => toggleClipPlayback(clip.id)}
             >
@@ -612,8 +806,8 @@ function FeedScreen({
                 clip={clip}
                 person={person}
                 following={isFollowing}
-                onOpenPerson={() => onOpenPerson(person.id)}
-                onToggleFollow={() => onToggleFollow(person.id)}
+                onOpenPerson={() => person && onOpenPerson(person.id)}
+                onToggleFollow={() => person && onToggleFollow(person.id)}
               />
               <ProgressRow
                 currentTime={currentTimes[clip.id] ?? 0}
@@ -625,6 +819,73 @@ function FeedScreen({
         })}
       </div>
     </section>
+  );
+}
+
+/**
+ * A feed scoped to one politician or to the saved archive.
+ *
+ * Deliberately a thin wrapper over `FeedScreen` rather than a second player.
+ * Everything the feed has earned — the FE-4 dwell activation, the FE-3
+ * explicit loop, FE-5's blocked-vs-paused split — applies here for free, and
+ * cannot drift out of sync with the main feed.
+ */
+function CollectionScreen({
+  collection,
+  onBack,
+  muted,
+  setMuted,
+  liked,
+  saved,
+  following,
+  onLike,
+  onSave,
+  onToggleFollow,
+  onOpenPerson
+}: {
+  collection: ClipCollection;
+  onBack: () => void;
+  muted: boolean;
+  setMuted: (muted: boolean) => void;
+  liked: BooleanMap;
+  saved: BooleanMap;
+  following: BooleanMap;
+  onLike: (clipId: string) => void;
+  onSave: (clipId: string) => void;
+  onToggleFollow: (personId: string) => void;
+  onOpenPerson: (personId: string) => void;
+}) {
+  return (
+    <FeedScreen
+      clips={collection.clips}
+      feedMode="senaste"
+      setFeedMode={() => undefined}
+      muted={muted}
+      setMuted={setMuted}
+      liked={liked}
+      saved={saved}
+      following={following}
+      loading={false}
+      clipSource="supabase"
+      feedError={null}
+      onLike={onLike}
+      onSave={onSave}
+      onToggleFollow={onToggleFollow}
+      onOpenPerson={onOpenPerson}
+      initialClipId={collection.startId}
+      emptyMessage="Inga klipp här ännu"
+      header={
+        <div className="collection-bar">
+          <button onClick={onBack} aria-label="Tillbaka">
+            <ChevronLeft size={22} />
+          </button>
+          <span className="collection-copy">
+            <strong>{collection.title}</strong>
+            <small>{collection.subtitle}</small>
+          </span>
+        </div>
+      }
+    />
   );
 }
 
@@ -703,18 +964,22 @@ function ClipMeta({
   onToggleFollow
 }: {
   clip: ClipItem;
-  person: PersonProfile;
+  /** Null when the speaker has no `politician_id` — see `personForClip` (Q-2). */
+  person: Politician | null;
   following: boolean;
   onOpenPerson: () => void;
   onToggleFollow: () => void;
 }) {
   const party = PARTIES[clip.party];
-  const displayName = cleanName(clip.speakerName) || person.name;
-  const speechType = clip.anforandetyp || person.role;
+  const displayName = cleanName(clip.speakerName) || person?.name || clip.speakerName;
+  const speechType = clip.anforandetyp || person?.role || "";
+  // Q-2: without a stable id there is nothing durable to hang a follow or a
+  // profile on, so both controls are inert rather than keyed on a name.
+  const identified = person !== null;
   return (
     <div className="clip-meta" onClick={(event) => event.stopPropagation()}>
       <div className="person-row">
-        <button className="person-pill" onClick={onOpenPerson}>
+        <button className="person-pill" onClick={onOpenPerson} disabled={!identified}>
           <Avatar name={displayName} party={clip.party} size="sm" />
           <span className="person-copy">
             <strong>{displayName}</strong>
@@ -727,7 +992,9 @@ function ClipMeta({
         </button>
         <button
           className={following ? "follow-button following" : "follow-button"}
-          aria-pressed={following}
+          aria-pressed={identified ? following : undefined}
+          disabled={!identified}
+          title={identified ? undefined : "Talaren saknar id hos Riksdagen och kan inte följas"}
           onClick={(event) => {
             event.stopPropagation();
             onToggleFollow();
@@ -803,99 +1070,164 @@ function ProgressRow({
   );
 }
 
+/**
+ * Who the viewer follows.
+ *
+ * Resolves the stored uuids against `public.politicians` rather than filtering
+ * the loaded feed: someone you followed last week is almost certainly not in
+ * today's 60 most recent clips, so the old feed-derived list showed an empty
+ * Följer tab for follows that genuinely existed.
+ */
 function FollowingScreen({
-  people,
-  following,
+  followedPoliticians,
   followedParties,
   onOpenPerson,
   onTogglePerson,
   onToggleParty
 }: {
-  people: PersonProfile[];
-  following: BooleanMap;
-  followedParties: Record<PartyCode, boolean>;
+  followedPoliticians: string[];
+  followedParties: PartyCode[];
   onOpenPerson: (personId: string) => void;
   onTogglePerson: (personId: string) => void;
   onToggleParty: (party: PartyCode) => void;
 }) {
-  const activeParties = partyCodes.filter((party) => followedParties[party]);
-  const activePeople = people.filter((person) => following[person.id]);
+  const [people, setPeople] = useState<Politician[]>([]);
+  const [loading, setLoading] = useState(false);
+  const key = followedPoliticians.join(",");
+
+  useEffect(() => {
+    if (followedPoliticians.length === 0) {
+      setPeople([]);
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    loadPoliticiansByIds(followedPoliticians)
+      .then((rows) => active && setPeople(rows))
+      .catch(() => active && setPeople([]))
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+    // `key` rather than the array itself: a new array identity on every render
+    // would refetch forever.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  const empty = followedParties.length === 0 && followedPoliticians.length === 0;
+
   return (
     <section className="panel-screen">
-      <Header title="Följer" subtitle={`${activeParties.length} partier · ${activePeople.length} personer`} />
+      <Header
+        title="Följer"
+        subtitle={`${followedParties.length} partier · ${followedPoliticians.length} personer`}
+      />
       <div className="panel-scroll">
-        <Group title="Partier">
-          {activeParties.map((partyCode) => {
-            const party = PARTIES[partyCode];
-            return (
+        {empty && (
+          <div className="panel-empty" role="status">
+            <strong>Du följer ingen ännu</strong>
+            <span>Följ en politiker från ett klipp eller via sök, så samlas de här.</span>
+          </div>
+        )}
+        {followedParties.length > 0 && (
+          <Group title="Partier">
+            {followedParties.map((partyCode) => {
+              const party = PARTIES[partyCode];
+              return (
+                <ListRow
+                  key={partyCode}
+                  avatar={<PartyAvatar party={partyCode} />}
+                  title={party.name}
+                  action={
+                    <button className="mini-button" onClick={() => onToggleParty(partyCode)}>
+                      Följer
+                    </button>
+                  }
+                />
+              );
+            })}
+          </Group>
+        )}
+        {followedPoliticians.length > 0 && (
+          <Group title="Personer">
+            {loading && people.length === 0 && <ListRow title="Hämtar…" />}
+            {people.map((politician) => (
               <ListRow
-                key={partyCode}
-                avatar={<PartyAvatar party={partyCode} />}
-                title={party.name}
-                subtitle={`${formatNumber(party.clips)} klipp`}
+                key={politician.id}
+                avatar={<Avatar name={cleanName(politician.name) || politician.name} party={politician.party} size="md" />}
+                title={cleanName(politician.name) || politician.name}
+                subtitle={[PARTIES[politician.party].name, politician.role]
+                  .filter(Boolean)
+                  .join(" · ")}
+                onClick={() => onOpenPerson(politician.id)}
                 action={
-                  <button className="mini-button" onClick={() => onToggleParty(partyCode)}>
+                  <button
+                    className="mini-button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onTogglePerson(politician.id);
+                    }}
+                  >
                     Följer
                   </button>
                 }
               />
-            );
-          })}
-        </Group>
-        <Group title="Personer">
-          {activePeople.map((person) => (
-            <ListRow
-              key={person.id}
-              avatar={<Avatar name={person.name} party={person.party} size="md" />}
-              title={person.name}
-              subtitle={`${PARTIES[person.party].name} · ${person.role}`}
-              onClick={() => onOpenPerson(person.id)}
-              action={
-                <button
-                  className="mini-button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onTogglePerson(person.id);
-                  }}
-                >
-                  Följer
-                </button>
-              }
-            />
-          ))}
-        </Group>
+            ))}
+          </Group>
+        )}
       </div>
     </section>
   );
 }
 
+/**
+ * Find a politician and open their page.
+ *
+ * Searches `public.politicians` over the network rather than filtering the
+ * loaded feed. The old version could only find the ~23 people who happened to
+ * appear in the 60 most recent clips, out of 165 with published clips — so
+ * searching for almost anyone returned nothing.
+ */
 function SearchScreen({
-  people,
   query,
   setQuery,
   partyFilter,
   setPartyFilter,
   onOpenPerson
 }: {
-  people: PersonProfile[];
   query: string;
   setQuery: (query: string) => void;
   partyFilter: PartyCode | null;
   setPartyFilter: (party: PartyCode | null) => void;
   onOpenPerson: (personId: string) => void;
 }) {
-  const normalizedQuery = query.trim().toLowerCase();
-  const results = people.filter((person) => {
-    const party = PARTIES[person.party];
-    const matchesFilter = !partyFilter || person.party === partyFilter;
-    const matchesQuery =
-      !normalizedQuery ||
-      person.name.toLowerCase().includes(normalizedQuery) ||
-      party.name.toLowerCase().includes(normalizedQuery) ||
-      person.role.toLowerCase().includes(normalizedQuery);
-    return matchesFilter && matchesQuery;
-  });
+  const [results, setResults] = useState<Politician[]>([]);
+  const [searching, setSearching] = useState(false);
+  const normalizedQuery = query.trim();
   const showResults = normalizedQuery.length > 0 || partyFilter !== null;
+
+  useEffect(() => {
+    if (!showResults) {
+      setResults([]);
+      return;
+    }
+    const controller = new AbortController();
+    setSearching(true);
+    // Debounced: a request per keystroke would put ~8 in flight for a surname
+    // and the answers can arrive out of order.
+    const timer = window.setTimeout(() => {
+      searchPoliticians(normalizedQuery, { party: partyFilter, signal: controller.signal })
+        .then(setResults)
+        .catch(() => undefined)
+        .finally(() => setSearching(false));
+    }, 220);
+    return () => {
+      window.clearTimeout(timer);
+      // Abort in flight too, so a slow early response cannot overwrite a newer
+      // one — the same stale-response rule FE-7 states for the feed.
+      controller.abort();
+    };
+  }, [normalizedQuery, partyFilter, showResults]);
 
   return (
     <section className="panel-screen">
@@ -924,23 +1256,42 @@ function SearchScreen({
       </div>
       <div className="panel-scroll">
         {showResults ? (
-          <Group title={`${results.length} ${results.length === 1 ? "träff" : "träffar"}`}>
-            {results.map((person) => (
-              <ListRow
-                key={person.id}
-                avatar={<Avatar name={person.name} party={person.party} size="md" />}
-                title={person.name}
-                subtitle={`${PARTIES[person.party].name} · ${formatNumber(person.clips)} klipp`}
-                onClick={() => onOpenPerson(person.id)}
-                chevron
-              />
-            ))}
-          </Group>
+          searching && results.length === 0 ? (
+            <Group title="Söker…">
+              <ListRow title="Hämtar träffar" />
+            </Group>
+          ) : results.length === 0 ? (
+            <div className="panel-empty" role="status">
+              <strong>Inga träffar</strong>
+              <span>Sök på en politikers namn, eller filtrera på parti.</span>
+            </div>
+          ) : (
+            <Group title={`${results.length} ${results.length === 1 ? "träff" : "träffar"}`}>
+              {results.map((politician) => (
+                <ListRow
+                  key={politician.id}
+                  avatar={<Avatar name={cleanName(politician.name) || politician.name} party={politician.party} size="md" />}
+                  title={cleanName(politician.name) || politician.name}
+                  subtitle={[PARTIES[politician.party].name, politician.role]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  onClick={() => onOpenPerson(politician.id)}
+                  chevron
+                />
+              ))}
+            </Group>
+          )
         ) : (
           <>
+            {/* Placeholder surfaces, kept deliberately at the owner's request as
+                a reminder of what to build. Both are hardcoded: the chips are
+                not the viewer's search history and the trending figures are
+                invented. Labelled so nobody reads them as real — invented
+                numbers presented as fact on political content is the FE-2
+                problem, and a label is what separates a mockup from a lie. */}
             <section className="recent-block">
               <div className="section-label">
-                Senaste sökningar
+                Senaste sökningar <span className="placeholder-tag">exempel</span>
                 <button onClick={() => setQuery("")}>Rensa</button>
               </div>
               <div className="recent-chips">
@@ -953,6 +1304,9 @@ function SearchScreen({
               </div>
             </section>
             <Group title="Populära debatter">
+              <div className="placeholder-note">
+                Exempeldata — populäritet mäts inte ännu.
+              </div>
               {TRENDING.map((item) => (
                 <ListRow key={item.n} eyebrow={item.n} title={item.title} subtitle={item.meta} action={<span className="up">{item.up}</span>} />
               ))}
@@ -967,11 +1321,19 @@ function SearchScreen({
 function ProfileScreen({
   consent,
   selectedParties,
+  savedCount,
+  followedCount,
+  savedLoading,
+  onOpenSaved,
   onEditInterests,
   onToggleConsent
 }: {
   consent: { personal: boolean; analytics: boolean; email: boolean };
   selectedParties: number;
+  savedCount: number;
+  followedCount: number;
+  savedLoading: boolean;
+  onOpenSaved: () => void;
   onEditInterests: () => void;
   onToggleConsent: (key: keyof typeof consent) => void;
 }) {
@@ -985,13 +1347,31 @@ function ProfileScreen({
       <Header title="Profil" />
       <div className="panel-scroll">
         <AccountCard />
-        {/* FE-2: "Sparade klipp 24" and "Följda ämnen 12" were invented. Saves
-            and follows do not persist anywhere yet (C-9), so there is no honest
-            number to show and the rows are gone until F1 stores them. */}
+        {/* These counts used to be invented ("Sparade klipp 24"). They are now
+            the real length of the device-local library — see
+            `library-store.ts`. Still not server-side: that is `C-9`, gated on
+            F1. */}
         <Group title="Konto">
-          <ListRow title="Sparade klipp" chevron />
-          <ListRow title="Aviseringar" chevron />
-          <ListRow title="Följda ämnen" chevron />
+          <ListRow
+            title="Sparade klipp"
+            subtitle={
+              savedCount === 0
+                ? "Inga sparade klipp ännu"
+                : `${savedCount} ${savedCount === 1 ? "klipp" : "klipp"} · sparas bara på den här enheten`
+            }
+            icon={<Bookmark size={18} />}
+            onClick={savedCount > 0 && !savedLoading ? onOpenSaved : undefined}
+            chevron={savedCount > 0}
+          />
+          <ListRow
+            title="Följer"
+            subtitle={
+              followedCount === 0
+                ? "Du följer ingen ännu"
+                : `${followedCount} personer · sparas bara på den här enheten`
+            }
+            icon={<UserPlus size={18} />}
+          />
         </Group>
         <Group title="Mina intressen">
           <ListRow
@@ -1182,69 +1562,109 @@ function describeLinkStatus(status: ClerkSupabaseLinkStatus | null, running: boo
 
 function PersonScreen({
   person,
+  clips,
+  loading,
   onBack,
   following,
-  onToggleFollow
+  onToggleFollow,
+  onPlayClip
 }: {
-  person: PersonProfile;
+  person: Politician | null;
+  clips: ClipItem[];
+  loading: boolean;
   onBack: () => void;
   following: boolean;
   onToggleFollow: () => void;
+  onPlayClip: (clipId: string | null) => void;
 }) {
+  const displayName = person ? cleanName(person.name) || person.name : "";
+  const party = person ? PARTIES[person.party] : PARTIES.NONE;
+  // The exact published total, which is not the same as how many were loaded
+  // onto this page. Null means it could not be read — rendered as absent, not
+  // as zero.
+  const total = person?.clipCount;
+
   return (
     <section className="person-screen">
       <div className="person-topbar">
         <button onClick={onBack} aria-label="Tillbaka">
           <ChevronLeft size={24} />
         </button>
-        <strong>{person.name}</strong>
+        <strong>{displayName}</strong>
         <button aria-label="Dela">
           <Share2 size={19} />
         </button>
       </div>
       <div className="panel-scroll person-scroll">
-        <section className="person-hero">
-          <Avatar name={person.name} party={person.party} size="xl" />
-          <h1>{person.name}</h1>
-          <span className="party-pill">
-            <i style={{ background: PARTIES[person.party].color }} />
-            {PARTIES[person.party].name}
-          </span>
-          <p>{person.role} · {person.constituency}</p>
-          <button className={following ? "follow-wide following" : "follow-wide"} onClick={onToggleFollow}>
-            {following ? "Följer" : "Följ"}
-          </button>
-        </section>
-        <div className="stats">
-          <Stat label="Klipp" value={formatNumber(person.clips)} />
-          <Stat label="Följare" value={formatNumber(person.followers)} />
-          <Stat label="Anföranden" value={formatNumber(person.speeches)} />
-        </div>
-        <Group title="Om">
-          <div className="bio">{person.bio}</div>
-        </Group>
-        <section className="tag-block">
-          <div className="section-label">Utskott</div>
-          <div className="recent-chips">
-            {person.committees.map((committee) => (
-              <button key={committee}>{committee}</button>
-            ))}
+        {loading && !person && <div className="loading-chip">Hämtar profil</div>}
+        {!loading && !person && (
+          <div className="panel-empty" role="status">
+            <strong>Profilen kunde inte hämtas</strong>
+            <span>Försök igen om en stund.</span>
           </div>
-        </section>
-        <section className="clip-grid-block">
-          <div className="section-label">Klipp</div>
-          <div className="clip-grid">
-            {PERSON_CLIPS.map((clip, index) => (
-              <div className="mini-clip" key={`${clip.date}-${index}`}>
-                <span>{clip.date}</span>
-                <div>
-                  <b>{clip.views}</b>
-                  <b>{clip.dur}</b>
+        )}
+        {person && (
+          <>
+            <section className="person-hero">
+              <Avatar name={displayName} party={person.party} size="xl" />
+              <h1>{displayName}</h1>
+              <span className="party-pill">
+                <i style={{ background: party.color }} />
+                {party.name}
+              </span>
+              {person.role && <p>{person.role}</p>}
+              <button
+                className={following ? "follow-wide following" : "follow-wide"}
+                onClick={onToggleFollow}
+              >
+                {following ? "Följer" : "Följ"}
+              </button>
+            </section>
+
+            {/* Real, counted numbers only. "Följare 16 800" used to sit here,
+                taken from a hardcoded demo profile that real clips matched by
+                name. Nothing counts followers, so the stat is gone rather than
+                zeroed (FE-2). */}
+            <div className="stats">
+              {typeof total === "number" && <Stat label="Klipp" value={formatNumber(total)} />}
+              <Stat label="Visas här" value={formatNumber(clips.length)} />
+            </div>
+
+            <section className="clip-grid-block">
+              <div className="section-label">Klipp</div>
+              {loading && clips.length === 0 && <div className="loading-chip">Hämtar klipp</div>}
+              {!loading && clips.length === 0 && (
+                <div className="panel-empty" role="status">
+                  <strong>Inga publicerade klipp</strong>
+                  <span>Den här talaren har inga klipp i katalogen ännu.</span>
                 </div>
-              </div>
-            ))}
-          </div>
-        </section>
+              )}
+              {clips.length > 0 && (
+                <div className="clip-grid">
+                  {clips.map((clip) => (
+                    <button
+                      className="mini-clip"
+                      key={clip.id}
+                      onClick={() => onPlayClip(clip.id)}
+                      aria-label={`Spela: ${clip.title}`}
+                    >
+                      <img src={clip.thumbUrl} alt="" loading="lazy" />
+                      <span className="mini-clip-copy">
+                        <b>{clip.title}</b>
+                        {/* Q-8: every clip shows its debate date, here as well
+                            as in the feed. Target for "old content without a
+                            visible date" is exactly zero. */}
+                        <small>
+                          {formatDate(clip.debateDate)} · {formatDuration(clip.durationS)}
+                        </small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          </>
+        )}
       </div>
     </section>
   );
@@ -1309,7 +1729,7 @@ function ListRow({
   onClick?: () => void;
 }) {
   const className = tone === "danger" ? "list-row danger" : "list-row";
-  const body = (
+  const lead = (
     <>
       {avatar}
       {icon && <span className="row-icon">{icon}</span>}
@@ -1318,23 +1738,48 @@ function ListRow({
         <strong>{title}</strong>
         {subtitle && <span>{subtitle}</span>}
       </div>
+    </>
+  );
+  const trail = (
+    <>
       {action}
       {chevron && <ChevronRight className="chevron" size={17} />}
     </>
   );
 
   // A row that does something must be a button, or it is unreachable by
-  // keyboard and invisible to a screen reader. Rows without a handler stay
-  // divs: the consent rows put a real <button> in `action`, and nesting one
-  // button inside another is invalid HTML.
+  // keyboard and invisible to a screen reader.
+  //
+  // But a row can have *two* things to do — open a person and unfollow them —
+  // and wrapping the whole row in a button then nests the action's own button
+  // inside it. That is invalid HTML, and browsers resolve it by making the
+  // inner control unreliable: React logs "cannot contain a nested button" and
+  // the keyboard can only reach the outer one. So when both are present, only
+  // the lead half becomes a button and the action stays its sibling.
+  if (onClick && action) {
+    return (
+      <div className={`${className} list-row--split`}>
+        <button type="button" className="list-row-main" onClick={onClick}>
+          {lead}
+        </button>
+        {trail}
+      </div>
+    );
+  }
   if (onClick) {
     return (
       <button type="button" className={`${className} list-row--button`} onClick={onClick}>
-        {body}
+        {lead}
+        {trail}
       </button>
     );
   }
-  return <div className={className}>{body}</div>;
+  return (
+    <div className={className}>
+      {lead}
+      {trail}
+    </div>
+  );
 }
 
 function Switch({ checked, onChange }: { checked: boolean; onChange: () => void }) {
@@ -1378,54 +1823,63 @@ function PartyAvatar({ party }: { party: PartyCode }) {
   );
 }
 
-function mergePeopleFromClips(clips: ClipItem[]): PersonProfile[] {
-  const byId = new Map(PEOPLE.map((person) => [person.id, person]));
-  clips.forEach((clip) => {
-    const person = personForClip(clip);
-    if (!byId.has(person.id)) {
-      byId.set(person.id, person);
-    }
-  });
-  return Array.from(byId.values());
-}
-
-function personForClip(clip: ClipItem): PersonProfile {
-  const cleanSpeaker = cleanName(clip.speakerName);
-  const existing = PEOPLE.find((person) => {
-    const cleanPerson = cleanName(person.name);
-    return cleanSpeaker.includes(cleanPerson) || cleanPerson.includes(cleanSpeaker);
-  });
-  if (existing) {
-    return existing;
+/**
+ * The person a clip belongs to, or `null` when nobody stable can be named.
+ *
+ * Built from what the clip already carries, so the feed needs no extra request.
+ * `clipCount` is `null` here for the same reason: the feed does not know a
+ * person's career total and must not guess one. The person page fetches it.
+ *
+ * Null means Riksdagen's `anforandelista` carried no `intressent_id` for that
+ * speaker — today, a minister who is not a sitting MP (10 clips, 0.57% of the
+ * catalogue on 2026-08-04). Callers must degrade rather than substitute: a
+ * name-derived id would silently detach from the real person the day the
+ * `intressent_id` is recovered, rotting the viewer's follow list invisibly.
+ */
+function personForClip(clip: ClipItem): Politician | null {
+  if (clip.politicianId === null) {
+    return null;
   }
   return {
-    id: slugify(cleanSpeaker || clip.speakerName),
-    name: cleanSpeaker || clip.speakerName,
+    id: clip.politicianId,
+    name: cleanName(clip.politicianName ?? clip.speakerName) || clip.speakerName,
     party: clip.party,
-    role: clip.anforandetyp || "Riksdagsledamot",
-    constituency: "Riksdagen",
-    clips: 1,
-    followers: 0,
-    speeches: 1,
-    bio: clip.transcript || clip.title,
-    committees: [clip.topic ?? clip.sourceTitle]
+    role: clip.politicianRole ?? clip.anforandetyp ?? "",
+    clipCount: null
   };
 }
 
+/**
+ * Tidy a name for display: drop the trailing `(M)` and a leading title.
+ *
+ * **Display only.** This is not an identity function and must never key
+ * anything durable — that is `clip.politicianId` (`Q-2`). This used to feed a
+ * slug that was the app's person key, and because it listed only four of the
+ * dozens of Swedish ministerial titles it split the five most-clipped
+ * ministers into two people each. Incomplete here now costs a clumsy label;
+ * incomplete in a key cost 21.6% of the catalogue.
+ *
+ * The `ministern` rule is **greedy and has no `\b`**, both deliberately:
+ *
+ * - greedy, so a compound portfolio collapses in one step — "Gymnasie-,
+ *   högskole- och forskningsministern Lotta Edholm" ends its title at the
+ *   *last* segment, and a lazy match would leave "och forskningsministern".
+ * - no word boundary, because "Finansmarknadsministern" has no boundary
+ *   before "ministern"; `\bministern` matches neither it nor most of the
+ *   compounds.
+ *
+ * It matches only the **definite** form with a following space, so the one
+ * name shaped "Minister för civilt försvar Carl-Oskar Bohlin" is untouched
+ * rather than mangled into "för civilt försvar Carl-Oskar Bohlin". Of the 23
+ * titled names in the catalogue, this resolves 19; that one and the three
+ * `TALMANNEN` chair rows keep their full string, which reads correctly.
+ */
 function cleanName(name: string): string {
   return name
     .replace(/\([^)]*\)/g, "")
-    .replace(/^(Justitieministern|Statsministern|Ministern|Ledamoten)\s+/i, "")
+    .replace(/^.*ministern\s+/i, "")
+    .replace(/^(Statsrådet|Ledamoten|Talmannen)\s+/i, "")
     .trim();
-}
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
 }
 
 function formatNumber(value: number): string {

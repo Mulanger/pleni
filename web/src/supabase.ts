@@ -1,5 +1,5 @@
 import { normalizeParty, SAMPLE_CLIPS } from "./data";
-import type { ClipFeed, ClipItem } from "./types";
+import type { ClipFeed, ClipItem, PartyCode, Politician } from "./types";
 
 interface RawSource {
   title: string | null;
@@ -7,10 +7,28 @@ interface RawSource {
   source_url: string | null;
 }
 
+/**
+ * The `public.politicians` row behind a speech.
+ *
+ * `id` is the stable identity the whole app keys on (`Q-2`). It is a uuid whose
+ * row is upserted `on conflict (intressent_id)`, so a minister who changes
+ * portfolio keeps the same `id` while `name` and `role` update in place.
+ * `name` here is Riksdagen's current display name and still carries any title
+ * prefix — it is for display, never for identity.
+ */
+interface RawPolitician {
+  id: string;
+  name: string | null;
+  party: string | null;
+  role: string | null;
+}
+
 interface RawSpeech {
   speaker_name: string | null;
   party: string | null;
   anforandetyp: string | null;
+  politician_id: string | null;
+  politicians: RawPolitician | RawPolitician[] | null;
   sources: RawSource | RawSource[] | null;
 }
 
@@ -76,6 +94,8 @@ export async function supabaseRest(
     signal?: AbortSignal;
     method?: "GET" | "POST";
     body?: unknown;
+    /** Extra request headers, e.g. `Prefer: count=exact` for a row total. */
+    headers?: Record<string, string>;
   } = {}
 ): Promise<Response> {
   if (!supabaseConfigured) {
@@ -91,7 +111,8 @@ export async function supabaseRest(
       apikey: SUPABASE_KEY,
       Authorization: `Bearer ${bearer}`,
       Accept: "application/json",
-      ...(method === "POST" ? { "Content-Type": "application/json" } : {})
+      ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
+      ...options.headers
     },
     body: method === "POST" ? JSON.stringify(options.body ?? {}) : undefined,
     signal: options.signal
@@ -208,6 +229,46 @@ export async function checkClerkSupabaseLink(
 }
 
 /**
+ * The clip column list, shared by every read that returns `ClipItem`s.
+ *
+ * `politicians` is embedded through the `speeches.politician_id` foreign key
+ * (Q-2). It needs no grant of its own: `politicians_public_read` is
+ * `using (true)` and migration 004 kept `select` for `anon`.
+ *
+ * `inner` makes the speech join a filter rather than a left join, which is what
+ * lets `loadClipsForPolitician()` constrain on `speeches.politician_id`. It is
+ * harmless for the unfiltered feed — every clip has a speech.
+ */
+function clipSelect(): string {
+  return [
+    "id",
+    "speech_id",
+    "rank_in_speech",
+    "duration_s",
+    "title",
+    "transcript",
+    "topic",
+    "archetype",
+    "url_540x960",
+    "thumb_url",
+    "published_at",
+    "speeches!inner(speaker_name,party,anforandetyp,politician_id," +
+      "politicians(id,name,party,role)," +
+      "sources(title,debate_date,source_url))"
+  ].join(",");
+}
+
+/** Run a clip query and map the rows, returning `[]` on any failure. */
+async function readClips(query: URLSearchParams): Promise<ClipItem[]> {
+  const response = await supabaseRest(`clips?${query.toString()}`);
+  if (!response.ok) {
+    return [];
+  }
+  const rows = (await response.json()) as RawClip[];
+  return rows.map(mapClip).filter((clip) => clip.videoUrl.length > 0);
+}
+
+/**
  * Read the published catalogue.
  *
  * Never silently substitutes demo data: the caller is told which source it got
@@ -221,23 +282,8 @@ export async function loadPublishedClips(limit = 60): Promise<ClipFeed> {
       : { clips: [], source: "supabase", error: "Supabase is not configured" };
   }
 
-  const select = [
-    "id",
-    "speech_id",
-    "rank_in_speech",
-    "duration_s",
-    "title",
-    "transcript",
-    "topic",
-    "archetype",
-    "url_540x960",
-    "thumb_url",
-    "published_at",
-    "speeches(speaker_name,party,anforandetyp,sources(title,debate_date,source_url))"
-  ].join(",");
-
   const query = new URLSearchParams({
-    select,
+    select: clipSelect(),
     order: "published_at.desc",
     limit: String(limit),
     published_at: "not.is.null",
@@ -265,15 +311,202 @@ export async function loadPublishedClips(limit = 60): Promise<ClipFeed> {
   return { clips, source: "supabase" };
 }
 
+/* ------------------------------------------------------------------ *
+ * Politicians and scoped clip reads — the Sök / Följer / person page   *
+ * surfaces (UI1). All of these run on the publishable key under RLS;   *
+ * every one was verified against the live project before being used.   *
+ * ------------------------------------------------------------------ */
+
+const POLITICIAN_SELECT = "id,name,party,role";
+
+function mapPolitician(row: RawPolitician, clipCount: number | null = null): Politician {
+  return {
+    id: row.id,
+    name: row.name?.trim() || "Okänd talare",
+    party: normalizeParty(row.party),
+    role: row.role?.trim() || "",
+    clipCount
+  };
+}
+
+/**
+ * PostgREST reserves `,` `.` `(` `)` inside a filter value, and `*` is the
+ * `like` wildcard. A surname cannot contain those, but a pasted query can, and
+ * an unescaped one silently changes the filter rather than failing.
+ */
+function escapeLikeValue(value: string): string {
+  return value.replace(/[,.()*\\]/g, " ").trim();
+}
+
+/**
+ * Find politicians by name, optionally narrowed to one party.
+ *
+ * Searches `public.politicians` directly rather than the loaded feed: a person
+ * the viewer is looking for is usually *not* in the 60 most recent clips, which
+ * is why the old people-derived-from-clips search could not find them.
+ */
+export async function searchPoliticians(
+  query: string,
+  options: { party?: PartyCode | null; limit?: number; signal?: AbortSignal } = {}
+): Promise<Politician[]> {
+  if (!supabaseConfigured) {
+    return [];
+  }
+  const params = new URLSearchParams({
+    select: POLITICIAN_SELECT,
+    order: "name.asc",
+    limit: String(options.limit ?? 40)
+  });
+
+  const term = escapeLikeValue(query);
+  if (term.length > 0) {
+    params.set("name", `ilike.*${term}*`);
+  }
+  if (options.party && options.party !== "NONE") {
+    params.set("party", `eq.${options.party}`);
+  }
+
+  const response = await supabaseRest(`politicians?${params.toString()}`, {
+    signal: options.signal
+  });
+  if (!response.ok) {
+    return [];
+  }
+  return ((await response.json()) as RawPolitician[]).map((row) => mapPolitician(row));
+}
+
+/**
+ * Resolve a follow list into politician rows.
+ *
+ * The follow list is a set of uuids on the device; the people behind them may
+ * not appear anywhere in the current feed, so Följer cannot be rendered from
+ * loaded clips.
+ */
+export async function loadPoliticiansByIds(ids: string[]): Promise<Politician[]> {
+  if (!supabaseConfigured || ids.length === 0) {
+    return [];
+  }
+  const params = new URLSearchParams({
+    select: POLITICIAN_SELECT,
+    id: `in.(${ids.join(",")})`,
+    order: "name.asc"
+  });
+  const response = await supabaseRest(`politicians?${params.toString()}`);
+  if (!response.ok) {
+    return [];
+  }
+  return ((await response.json()) as RawPolitician[]).map((row) => mapPolitician(row));
+}
+
+/** One politician plus their exact published clip total. */
+export async function loadPolitician(id: string): Promise<Politician | null> {
+  const [rows, clipCount] = await Promise.all([
+    loadPoliticiansByIds([id]),
+    countClipsForPolitician(id)
+  ]);
+  const row = rows[0];
+  return row ? { ...row, clipCount } : null;
+}
+
+/**
+ * The exact number of published clips for one politician.
+ *
+ * Taken from `Content-Range` with `Prefer: count=exact` and a one-row window,
+ * so the total does not depend on how many rows were fetched — the count and
+ * the page are independent. Returns `null` if the header is missing, because
+ * "unknown" must not render as `0`.
+ */
+export async function countClipsForPolitician(politicianId: string): Promise<number | null> {
+  if (!supabaseConfigured) {
+    return null;
+  }
+  const params = new URLSearchParams({
+    select: "id,speeches!inner(politician_id)",
+    "speeches.politician_id": `eq.${politicianId}`,
+    published_at: "not.is.null",
+    moderation: "neq.rejected"
+  });
+  const response = await supabaseRest(`clips?${params.toString()}`, {
+    headers: { Prefer: "count=exact", Range: "0-0" }
+  });
+  if (!response.ok) {
+    return null;
+  }
+  const total = response.headers.get("content-range")?.split("/")[1];
+  const parsed = Number(total);
+  return total && Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * A politician's published clips, newest debate first.
+ *
+ * Ordered by `debate_date`, not `published_at`: on a person's page the question
+ * is when they said it, not when the pipeline got round to encoding it. The
+ * same distinction `Q-4` makes for ranking.
+ */
+export async function loadClipsForPolitician(
+  politicianId: string,
+  limit = 60
+): Promise<ClipItem[]> {
+  if (!supabaseConfigured) {
+    return [];
+  }
+  return readClips(
+    new URLSearchParams({
+      select: clipSelect(),
+      "speeches.politician_id": `eq.${politicianId}`,
+      published_at: "not.is.null",
+      moderation: "neq.rejected",
+      order: "published_at.desc",
+      limit: String(limit)
+    })
+  );
+}
+
+/**
+ * Clips by id, for the saved archive.
+ *
+ * Returned in the caller's order rather than the database's, so the archive
+ * reads newest-saved-first instead of by primary key. Ids that no longer exist
+ * are simply absent — a clip pulled from the catalogue should vanish from the
+ * archive, not render as a broken player.
+ */
+export async function loadClipsByIds(ids: string[]): Promise<ClipItem[]> {
+  if (!supabaseConfigured || ids.length === 0) {
+    return [];
+  }
+  const clips = await readClips(
+    new URLSearchParams({
+      select: clipSelect(),
+      id: `in.(${ids.join(",")})`,
+      published_at: "not.is.null",
+      moderation: "neq.rejected",
+      limit: String(ids.length)
+    })
+  );
+  const byId = new Map(clips.map((clip) => [clip.id, clip]));
+  return ids.map((id) => byId.get(id)).filter((clip): clip is ClipItem => clip !== undefined);
+}
+
 function mapClip(row: RawClip, index: number): ClipItem {
   const speech = first(row.speeches);
   const source = first(speech?.sources ?? null);
+  const politician = first(speech?.politicians ?? null);
   const speakerName = speech?.speaker_name?.trim() || "Riksdagen";
-  const party = normalizeParty(speech?.party);
+  // The politician row wins for party when it has one: `speeches.party` is what
+  // Riksdagen printed on that particular speech, while the politician row is the
+  // person's current affiliation.
+  const party = normalizeParty(politician?.party ?? speech?.party);
 
   return {
     id: row.id,
     speechId: row.speech_id,
+    // Null for the ~0.6% of clips whose speaker Riksdagen's `anforandelista`
+    // gives no `intressent_id` — ministers who are not sitting MPs. Callers must
+    // treat null as "not followable", never fall back to a name (Q-2).
+    politicianId: speech?.politician_id ?? null,
+    politicianName: politician?.name?.trim() || null,
+    politicianRole: politician?.role?.trim() || null,
     speakerName,
     party,
     anforandetyp: speech?.anforandetyp ?? "",

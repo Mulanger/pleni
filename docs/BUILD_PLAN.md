@@ -440,6 +440,142 @@ schema may be built in parallel — see the note in ADR 007.
 
 ---
 
+## Q2 — Stable politician identity in the feed DTO
+
+**Depends on:** C11 (the `politicians` table and its `intressent_id` upsert key).
+**Blocks:** F1's private-schema key design, `C-9`, `F3`. **Size:** small.
+
+**Objective.** Give the feed a person identity that survives a job title, so
+follows and preferences are keyed on something that does not move.
+Prerequisite `Q-2`, a GATE.
+
+**Why now, and why before F1.** `speeches.politician_id` has existed since
+migration 001 and the frontend has never read it. `personForClip()` builds
+identity by stripping `(…)` and four hardcoded title prefixes —
+`Justitieministern|Statsministern|Ministern|Ledamoten`, which are exactly the
+ones that appeared in the 16-clip HD10540 batch it was written against — then
+slugifying whatever is left. Every other ministerial title falls through
+untouched. Measured against the live catalogue on 2026-08-04:
+
+| | |
+|---|---|
+| Real politicians with clips | 165 |
+| Distinct identities the UI renders | 171 |
+| Politicians split across two identities | 5 |
+| Clips affected | **380, or 21.6% of the catalogue** |
+
+The five are the five most-clipped ministers — Andreas Carlson (151 clips),
+Anna Tenje (82), Benjamin Dousa (55), Elisabet Lann (49), Erik Slottner (43) —
+because a minister is precisely the person whose display name carries a title.
+This is not a future risk from a title change; a fifth of the catalogue is
+already mis-keyed, concentrated on the highest-volume speakers.
+
+`politicians.intressent_id` is `unique` and is the `on conflict` target of the
+C11 upsert, so `politicians.id` is stable across a title change: the row's
+`name` and `role` update in place and the uuid does not move. That is the
+property `Q-2` needs and it is already true in the database.
+
+**Scope — may create or modify:**
+
+```
+web/src/supabase.ts        (select + mapClip only)
+web/src/types.ts           (ClipItem identity fields)
+web/src/App.tsx            (person identity, follow keying, profile derivation)
+web/src/data.ts            (sample clips carry ids; PEOPLE becomes sample-only)
+```
+
+**Scope — must not touch:** `src/contracts.py`, any `src/**`, any
+`migrations/*` (no schema change is needed — `politicians_public_read` is
+`using (true)` and migration 004 grants `select` to `anon`), the consent and
+onboarding flow, `tests/fixtures/golden/*`.
+
+**Build.** `clips` gains an embedded `politicians` row through the existing
+`speeches.politician_id` foreign key. `ClipItem` carries `politicianId` plus
+the canonical name/party/role from that row. `PersonProfile.id` becomes the
+politician uuid, follows key on it, and `personForClip()` stops matching on
+names entirely.
+
+**The unlinked case is deliberate.** 10 clips (0.57%) across 2 people have no
+`politician_id` — ministers who are not sitting MPs, whom Riksdagen's
+`anforandelista` omits. They get `politicianId: null` and a **disabled follow
+control**, not a name-derived fallback. A name-keyed follow would silently
+detach the day the `intressent_id` is recovered, and the user's follow list
+would rot invisibly. Refusing to record a follow we cannot keep is the honest
+failure. Recovering those ids is its own chunk — name matching can misattribute
+a statement in political content.
+
+**Acceptance:** the feed DTO carries `politicianId`; the 5 split ministers each
+resolve to exactly one identity; following a minister from a clip where the
+title is present and unfollowing from one where it is absent are the same
+follow; a clip with no `politician_id` renders normally with the follow control
+disabled; `tsc --noEmit` and `vite build` green.
+
+---
+
+## UI1 — Navigation tabs on real data
+
+**Depends on:** Q2 (a stable person key to hang follows on). **Size:** medium.
+
+**Objective.** Make Sök, Följer, Profil and the person page work against the
+1,762-clip catalogue instead of demo arrays, and make a follow or a save
+survive a reload.
+
+**Why it is not F1.** `C-9` wants follows persisted *server-side*, which needs
+the `private` schema, the consent ledger and the F0 documents — all open GATEs.
+This chunk stops short of that line deliberately: everything is device-local,
+written by exactly one module, and nothing is transmitted. That is the same
+position `onboarding-store.ts` already occupies and the same reasoning
+(`C-5` permits local; `C-1`/`C-2`/`C-6` gate the server). When F1 lands, the
+ledger becomes the source of truth and this store becomes its cache.
+
+**Scope — may create or modify:**
+
+```
+web/src/library-store.ts   (new — device-local follows, saves, likes)
+web/src/supabase.ts        (politician search, per-politician and by-id clip reads)
+web/src/types.ts           (Politician + LibraryState DTOs)
+web/src/App.tsx            (Sök, Följer, Profil, PersonScreen, scoped feed)
+web/src/styles.css         (clip grid and list surfaces)
+```
+
+**Scope — must not touch:** `src/**`, `migrations/*` (none needed — every query
+below was verified against the live project on the publishable key alone),
+`web/src/onboarding*.{ts,tsx}` and the consent flow (F1), feed ordering.
+
+**Build.**
+
+*Reads.* `searchPoliticians()` over `public.politicians` with an `ilike` name
+match and a party filter; `loadPoliticiansByIds()` to resolve a follow list
+whose people may not be in the current feed; `loadClipsForPolitician()` using a
+`speeches!inner(...)` join filter; `countClipsForPolitician()` reading the exact
+total from `Content-Range` with `Prefer: count=exact`; `loadClipsByIds()` for
+the saved archive.
+
+*Store.* `library-store.ts` is the single writer for followed politicians,
+followed parties, saved clips and liked clips. Follows are keyed on
+`politicians.id` (`Q-2`), never a name.
+
+*Scoped feed.* One mechanism serves both "this politician's videos" and "my
+saved clips": a collection overlay that renders the existing `FeedScreen` over
+a supplied clip array, so the player, the FE-4 dwell activation and the FE-3
+loop instrumentation are reused rather than duplicated.
+
+**A followed politician is Article 9 data.** A list of politicians a person
+chose to follow reveals political opinion as surely as the onboarding leaning
+slider does. It stays on the device, it is never put in a URL or a log
+(`C-13`), and the Profil copy says where it lives.
+
+**Demo data that stays, by owner's decision:** `TRENDING` and the recent-search
+chips in Sök. Kept as a reminder of what to build, and labelled in the UI so
+nobody reads them as real figures.
+
+**Acceptance:** searching a surname finds that politician and opens their page;
+their page lists their real clips and their real total; tapping one plays it;
+following adds them to Följer and survives a reload; saving a clip puts it in
+the saved archive and survives a reload; `tsc --noEmit` and `vite build` green.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.
@@ -452,8 +588,8 @@ personal is persisted before consent exists.
 **Scope — may create or modify:**
 
 ```
-migrations/004_private_schema.{up,down}.sql
-migrations/005_consent_ledger.{up,down}.sql
+migrations/009_private_schema.{up,down}.sql
+migrations/010_consent_ledger.{up,down}.sql
 supabase/functions/_shared/{jwt.ts,consent.ts,cors.ts,db.ts}
 supabase/functions/consent/index.ts
 supabase/functions/clerk-webhook/index.ts
@@ -471,6 +607,12 @@ tasks.py                  (Deno targets, O-4)
 **Scope — must not touch:** `src/contracts.py`, any `src/stages/*`, any
 `src/{asr,camera,candidates,features,media,render,scoring,segment,vision}/*`,
 `migrations/001_publish_schema.*`, `tests/fixtures/golden/*`.
+
+> **Migration numbers corrected 2026-08-04.** This entry originally scoped
+> `004_private_schema` and `005_consent_ledger`. Both numbers were already taken
+> and applied (`004_revoke_default_table_grants`, `005_fix_auth_probe_role_columns`)
+> and the tree is at `008`, so F1 starts at `009`. Reusing an applied number
+> would have failed the `schema_migrations` checksum check on the first run.
 
 **Build.**
 

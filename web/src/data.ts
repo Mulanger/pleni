@@ -12,6 +12,19 @@ export const PARTIES: Record<PartyCode, PartyProfile> = {
   NONE: { abbr: "NONE", name: "Partilös", short: "Partilös", color: "#8f8f87", clips: 0 }
 };
 
+/**
+ * DEAD as of `Q-2` (2026-08-04) — no longer imported anywhere.
+ *
+ * These six profiles used to seed the people list unconditionally, and
+ * `personForClip()` matched real clips against them **by name**. A genuine
+ * Gunnar Strömmer clip therefore rendered "16 800 följare" and "112 klipp" as
+ * fact on a real politician's page. Person identity now comes from
+ * `public.politicians.id`, so nothing reaches these rows.
+ *
+ * Left in place rather than deleted because that is a product call about demo
+ * mode, not a Q-2 one. If demo mode keeps them, the fabricated `followers`,
+ * `clips` and `speeches` figures must go first (FE-2).
+ */
 export const PEOPLE: PersonProfile[] = [
   {
     id: "gunnar-strommer",
@@ -95,6 +108,16 @@ export const TRENDING = [
   { n: "5", title: "Vårdköerna", meta: "71 klipp · 24 talare", up: "+4%" }
 ];
 
+/**
+ * DEAD as of `Q-2` (2026-08-04) — no longer imported anywhere.
+ *
+ * This six-item array was rendered on **every** politician's profile, invented
+ * view counts included ("48 t"), regardless of who the person was. Showing
+ * fabricated engagement figures under a verified real identity is exactly what
+ * FE-2 exists to prevent, so the grid came out with the identity change. The
+ * honest replacement is that person's real clips, which needs a per-politician
+ * query the app does not have yet.
+ */
 export const PERSON_CLIPS = [
   { date: "3 jun", views: "48 t", dur: "0:44" },
   { date: "3 jun", views: "31 t", dur: "0:55" },
@@ -107,10 +130,22 @@ export const PERSON_CLIPS = [
 const sourceUrl =
   "https://www.riksdagen.se/sv/webb-tv/video/interpellationsdebatt/lokal-polisnarvaro-och-fler-polisstationer_hd10540/";
 
+/**
+ * Demo feed, opt-in behind `VITE_ALLOW_SAMPLE_CLIPS` (FE-1).
+ *
+ * `politicianId` carries a `demo-politician-…` prefix rather than the real
+ * `public.politicians.id` uuid these speakers have. Two reasons: a demo row
+ * must never be mistaken for a catalogue row if one leaks into a follow map,
+ * and hardcoding a live uuid here would rot silently the day the row is
+ * recreated. The prefix cannot collide with a uuid.
+ */
 export const SAMPLE_CLIPS: ClipItem[] = [
   {
     id: "HD10540_e0bb9ba6-5d6e-f111-bf27-6805cafeabf9_c02",
     speechId: "HD10540_e0bb9ba6-5d6e-f111-bf27-6805cafeabf9",
+    politicianId: "demo-politician-gunnar-strommer",
+    politicianName: "Justitieministern Gunnar Strömmer (M)",
+    politicianRole: "minister",
     speakerName: "Gunnar Strömmer",
     party: "M",
     anforandetyp: "Svar",
@@ -133,6 +168,9 @@ export const SAMPLE_CLIPS: ClipItem[] = [
   {
     id: "HD10540_e0bb9ba6-5d6e-f111-bf27-6805cafeabf9_c01",
     speechId: "HD10540_e0bb9ba6-5d6e-f111-bf27-6805cafeabf9",
+    politicianId: "demo-politician-gunnar-strommer",
+    politicianName: "Justitieministern Gunnar Strömmer (M)",
+    politicianRole: "minister",
     speakerName: "Gunnar Strömmer",
     party: "M",
     anforandetyp: "Svar",
@@ -155,6 +193,9 @@ export const SAMPLE_CLIPS: ClipItem[] = [
   {
     id: "HD10540_e3bb9ba6-5d6e-f111-bf27-6805cafeabf9_c01",
     speechId: "HD10540_e3bb9ba6-5d6e-f111-bf27-6805cafeabf9",
+    politicianId: "demo-politician-mathias-tegner",
+    politicianName: "Mathias Tegnér (S)",
+    politicianRole: "ledamot",
     speakerName: "Mathias Tegnér",
     party: "S",
     anforandetyp: "Anförande",
@@ -177,6 +218,9 @@ export const SAMPLE_CLIPS: ClipItem[] = [
   {
     id: "HD10540_e4bb9ba6-5d6e-f111-bf27-6805cafeabf9_c02",
     speechId: "HD10540_e4bb9ba6-5d6e-f111-bf27-6805cafeabf9",
+    politicianId: "demo-politician-gunnar-strommer",
+    politicianName: "Justitieministern Gunnar Strömmer (M)",
+    politicianRole: "minister",
     speakerName: "Gunnar Strömmer",
     party: "M",
     anforandetyp: "Svar",

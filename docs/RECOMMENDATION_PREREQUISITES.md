@@ -508,10 +508,20 @@ training data, so they must change *before* telemetry is switched on, not after.
       pools or a 5/2/2/1 mix. Define the minimum viable catalogue (parties covered, speakers,
       debate dates, clips per party) before `För dig` is anything but a shuffle. This is
       gated on `P1`, and it is the single slowest prerequisite.
-- [ ] **Q-2 · GATE — Expose `politician_id` in the feed DTO.** `speeches.politician_id` exists in
-      the schema but the frontend derives person identity from a display name. Follows and
-      preferences keyed on a name slug break the moment a title changes
-      ("Justitieministern Gunnar Strömmer (M)" → "Gunnar Strömmer (M)").
+- [x] **Q-2 · DONE 2026-08-04 — Expose `politician_id` in the feed DTO.** `speeches.politician_id`
+      existed in the schema since migration 001 and the frontend had never read it; person
+      identity came from a slugified display name.
+      **It had already broken, not "would break".** `cleanName()` stripped only four hardcoded
+      title prefixes — the set present in the 16-clip HD10540 batch it was written against — so
+      165 real politicians rendered as **171 identities**, with the five most-clipped ministers
+      split in two each: **380 clips, 21.6% of the catalogue.**
+      `ClipItem` now carries `politicianId` (`public.politicians.id`) and follows key on it.
+      No migration was needed: `intressent_id` is the `on conflict` target so the uuid is stable
+      across a title change, and `anon` already had `select`.
+      *Accept:* verified live — one follow on an Anna Tenje clip flips all 9 of her clips and
+      none of the other 51; every identity in a 60-clip page is a uuid; an unlinked speaker
+      (10 clips, 0.57%) gets inert follow/profile controls rather than a name fallback.
+      See `PROGRESS.md`, "Q2 — Stable politician identity in the feed DTO".
 - [ ] **Q-3 — Calibrated quality prior.** Do not compare raw C7 `final_score` across speeches —
       C7 z-scores within a speech by design. Start with the publish gate, `rank_in_speech`,
       absolute framing/comprehensibility features and a percentile calibrated per

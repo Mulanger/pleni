@@ -26,6 +26,42 @@ export interface OnboardingState {
   completedAt: string | null;
 }
 
+/**
+ * A row from `public.politicians` — the app's canonical person record.
+ *
+ * `id` is the same stable uuid `ClipItem.politicianId` carries (`Q-2`).
+ * `clipCount` is the exact published total from `Content-Range`, or `null`
+ * when it has not been fetched; `null` renders as absent rather than as `0`,
+ * because "we have not counted" and "they have no clips" are different facts.
+ */
+export interface Politician {
+  id: string;
+  name: string;
+  party: PartyCode;
+  role: string;
+  clipCount: number | null;
+}
+
+/**
+ * Everything the viewer has chosen to keep: follows, saves, likes.
+ *
+ * **Device-local, and deliberately so.** A list of politicians someone follows
+ * reveals political opinion just as the onboarding leaning slider does, so it
+ * is Article 9 special-category data. `library-store.ts` is the only writer and
+ * nothing here is transmitted until `F1` provides a lawful place to put it —
+ * `C-1` (private schema), `C-2` (consent ledger) and `C-6` (server enforcement)
+ * are open GATEs.
+ *
+ * Politicians are keyed by `politicians.id` and never by a display name
+ * (`Q-2`); clips by `clips.id`.
+ */
+export interface LibraryState {
+  followedPoliticians: string[];
+  followedParties: PartyCode[];
+  savedClips: string[];
+  likedClips: string[];
+}
+
 export interface PartyProfile {
   abbr: PartyCode;
   name: string;
@@ -50,6 +86,27 @@ export interface PersonProfile {
 export interface ClipItem {
   id: string;
   speechId: string;
+  /**
+   * Stable identity of the speaker — `public.politicians.id` (`Q-2`, a GATE).
+   *
+   * Everything that outlives a session keys on this and never on the display
+   * name. The row is upserted `on conflict (intressent_id)`, so a minister who
+   * changes portfolio keeps the same uuid while their name and role update in
+   * place. The old name-slug scheme split the five most-clipped ministers into
+   * two identities each — 380 clips, 21.6% of the catalogue, measured
+   * 2026-08-04 — because it stripped only four hardcoded title prefixes.
+   *
+   * `null` when Riksdagen's `anforandelista` supplied no `intressent_id`,
+   * which today means a minister who is not a sitting MP. A null speaker is
+   * **not followable**: falling back to a name would record a follow that
+   * silently detaches the day the id is recovered.
+   */
+  politicianId: string | null;
+  /** Riksdagen's current display name for that politician; may carry a title. */
+  politicianName: string | null;
+  /** `ledamot`, `minister`, … from the politician row. Null when unlinked. */
+  politicianRole: string | null;
+  /** The name as printed on *this* speech. Display only — never an identity. */
   speakerName: string;
   party: PartyCode;
   anforandetyp: string;
