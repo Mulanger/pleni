@@ -102,7 +102,7 @@ export function Onboarding({
           <div className="onboarding-badge">
             <Sparkles size={28} />
           </div>
-          <h2>Välkommen till Kammaren</h2>
+          <h2>Välkommen till Pleni</h2>
           <p>
             {consent.personal
               ? "Ditt flöde anpassas efter dina val. Du kan stänga av det när som helst under Profil."

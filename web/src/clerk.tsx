@@ -3,7 +3,7 @@ import { ClerkProvider } from "@clerk/react";
 import { svSE } from "@clerk/localizations";
 
 /**
- * Clerk configuration for the Riket TV mobile app.
+ * Clerk configuration for the Pleni mobile app.
  *
  * The publishable key is public by design and is the only Clerk credential that
  * may appear in a Vite build. The secret key belongs to server-side code only —
@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   if (!clerkEnabled) {
     if (import.meta.env.DEV) {
       console.warn(
-        "[riket] VITE_CLERK_PUBLISHABLE_KEY is not set — running without authentication."
+        "[pleni] VITE_CLERK_PUBLISHABLE_KEY is not set — running without authentication."
       );
     }
     return <>{children}</>;

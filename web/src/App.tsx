@@ -330,7 +330,7 @@ function App() {
           }}
         />
       )}
-      <main className="mobile-app" aria-label="Riket TV">
+      <main className="mobile-app" aria-label="Pleni">
         {collection ? (
           <CollectionScreen
             collection={collection}
@@ -418,7 +418,7 @@ function WideScreenMessage() {
   return (
     <section className="wide-message">
       <div className="wide-panel">
-        <div className="wide-kicker">Riket TV</div>
+        <div className="wide-kicker">Pleni</div>
         <h1>Öppna appen på en mobilskärm.</h1>
         <p>Den första versionen är byggd för en fullskärms 9:16-feed. Surfa från mobilen för hela upplevelsen.</p>
       </div>
@@ -1404,7 +1404,7 @@ function ProfileScreen({
             <AuthDiagnostics />
           </Show>
         )}
-        <div className="version">Kammaren 1.0 · data från riksdagen.se</div>
+        <div className="version">Pleni 1.0 · data från riksdagen.se</div>
       </div>
     </section>
   );
