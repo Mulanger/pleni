@@ -1912,3 +1912,85 @@ a label is what separates a mockup from a claim, and this is political content.
 - The scoped-feed mechanism (`ClipCollection` + `CollectionScreen`) is the
   place to hang any future "clips from this debate" or "clips you liked" view.
   It costs one state field and no new player.
+
+## A-2 — pleni.se live, and the rename to Pleni — DONE 2026-08-05
+
+**The project is now Pleni.** `https://pleni.se` and `https://www.pleni.se` both
+serve the app over HTTPS with valid certificates. `A-2`, open and blocking since
+2026-08-02, is **closed**.
+
+### Domain
+
+Registration had **failed** at Simply.com and nobody had noticed: the product
+page said "Registrering av pleni.se misslyckades" while the hosting product
+looked healthy, and `a.ns.se` returned NXDOMAIN. Cause was a missing
+`Företagsnamn` on the account — `.se`/IIS rejects registrations without valid
+registrant data. Owner fixed the account, retry succeeded, expiry 2027-08-04.
+
+Zone at Simply (ns1/ns2/ns3.simply.com), 12 records:
+
+| Type | Name | Value |
+|---|---|---|
+| ALIAS | pleni.se | rikettv.nbg1-3.instapods.app |
+| CNAME | www | rikettv.nbg1-3.instapods.app |
+| TXT | _instapods | InstaPods apex ownership token |
+
+Simply supports **ALIAS**, so the apex needs no hardcoded pod IP — both names
+follow the pod hostname and survive an InstaPods IP change. Deleted the two
+stock `A → 94.231.103.86` records and the `*` wildcard. All mail records (MX,
+SPF, DKIM x2, DMARC, 3x SRV, autoconfig) untouched and verified after each
+delete. InstaPods → Domains: apex **active, SSL active**; `www` shows *pending*
+but returns 200 with a valid cert, so that flag is stale.
+
+### Rename
+
+| Where | Was | Now |
+|---|---|---|
+| GitHub repo | `Mulanger/riketTV` | **`Mulanger/pleni`** (old URL 301s) |
+| Clerk workspace | RiketTV | **Pleni** |
+| Clerk application | Riket | **Pleni** |
+| Supabase project | Mulanger's Project | **Pleni** |
+| UI strings | Riket TV / Kammaren | **Pleni** |
+
+Two user-visible strings said **"Kammaren"**, not "Riket" — an older name in the
+onboarding heading and the version footer. A grep for "riket" misses them.
+
+**Deliberately NOT renamed** — see `docs/RENAME_TO_PLENI.md` for the evidence:
+
+- **Bunny zone `riketnlooigm`.** Verified live: all 1,762 clips *and* all 1,762
+  thumbnails carry absolute URLs on that host. 3,524 URLs, no redirect.
+  Renaming 404s the whole catalogue.
+- **InstaPods pod `rikettv`.** Its hostname is the ALIAS/CNAME target.
+- **`RIKET_` env prefix** (`src/config.py:19`). One line, but every `.env`, CI
+  secret and the InstaPods env panel must change in the same commit.
+- **localStorage keys `riket.library.v1` / `riket.onboarding.v1`.** They hold
+  every viewer's follows, saves, likes and consent answers. Renaming a key
+  orphans the data — silently wiping the library and resetting consent to off.
+  The `.v1` is a version, not a brand.
+
+**Verified after the GitHub rename:** auto-deploy still fires. Commit `fbd1fa0`
+deployed on push *after* the rename. InstaPods still stores the old clone URL
+`.../riketTV.git` and works via GitHub's redirect — left alone deliberately,
+because reconnecting a working pipeline gains nothing. It only breaks if
+someone recreates a repo at `Mulanger/riketTV`.
+
+**Blocked / needs a decision:**
+- `P0-9` — five credentials in chat transcripts: Supabase access token,
+  Supabase secret key, DeepSeek key, Bunny storage password, rotated Bunny
+  password. Open since 2026-08-02. Still the only live risk in the list.
+
+**Next agent should know:**
+- Verify delegation with `nslookup -type=NS pleni.se a.ns.se`, never a public
+  resolver alone — a registered-but-unpublished domain reads NXDOMAIN
+  everywhere and Simply then falsely warns "domain does not point to Simply
+  nameservers".
+- The Simply DNS UI resists automation: coordinate clicks need
+  `scale = 1568 / window.innerWidth`, the first submit click is routinely
+  swallowed, delete buttons use a `data-confirm-question` interceptor that
+  ignores synthetic `.click()`, record **type is immutable** (delete + re-add),
+  and a direct GET to a state-changing URL bounces to login. Clicking by
+  element `ref` is the most reliable path.
+- **Clerk production instance is now unblocked** and is the rest of `A-2`. It
+  needs new CNAMEs on pleni.se, a new `VITE_CLERK_PUBLISHABLE_KEY` in the
+  InstaPods env panel, and a **second** Supabase third-party auth entry — an
+  addition, not an edit, since dev and prod have different domains.
