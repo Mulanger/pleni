@@ -22,6 +22,7 @@ This file is the source of truth for chunk status and handoff notes.
 | C11 - Publish | DONE | Completed 2026-08-02 |
 | C12 - Orchestration | TODO | Depends on C11 |
 | C13 - Observability & runbook | TODO | Depends on C12 |
+| UI2 - Feed swipe & autoplay | DONE | Completed 2026-08-06 |
 
 ## C0 - Foundations - DONE 2026-08-01
 
@@ -1994,3 +1995,151 @@ someone recreates a repo at `Mulanger/riketTV`.
   needs new CNAMEs on pleni.se, a new `VITE_CLERK_PUBLISHABLE_KEY` in the
   InstaPods env panel, and a **second** Supabase third-party auth entry — an
   addition, not an edit, since dev and prod have different domains.
+
+## UI2 — One clip per swipe, and a feed that plays on arrival — DONE 2026-08-06
+
+**Built:** snap and sizing rules in `web/src/styles.css`; muted-fallback autoplay,
+tap-to-unmute and `VIDEO_WINDOW`/`POSTER_WINDOW` source windowing in
+`web/src/App.tsx`; player-behavior bullets in `AGENTS.md`.
+**Tests:** `python tasks.py test lint typecheck` green — **274 passed**, 67
+deselected, 1 pre-existing `audioop` warning; ruff clean; mypy strict clean on 74
+files. No Python was touched, so that count is unchanged by this chunk.
+`tsc --noEmit` green; `vite build` green (426.13 kB, 122.95 kB gzipped).
+**Contracts touched:** none.
+
+### The reported bug was one missing declaration
+
+A swipe jumped two or three clips, on phone *and* on desktop. The feed is pure
+CSS scroll-snap — no swipe library, no JS scroll or touch handler anywhere in
+`web/src/` — so the behaviour came down to what `.feed-item` declared.
+
+`scroll-snap-stop` was absent, which defaults to `normal`, and `normal`
+**explicitly permits a fling to pass over snap points**: the browser runs its
+usual momentum physics and snaps to whatever is nearest when the fling stops.
+Three clips of momentum lands three clips away. `always` forbids passing a snap
+point at any gesture velocity, and is the same fix for desktop wheel momentum.
+
+Two compounding faults fixed in the same rule:
+
+- **`.feed-item` was sized in `dvh`/`svh`.** `dvh` changes *while you scroll* as
+  the mobile URL bar collapses; container and items resize together mid-fling,
+  every snap point moves, and `mandatory` re-targets. It is now `height: 100%`
+  of `.feed-scroll`, which is `inset: 0` and therefore has a definite height, so
+  an item can no longer disagree with its scroller. Verified: all 60 items
+  measure 812 px against a 812 px scroller, one distinct height.
+- **No `overscroll-behavior`.** Added `contain`, so an overscroll cannot chain to
+  the document or trigger Android Chrome's pull-to-refresh mid-swipe.
+- `min-height: 680px` was dead (overridden to `0` 1,160 lines later) and is gone.
+
+### Nothing autoplayed, and that was by design
+
+`muted` initialises to `false`, so the first `play()` was an **unmuted** autoplay.
+Every modern browser refuses that until the origin has earned a user gesture. The
+FE-5 path caught the rejection and rendered the centre play button — working
+exactly as written, but the written outcome is "a frozen poster until you tap",
+which is the wrong default for a short-form feed.
+
+`playWithMutedFallback()` now retries muted before concluding anything. This
+**sharpens FE-5 rather than weakening it**: `blocked` stops meaning "audio was
+refused", which is routine and happens on nearly every cold load, and starts
+meaning "playback itself was refused", which is rare and is the only case where a
+centre play button is the right answer.
+
+The first tap after an automatic mute turns audio on instead of pausing — on this
+feed a tap means "let me hear it" far more often than "stop". `autoMutedRef`
+exists so that shortcut can only ever undo *our* mute; a mute the viewer chose
+from the mute control is theirs and stays put.
+
+### Measured, not assumed: 119 CDN requests per feed load
+
+Every one of the 60 rows mounted with its Bunny URL and `preload="metadata"`, so
+a cold load opened **119** requests to one CDN host against a browser cap of
+about six connections. The clip being watched queued behind metadata and posters
+for clips nobody would reach.
+
+| | Before | After |
+|---|---|---|
+| CDN requests on a cold load | **119** | **5** |
+| MP4 | 59 | 1 |
+| WebP posters | 60 | 4 |
+| Last CDN response finished | 2,796 ms | 966 ms |
+
+**How the baseline was taken.** It is not an inference from reading the code:
+both constants were temporarily set to `999` to reproduce the pre-change state,
+the page reloaded, and `performance.getEntriesByType('resource')` counted. Repeat
+that if either window is ever tuned. The first draft of this entry claimed a
+before-figure of 61, which was the *mid-change* state — the video window was
+already in when that reading was taken — and it understated the problem by half.
+
+The request counts are deterministic and follow from the code. The two timings
+are single observations on one machine against the live CDN, so treat them as
+indicative rather than a benchmark.
+
+`VIDEO_WINDOW = 1`, `POSTER_WINDOW = 3`. The window is centred on the active
+clip, so whichever clip you swipe to already had its `src` as a neighbour and
+does not wait on the 180 ms FE-4 dwell before it starts fetching. The wider
+poster window is safe *only because* `scroll-snap-stop` now caps a gesture at one
+clip — the window cannot be outrun by a single swipe.
+
+### Verified in the browser at 375x812, against the live catalogue
+
+| Check | Result |
+|---|---|
+| Single wheel fling | index 0 → **1**, `scrollTop` 812, remainder **0** |
+| Fling up | index 3 → **2**, remainder 0 |
+| 3x-repeat hard fling | 1 → 3, i.e. **never more than one per gesture** |
+| `scrollSnapStop` computed | `always` |
+| Item vs scroller height | 812 / 812, one distinct item height across all 60 |
+| Autoplay on load | starts on its own, `readyState` 4, **no centre play button** |
+| Autoplay with unmuted `play()` forced to reject | **plays muted**, button reads `Slå på ljud`, no play button |
+| First tap after that | audio **on**, still playing |
+| Second tap | pauses, as before |
+| Deep link (person grid tile 5) | lands on that exact clip, remainder 0, `src` window `[3,4,5]` |
+| Console errors / nested buttons | **0 / 0** |
+
+The muted-fallback row is the one that needed a trick: this desktop browser
+permits unmuted autoplay, so the branch never ran. Patching
+`HTMLMediaElement.prototype.play` to reject any unmuted call reproduces mobile
+policy exactly and exercises the real code path.
+
+**What the browser pane cannot show is sustained playback.** `document.hasFocus()`
+is false in that surface even straight after a synthetic click, and the browser
+suspends media in an unfocused tab: every newly-activated clip advanced from 0 to
+about 2 s and then froze, with `readyState` 4, `ended` false and `networkState`
+idle. So "autoplay starts without a tap" is proven — `play()` is not refused and
+the centre button never appears — while "it keeps running" is not observable
+here. Pre-existing behaviour, unrelated to this chunk, but worth knowing before
+someone reads a frozen `currentTime` as a regression.
+
+**Observations (not fixed, out of scope):**
+- A clip that leaves the `src` window keeps whatever it already buffered —
+  removing the `src` attribute does not reset a media element. It is paused, so
+  it is not competing for bandwidth, and it makes scrolling back instant. Truly
+  releasing it would need `removeAttribute('src')` + `load()`.
+- `transferSize` is 0 for every Bunny resource because the CDN sends no
+  `Timing-Allow-Origin`. Request *counts* and timings are measurable from the
+  page; byte totals are not. Worth adding that header if bandwidth ever needs
+  attributing from the client.
+- `PARTIES[].clips` in `data.ts` is still fabricated and still rendered. Same
+  FE-2 family, carried since Q2.
+- **The chunk table at the top of this file still lists C12 and C13 as `TODO`**,
+  but both have full handoff entries below dated 2026-08-03 and C12b is recorded
+  as complete. Left as-is rather than corrected in passing (rule 2); it reads as
+  the largest remaining work when in fact P1 is closed, so it is worth a one-word
+  fix by whoever owns the ledger next.
+
+**Blocked / needs a decision:**
+- `P0-9` — five credentials in chat transcripts: Supabase access token, Supabase
+  secret key, DeepSeek key, Bunny storage password, rotated Bunny password. Open
+  since 2026-08-02. Still the only live risk in the list.
+
+**Next agent should know:**
+- **`scroll-snap-stop: always` is load-bearing, not decoration.** If a future
+  change reintroduces multi-clip jumping, check that declaration and the item
+  height before reaching for a JS gesture handler. A touch-driven `scrollTo`
+  fallback was planned and deliberately not built — it fights the native
+  scroller and costs the momentum feel.
+- Verified on desktop Chromium only. `scroll-snap-stop` has a patchier history in
+  iOS Safari; confirm on a real iPhone at `https://pleni.se` before assuming the
+  phone half of the report is closed.
+- Anything added to the feed item that fetches must respect the windows.

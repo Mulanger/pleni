@@ -93,6 +93,37 @@ const IMPRESSION_VISIBLE_FRACTION = 0.72;
  */
 const ACTIVATION_DWELL_MS = 180;
 
+/**
+ * How many clips either side of the active one carry a `src`.
+ *
+ * Every clip used to mount with its Bunny URL and `preload="metadata"`, so a
+ * 60-row feed opened with 119 requests to one CDN host — 59 MP4 plus 60 posters
+ * — against a browser cap of about six connections. The active clip's video data
+ * queued behind metadata for clips the viewer might never reach, which is both
+ * the poster-sits-there delay on load and a good part of the scroll stutter.
+ * Measured by setting this constant and POSTER_WINDOW to 999 and reloading.
+ *
+ * One either side is enough: the window is centred on the active clip, so
+ * whichever clip you swipe to already had its `src` attached as a neighbour and
+ * does not wait on the FE-4 dwell before it starts fetching.
+ */
+const VIDEO_WINDOW = 1;
+
+/**
+ * How many clips either side of the active one carry a `poster`.
+ *
+ * Wider than VIDEO_WINDOW because a thumbnail is far cheaper than a video and
+ * it is what stands in for the clip until the first frame decodes — a poster
+ * that arrives late shows as a black card. Still bounded: measured on a cold
+ * load, all 60 posters together took 1,089 ms to finish and were competing with
+ * the active clip's MP4 for the same six connections to the CDN. Windowing both
+ * took the last CDN response from 2,796 ms to 966 ms.
+ *
+ * Safe at this width only because `scroll-snap-stop: always` now limits a
+ * gesture to one clip, so the window cannot be outrun by a single swipe.
+ */
+const POSTER_WINDOW = 3;
+
 function App() {
   const [tab, setTab] = useState<Tab>("hem");
   const [feedMode, setFeedMode] = useState<FeedMode>("fordig");
@@ -488,6 +519,12 @@ function FeedScreen({
    * means the distinction is observable from the day telemetry is switched on.
    */
   const loopCounts = useRef<Record<string, number>>({});
+  /**
+   * True when the mute is ours, not the viewer's — set when autoplay policy
+   * forced a muted fallback. Two things depend on knowing the difference: the
+   * next tap may undo our mute, and it must never undo theirs.
+   */
+  const autoMutedRef = useRef(false);
 
   useEffect(() => {
     // A collection opened from a grid starts on the clip that was tapped, not
@@ -515,6 +552,43 @@ function FeedScreen({
   }, [initialClipId, clips]);
 
   /**
+   * Autoplay policy refuses an unmuted `play()` until the origin has earned a
+   * user gesture, so a feed that opens unmuted opens frozen — which is what a
+   * short-form feed must never do. Fall back to muted, which policy does not
+   * refuse, instead of treating the refusal as the end of the attempt.
+   *
+   * This sharpens FE-5 rather than weakening it. `blocked` stops meaning "audio
+   * was refused", which is routine and happens on nearly every cold load, and
+   * starts meaning "playback itself was refused", which is rare and is the only
+   * case where a centre play button is the right answer.
+   */
+  const playWithMutedFallback = (clipId: string, video: HTMLVideoElement) => {
+    const succeeded = () => {
+      setPaused((state) => ({ ...state, [clipId]: false }));
+      setBlocked((state) => ({ ...state, [clipId]: false }));
+    };
+    const refused = () => {
+      setPaused((state) => ({ ...state, [clipId]: true }));
+      setBlocked((state) => ({ ...state, [clipId]: true }));
+    };
+
+    void video
+      .play()
+      .then(succeeded)
+      .catch(() => {
+        if (video.muted) {
+          // Already muted and still refused. That is a real block.
+          refused();
+          return;
+        }
+        video.muted = true;
+        autoMutedRef.current = true;
+        setMuted(true);
+        void video.play().then(succeeded).catch(refused);
+      });
+  };
+
+  /**
    * FE-3. Explicit loop rather than the `loop` attribute. The clip restarts
    * exactly as before; the difference is that the boundary is now a countable
    * event instead of an invisible seek to zero.
@@ -525,7 +599,7 @@ function FeedScreen({
       return;
     }
     video.currentTime = 0;
-    void video.play().catch(() => setBlocked((state) => ({ ...state, [clipId]: true })));
+    playWithMutedFallback(clipId, video);
   };
 
   useEffect(() => {
@@ -616,18 +690,7 @@ function FeedScreen({
       }
       video.muted = muted;
       if (clipId === activeId) {
-        video
-          .play()
-          .then(() => {
-            setPaused((state) => ({ ...state, [clipId]: false }));
-            setBlocked((state) => ({ ...state, [clipId]: false }));
-          })
-          .catch(() => {
-            // FE-5: browser policy refused unmuted autoplay. Record it as
-            // blocked, never as a pause the viewer chose.
-            setPaused((state) => ({ ...state, [clipId]: true }));
-            setBlocked((state) => ({ ...state, [clipId]: true }));
-          });
+        playWithMutedFallback(clipId, video);
       } else {
         video.pause();
       }
@@ -656,6 +719,15 @@ function FeedScreen({
   const toggleClipPlayback = (clipId: string) => {
     const video = videoRefs.current[clipId];
     if (!video || clipId !== activeId) {
+      return;
+    }
+    // The tap that follows an automatic mute is the gesture that unlocks audio.
+    // On a feed like this it means "let me hear it" far more often than "stop",
+    // so spend it on turning sound on. Only ever undoes a mute we applied — an
+    // explicit mute from the control below is the viewer's and stays put.
+    if (autoMutedRef.current && !video.paused) {
+      autoMutedRef.current = false;
+      setMuted(false);
       return;
     }
     if (video.paused) {
@@ -689,6 +761,11 @@ function FeedScreen({
     setCurrentTimes((state) => ({ ...state, [clipId]: nextTime }));
   };
 
+  // Centre of the `src` window. Falls back to the top of the list before the
+  // first activation, so a cold load still fetches the clip about to be seen.
+  const activeIndex = clips.findIndex((clip) => clip.id === activeId);
+  const windowCentre = activeIndex >= 0 ? activeIndex : 0;
+
   return (
     <section className="feed-screen">
       {header ?? (
@@ -716,7 +793,10 @@ function FeedScreen({
       )}
 
       <div className="feed-scroll">
-        {clips.map((clip) => {
+        {clips.map((clip, index) => {
+          const distanceFromActive = Math.abs(index - windowCentre);
+          const withinWindow = distanceFromActive <= VIDEO_WINDOW;
+          const withinPosterWindow = distanceFromActive <= POSTER_WINDOW;
           const person = personForClip(clip);
           const isLiked = !!liked[clip.id];
           const isSaved = !!saved[clip.id];
@@ -739,8 +819,13 @@ function FeedScreen({
                 ref={(node) => {
                   videoRefs.current[clip.id] = node;
                 }}
-                src={clip.videoUrl}
-                poster={clip.thumbUrl}
+                /* Only clips near the active one carry a source — see
+                   VIDEO_WINDOW. The rest render their poster and cost nothing.
+                   A clip that has left the window keeps whatever it already
+                   buffered, which makes scrolling back instant; it is paused,
+                   so it is not competing for bandwidth. */
+                src={withinWindow ? clip.videoUrl : undefined}
+                poster={withinPosterWindow ? clip.thumbUrl : undefined}
                 autoPlay={clip.id === activeId}
                 playsInline
                 muted={muted}
@@ -749,7 +834,7 @@ function FeedScreen({
                    costs two of the strongest positive signals. The clip still
                    loops — see onEnded — but the boundary is now an event we
                    can count. */
-                preload="metadata"
+                preload={clip.id === activeId ? "auto" : "metadata"}
                 onLoadedMetadata={(event) => {
                   const duration = event.currentTarget.duration;
                   setDurations((state) => ({
@@ -790,6 +875,9 @@ function FeedScreen({
                 aria-label={muted ? "Slå på ljud" : "Stäng av ljud"}
                 onClick={(event) => {
                   event.stopPropagation();
+                  // Whatever the viewer chooses here is theirs, so the
+                  // tap-to-unmute shortcut must not second-guess it later.
+                  autoMutedRef.current = false;
                   setMuted(!muted);
                 }}
               >

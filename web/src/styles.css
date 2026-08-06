@@ -107,15 +107,30 @@ a {
   inset: 0;
   overflow-y: auto;
   scroll-snap-type: y mandatory;
+  /* Keeps a fling inside the feed: without this, an overscroll at the top
+     chains to the document and can trigger Android Chrome's pull-to-refresh
+     mid-swipe. */
+  overscroll-behavior-y: contain;
   scrollbar-width: none;
 }
 
 .feed-item {
   position: relative;
-  height: 100dvh;
-  min-height: 680px;
+  /* Sized from the scroller, deliberately not from a viewport unit. `100dvh`
+     changes while you scroll as the mobile URL bar collapses; container and
+     items then resize together mid-fling, every snap point moves, and
+     `mandatory` re-targets — which reads as the feed jumping on its own.
+     `.feed-scroll` is `inset: 0`, so its height is definite and `100%`
+     resolves against it. An item can no longer disagree with its scroller. */
+  height: 100%;
   overflow: hidden;
   scroll-snap-align: start;
+  /* One clip per swipe. The default, `normal`, explicitly permits a fling to
+     pass over snap points — the browser runs its usual momentum physics and
+     snaps to whatever is nearest when it stops, so three clips of momentum
+     lands three clips away. `always` forbids passing a snap point at any
+     gesture velocity. This is also what tames desktop wheel/trackpad momentum. */
+  scroll-snap-stop: always;
   background:
     repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.032) 0 1px, transparent 1px 10px),
     linear-gradient(158deg, #f4f4f1 0%, #e6e6e2 55%, #dcdcd7 100%);
@@ -1280,15 +1295,12 @@ a {
 }
 
 .feed-item {
-  height: 100dvh;
-  min-height: 0;
   background: #050608;
   color: #fff;
 }
 
 @supports (height: 100svh) {
-  .mobile-app,
-  .feed-item {
+  .mobile-app {
     height: 100svh;
   }
 }

@@ -106,14 +106,30 @@ Last updated: 2026-08-02.
 ### Frontend app state
 
 - `web/` is a mobile-only React/Vite app. Widths `>=700px` intentionally show a "view on phone" gate.
-- The feed is a TikTok-style vertical scroll over published Bunny MP4s.
+- The feed is a TikTok-style vertical scroll over published Bunny MP4s. Snapping is
+  pure CSS — there is no swipe library and no JS scroll handler. `.feed-item` carries
+  `scroll-snap-stop: always`, which is what limits a fling to one clip; without it the
+  browser is allowed to sail past snap points and a hard swipe jumps two or three.
+  Item height is `100%` of `.feed-scroll` on purpose, never a viewport unit: `dvh`
+  changes mid-scroll as the mobile URL bar collapses, which moves every snap point.
 - Current player behavior:
-  - audio starts unmuted where browser policy allows it;
-  - if unmuted autoplay is blocked, the center play button appears;
-  - tapping the video surface toggles pause/play;
-  - center play button is visible only while paused/blocked;
+  - the active clip autoplays; audio starts unmuted where browser policy allows it,
+    and falls back to **muted playback** where it does not, rather than not playing;
+  - the first tap after such an automatic mute turns audio on instead of pausing;
+    a mute the viewer chose from the mute control is never undone this way;
+  - the center play button appears only if playback itself was refused — with the
+    muted fallback in place that is rare, and it no longer means "audio was refused";
+  - tapping the video surface otherwise toggles pause/play;
   - progress uses real `video.currentTime`/duration and supports scrubbing;
   - bottom nav is flush to the mobile viewport bottom.
+- Only clips near the active one carry a `src` (±1) or a `poster` (±3); see
+  `VIDEO_WINDOW` / `POSTER_WINDOW` in `web/src/App.tsx`. Mounting all 60 rows with
+  media cost **119** CDN requests per feed load against a ~6-connection-per-host cap,
+  so the clip being watched queued behind clips nobody reached; windowing takes that
+  to 5. Do not reintroduce an unconditional `src`/`poster` when adding to the feed
+  item. Bunny sends no `Timing-Allow-Origin`, so `transferSize` is 0 for every CDN
+  resource — request counts and timings are measurable from the page, byte totals
+  are not.
 - The frontend data layer is `web/src/supabase.ts`; do not bypass it with hardcoded Bunny URLs except for the fallback sample data.
 - In this Codex desktop environment, `npm run ...` scripts have previously failed due a local Bun remap issue. Prefer direct Node commands:
   - Typecheck: `node .\node_modules\typescript\bin\tsc --noEmit -p tsconfig.json`
