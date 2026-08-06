@@ -23,7 +23,25 @@ import type { LibraryState, PartyCode } from "./types";
  * slug (`Q-2`).
  */
 
-const KEY = "riket.library.v1";
+/**
+ * Storage key for one account's library.
+ *
+ * Scoped by Clerk user id, never a bare shared key. Two people using the same
+ * phone must not see each other's follows and saves, and a follow list reveals
+ * political opinion — leaking it to whoever signs in next is the same Article 9
+ * problem as sending it to a server without a lawful basis, just closer to home.
+ *
+ * The bare `riket.library.v1` is deliberately no longer written. It may still
+ * exist from before library actions required an account; nothing reads it, so
+ * an anonymous library cannot be silently adopted by the first account that
+ * signs in. Attributing follows to a person who never made them is worse than
+ * losing them.
+ */
+const KEY_PREFIX = "riket.library.v1";
+
+function keyFor(userId: string): string {
+  return `${KEY_PREFIX}:${userId}`;
+}
 
 export const EMPTY_LIBRARY: LibraryState = {
   followedPoliticians: [],
@@ -51,9 +69,12 @@ function stringList(value: unknown, limit: number): string[] {
   return [...seen];
 }
 
-export function readLibrary(): LibraryState {
+export function readLibrary(userId: string | null): LibraryState {
+  if (!userId) {
+    return EMPTY_LIBRARY;
+  }
   try {
-    const raw = window.localStorage.getItem(KEY);
+    const raw = window.localStorage.getItem(keyFor(userId));
     if (!raw) {
       return EMPTY_LIBRARY;
     }
@@ -84,17 +105,25 @@ export function readLibrary(): LibraryState {
   }
 }
 
-export function writeLibrary(state: LibraryState): void {
+export function writeLibrary(userId: string | null, state: LibraryState): void {
+  // No account, no write. This is the storage-level half of the gate: even if a
+  // caller forgot to check, an anonymous library cannot come into existence.
+  if (!userId) {
+    return;
+  }
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(state));
+    window.localStorage.setItem(keyFor(userId), JSON.stringify(state));
   } catch {
     // Non-fatal for the same reason.
   }
 }
 
-export function clearLibrary(): void {
+export function clearLibrary(userId: string | null): void {
+  if (!userId) {
+    return;
+  }
   try {
-    window.localStorage.removeItem(KEY);
+    window.localStorage.removeItem(keyFor(userId));
   } catch {
     // Non-fatal.
   }

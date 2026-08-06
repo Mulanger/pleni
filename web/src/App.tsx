@@ -33,7 +33,7 @@ import {
   useSession,
   useUser
 } from "@clerk/react";
-import { clerkEnabled } from "./clerk";
+import { clerkEnabled, useViewer } from "./clerk";
 import { initials, PARTIES, partyInk, partyTint, TRENDING } from "./data";
 import { Onboarding } from "./onboarding";
 import { EMPTY_ONBOARDING, readOnboarding, writeOnboarding } from "./onboarding-store";
@@ -161,13 +161,39 @@ function App() {
     // First run only. Skipping counts as answered so it does not nag; Profil
     // has a row to reopen it.
     setShowOnboarding(stored.completedAt === null);
-    setLibrary(readLibrary());
   }, []);
 
+  /**
+   * The library belongs to an account, not to a device.
+   *
+   * Following politicians and saving clips are the inputs to a political
+   * recommendation system, so they are only collected for someone who has asked
+   * for them by signing up. An anonymous viewer gets the full feed and no
+   * profile — `Senaste` must keep working signed out, which is the acceptance
+   * criterion F1 states.
+   */
+  const viewer = useViewer();
+
+  // Load on sign-in, drop on sign-out. Reading is keyed on the account, so
+  // switching users on a shared device swaps the library rather than merging it.
+  useEffect(() => {
+    setLibrary(viewer.signedIn ? readLibrary(viewer.userId) : EMPTY_LIBRARY);
+  }, [viewer.signedIn, viewer.userId]);
+
+  /**
+   * The single funnel every follow, save and like passes through, and therefore
+   * the only place the gate has to exist. A signed-out tap opens Clerk's modal
+   * and writes nothing — no optimistic local state that would have to be
+   * reconciled, and no anonymous row to migrate later.
+   */
   const updateLibrary = (update: (current: LibraryState) => LibraryState) => {
+    if (!viewer.signedIn) {
+      viewer.requireSignIn();
+      return;
+    }
     setLibrary((current) => {
       const next = update(current);
-      writeLibrary(next);
+      writeLibrary(viewer.userId, next);
       return next;
     });
   };

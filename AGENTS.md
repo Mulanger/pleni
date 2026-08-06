@@ -72,6 +72,21 @@ Last updated: 2026-08-02.
 - Frontend env vars in InstaPods:
   - `VITE_SUPABASE_URL`
   - `VITE_SUPABASE_PUBLISHABLE_KEY`
+  - `VITE_CLERK_PUBLISHABLE_KEY` — **production** `pk_live_…` since 2026-08-06.
+    Vite bakes `VITE_*` in at build time, so changing it in the InstaPods panel does
+    nothing until the next deploy rebuilds the bundle.
+- **Clerk production is live**: `clerk.pleni.se` (Frontend API) and `accounts.pleni.se`
+  (account portal), five CNAMEs in the Simply zone, SSL issued. The development
+  instance `leading-seasnail-33.clerk.accounts.dev` still exists and is still
+  registered in Supabase — local dev uses it via `web/.env.local`. Supabase
+  Third-Party Auth therefore has **two** Clerk entries; deleting the dev one breaks
+  local sign-in, deleting the prod one breaks the live site.
+- **Following, saving and liking require a signed-in account.** The gate is a single
+  guard in `updateLibrary()` (`web/src/App.tsx`), the one funnel all four toggles
+  pass through; a signed-out tap opens Clerk's modal and writes nothing. Storage is
+  keyed `riket.library.v1:<clerk-user-id>` so two people on one device get separate
+  libraries. The anonymous feed, search and playback still work signed out — F1's
+  acceptance criterion is that `Senaste` keeps working signed out.
 - Do not put server secrets in Vite env vars. Bunny API keys, Supabase access tokens and Supabase secret/service keys belong only in local/server worker environments.
 
 ### Pipeline completion

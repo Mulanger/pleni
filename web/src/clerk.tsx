@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ClerkProvider } from "@clerk/react";
+import { ClerkProvider, useClerk, useUser } from "@clerk/react";
 import { svSE } from "@clerk/localizations";
 
 /**
@@ -27,6 +27,42 @@ const appearance = {
     fontFamily: "inherit"
   }
 } as const;
+
+/**
+ * Who the viewer is, and how to ask them to sign in — safe to call whether or
+ * not Clerk is configured.
+ *
+ * `clerkEnabled` is derived from a `VITE_` constant, so it is fixed at build
+ * time and cannot change between renders. That is what makes the branch below
+ * legal despite looking like a conditional hook: for any given bundle exactly
+ * one path is ever taken, so the hook order is stable for the app's lifetime.
+ * Calling `useUser()` outside a `ClerkProvider` throws, which is why the branch
+ * has to exist at all.
+ *
+ * A deploy without the key reports "not signed in" rather than crashing. That
+ * keeps the anonymous feed working — the same property `AuthProvider` protects —
+ * while making the library actions unavailable rather than silently anonymous.
+ */
+export function useViewer(): {
+  signedIn: boolean;
+  userId: string | null;
+  requireSignIn: () => void;
+} {
+  if (!clerkEnabled) {
+    return { signedIn: false, userId: null, requireSignIn: () => {} };
+  }
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks -- build-time constant, see above.
+  const { isSignedIn, user } = useUser();
+  // eslint-disable-next-line react-hooks/rules-of-hooks -- build-time constant, see above.
+  const clerk = useClerk();
+
+  return {
+    signedIn: !!isSignedIn,
+    userId: user?.id ?? null,
+    requireSignIn: () => clerk.openSignIn({})
+  };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   if (!clerkEnabled) {

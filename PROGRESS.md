@@ -2143,3 +2143,109 @@ someone reads a frozen `currentTime` as a regression.
   iOS Safari; confirm on a real iPhone at `https://pleni.se` before assuming the
   phone half of the report is closed.
 - Anything added to the feed item that fetches must respect the windows.
+
+## A-2 closed + library gated behind an account — DONE 2026-08-06
+
+**Built:** `useViewer()` in `web/src/clerk.tsx`; per-account keying and null-user
+refusal in `web/src/library-store.ts`; the sign-in gate in `web/src/App.tsx`;
+Clerk production DNS, Supabase third-party auth and the InstaPods key (infra).
+**Tests:** `python tasks.py test lint typecheck` green — **274 passed**, 67
+deselected; ruff clean; mypy strict clean on 74 files. No Python touched.
+`tsc --noEmit` green; `vite build` green.
+**Contracts touched:** none.
+
+### Clerk production — the rest of A-2
+
+All five CNAMEs added to the Simply zone for `pleni.se`. Clerk went from
+**0/5** to **Verified** on the first check; SSL **Issued**; primary domain
+**Verified**.
+
+| Host | Target |
+|---|---|
+| `accounts` | `accounts.clerk.services` |
+| `clerk` | `frontend-api.clerk.services` |
+| `clk._domainkey` | `dkim1.mqb2yvc3pi4p.clerk.services` |
+| `clk2._domainkey` | `dkim2.mqb2yvc3pi4p.clerk.services` |
+| `clkmail` | `mail.mqb2yvc3pi4p.clerk.services` |
+
+Verified against `ns1`/`ns2.simply.com` directly, not a public resolver. **Every
+mail record was re-checked afterwards** — MX, SPF, `_dmarc`, both
+`simplycom*._domainkey`, the three SRVs and `autoconfig` are unchanged. Clerk's
+DKIM selectors (`clk`, `clk2`) do not collide with Simply's (`simplycom1`,
+`simplycom2`), which is the one thing that could have broken mail.
+
+Production key is `pk_live_Y2xlcmsucGxlbmkuc2Uk`; the base64 tail decodes to
+`clerk.pleni.se$`, which is how you check a Clerk key points where you think.
+
+**Supabase now has two Clerk third-party auth entries** — `https://clerk.pleni.se`
+added, `https://leading-seasnail-33.clerk.accounts.dev` kept. An addition, not an
+edit: dev and prod are different issuers, and deleting the dev entry breaks local
+sign-in.
+
+**`VITE_*` is baked in at build time.** Changing the key in the InstaPods panel
+does nothing until a deploy rebuilds the bundle. The env save and this commit
+were sequenced so one deploy carries both.
+
+### The library now belongs to an account, not a device
+
+`Q-2` made identity stable; this makes it *owned*. All four toggles already
+funnelled through `updateLibrary()`, so the gate is one guard in one place rather
+than four call sites that can drift.
+
+- Signed out, a tap opens Clerk's modal and **writes nothing** — no optimistic
+  local state to reconcile, and no anonymous row for F1 to migrate.
+- Storage moved from a bare `riket.library.v1` to `riket.library.v1:<user-id>`.
+  Two people on one phone must not see each other's follows: a follow list
+  reveals political opinion, and leaking it to whoever signs in next is the same
+  Article 9 problem as sending it to a server with no lawful basis, just closer
+  to home.
+- `writeLibrary` refuses a null user outright, so an anonymous library cannot
+  come into existence even if a future caller forgets to check.
+- The pre-existing anonymous library is **not adopted** by the first account to
+  sign in. Attributing follows to someone who did not make them is worse than
+  losing them. The owner confirmed the only such data is their own.
+
+`useViewer()` branches on `clerkEnabled`, which is a build-time constant — so the
+apparent conditional hook is legal, because exactly one path is taken for the
+life of any bundle. Calling `useUser()` outside a `ClerkProvider` throws, which
+is why the branch has to exist. A deploy without the key reports "not signed in"
+rather than crashing, so the anonymous feed survives a missing env var.
+
+### Verified in the browser
+
+| Check | Result |
+|---|---|
+| Tap `Gilla` signed out | Clerk modal opens |
+| Library keys written | **none** |
+| Legacy anonymous blob | unchanged, and now unread |
+| Feed, search, playback signed out | unaffected |
+
+The dev-instance modal rendered **"Development mode"** in orange — visible to any
+viewer. That is the concrete reason production Clerk had to land before the gate
+shipped, not after.
+
+**Observations (not fixed, out of scope):**
+- `clearLibrary()` is exported and now takes a user id, but nothing calls it.
+  Sign-out drops the in-memory state and leaves the stored blob for the next
+  sign-in on that device, which is the behaviour you want on a personal phone and
+  the wrong one on a shared device. A real "forget me on this device" belongs
+  with `C-10`'s deletion workflow in F1.
+- The InstaPods control panel is at `app.instapods.com`, not `instapods.app` —
+  that domain serves the pods only and its root errors.
+
+**Blocked / needs a decision:**
+- `P0-9` — five credentials in chat transcripts. Open since 2026-08-02.
+- **F0 still gates consent collection from real users.** F1 *engineering* may
+  proceed in parallel (BUILD_PLAN F0, ADR 007), and the gate above deliberately
+  collects nothing new — it only stops collecting from people who never asked.
+  The DPIA, Article 6 basis and Article 9(2)(a) analysis are still open before
+  anything personal reaches a server.
+
+**Next agent should know:**
+- F1 is next and is the large one. Migrations start at **009** — `004`–`008` are
+  applied and the ledger checksums them.
+- The library store is now the shape F1 wants: single writer, keyed on the Clerk
+  subject and on `politicians.id`. When the consent ledger lands it becomes the
+  cache and the server becomes the source of truth, exactly as
+  `library-store.ts` has said since UI1.
+- Do not delete either Supabase Clerk entry.
