@@ -17,11 +17,10 @@ import type { OnboardingState, PartyCode } from "./types";
  * Two deliberate departures from the supplied design, both required by
  * `docs/RECOMMENDATION_PREREQUISITES.md`:
  *
- * 1. **Consent is granular, not one checkbox.** `C-4` is a GATE:
- *    "Personalization, analytics, email, model-training reuse are four
- *    independent consents. One 'improve my experience' switch is not specific
- *    enough." Accepting the terms is therefore separated from agreeing to be
- *    profiled, and each purpose is its own switch, all defaulting to off.
+ * 1. **Only offered processing is shown.** This release offers personalisation
+ *    only. Analytics and email are neither collected nor presented as choices.
+ *    Accepting the terms remains separate from agreeing to be profiled, and
+ *    personalisation defaults to off.
  * 2. **Onboarding can be skipped.** The design gated the whole app behind
  *    accepting terms. `A-9` and decision 3 of the launch plan both require the
  *    non-personalised `Senaste` feed to stay fully usable without consent —
@@ -30,24 +29,6 @@ import type { OnboardingState, PartyCode } from "./types";
  */
 
 const PARTY_ORDER: PartyCode[] = ["V", "S", "MP", "C", "L", "KD", "M", "SD"];
-
-const CONSENT_PURPOSES = [
-  {
-    key: "personal" as const,
-    title: "Personaliserat flöde",
-    help: "Använder dina val och ditt tittande för att välja klipp åt dig."
-  },
-  {
-    key: "analytics" as const,
-    title: "Analys & statistik",
-    help: "Hjälper oss förstå vad som fungerar i appen."
-  },
-  {
-    key: "email" as const,
-    title: "Aviseringar via e-post",
-    help: "Nya klipp från personer och partier du följer."
-  }
-];
 
 export function Onboarding({
   initial,
@@ -70,18 +51,15 @@ export function Onboarding({
       current.includes(party) ? current.filter((p) => p !== party) : [...current, party]
     );
 
-  const anyConsent = consent.personal || consent.analytics || consent.email;
-
   /**
-   * `granted` is passed explicitly so "Slå på allt" is a single affirmative act
-   * rather than a pre-set state. The distinction is the whole legal test: a
-   * switch already on when the screen loads is not consent, because the user
-   * did nothing; a button they press that turns three switches on is.
+   * `granted` is passed explicitly so enabling personalisation is an
+   * affirmative act rather than a pre-set state. The distinction is the whole
+   * legal test: a switch already on when the screen loads is not consent,
+   * because the user did nothing; a button they press that enables it is.
    *
    * Nothing here is bundled. Personalisation is granted on its own and gives
-   * the personalised feed on its own — `C-4` requires the four purposes to be
-   * independent, and Article 7(4) treats consent to unrelated processing as a
-   * condition of service as a strong sign it was not freely given.
+   * the personalised feed on its own. Analytics and email remain false because
+   * neither purpose is offered in the current product.
    */
   const finish = (granted: OnboardingState["consent"]) => {
     onComplete({
@@ -130,19 +108,31 @@ export function Onboarding({
         aria-label={`Onboarding, steg ${step} av 3`}
       >
         <div className="onboarding-progress">
-          <div className="onboarding-bars">
-            {[1, 2, 3].map((index) => (
-              <span
-                key={index}
-                className={
-                  index === step
-                    ? "onboarding-bar onboarding-bar--active"
-                    : index < step
-                      ? "onboarding-bar onboarding-bar--done"
-                      : "onboarding-bar"
-                }
-              />
-            ))}
+          <div className="onboarding-progress-start">
+            {step > 1 && (
+              <button
+                type="button"
+                className="onboarding-back"
+                aria-label="Föregående steg"
+                onClick={() => setStep((s) => Math.max(1, s - 1))}
+              >
+                <ArrowLeft size={15} />
+              </button>
+            )}
+            <div className="onboarding-bars">
+              {[1, 2, 3].map((index) => (
+                <span
+                  key={index}
+                  className={
+                    index === step
+                      ? "onboarding-bar onboarding-bar--active"
+                      : index < step
+                        ? "onboarding-bar onboarding-bar--done"
+                        : "onboarding-bar"
+                  }
+                />
+              ))}
+            </div>
           </div>
           <span className="onboarding-step">Steg {step} av 3</span>
         </div>
@@ -237,18 +227,23 @@ export function Onboarding({
               <h2>Villkor & samtycke</h2>
               <p className="onboarding-lede">
                 Dina partival och din politiska inriktning räknas som känsliga personuppgifter.
-                Därför frågar vi separat om varje sak — och allt är avstängt tills du slår på det.
+                Personalisering är därför avstängd tills du själv slår på den.
               </p>
 
-              <label className="terms-row">
-                <span className={acceptedTerms ? "tick tick--on" : "tick"}>
-                  {acceptedTerms && <Check size={14} />}
+              <label className="consent-row consent-row--personal">
+                <span className="consent-copy">
+                  <strong>Personaliserat flöde</strong>
+                  <small>Använder dina val och ditt tittande för att välja klipp åt dig.</small>
                 </span>
-                <span>Jag har läst och godkänner användarvillkoren och integritetspolicyn.</span>
+                <span className={consent.personal ? "switch switch--on" : "switch"}>
+                  <span className="switch-dot" />
+                </span>
                 <input
                   type="checkbox"
-                  checked={acceptedTerms}
-                  onChange={(event) => setAcceptedTerms(event.target.checked)}
+                  checked={consent.personal}
+                  onChange={() =>
+                    setConsent((current) => ({ ...current, personal: !current.personal }))
+                  }
                 />
               </label>
 
@@ -264,49 +259,46 @@ export function Onboarding({
                 <strong>Senaste</strong> — alla klipp, senaste först.
               </p>
 
-              <div className="consent-list">
-                {CONSENT_PURPOSES.map((purpose) => (
-                  <label key={purpose.key} className="consent-row">
-                    <span className="consent-copy">
-                      <strong>{purpose.title}</strong>
-                      <small>{purpose.help}</small>
-                    </span>
-                    <span className={consent[purpose.key] ? "switch switch--on" : "switch"}>
-                      <span className="switch-dot" />
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={consent[purpose.key]}
-                      onChange={() =>
-                        setConsent((current) => ({
-                          ...current,
-                          [purpose.key]: !current[purpose.key]
-                        }))
-                      }
-                    />
-                  </label>
-                ))}
+              <div className="consent-choice">
+                <button
+                  type="button"
+                  className="onboarding-primary"
+                  disabled={!acceptedTerms}
+                  onClick={() => finish({ personal: true, analytics: false, email: false })}
+                >
+                  Slå på personalisering
+                </button>
+                <button
+                  type="button"
+                  className="onboarding-primary onboarding-primary--ghost"
+                  disabled={!acceptedTerms}
+                  onClick={() => finish({ personal: false, analytics: false, email: false })}
+                >
+                  Fortsätt utan
+                </button>
               </div>
 
               <p className="onboarding-fineprint">
-                Personalisering fungerar på egen hand — analys och e-post är frivilliga och
-                påverkar inte ditt flöde. Inget skickas till våra servrar än.
+                Dina val stannar på enheten. Du kan stänga av personalisering när som helst
+                under Profil.
               </p>
+
+              <label className="terms-row">
+                <span className={acceptedTerms ? "tick tick--on" : "tick"}>
+                  {acceptedTerms && <Check size={14} />}
+                </span>
+                <span>Jag har läst och godkänner användarvillkoren och integritetspolicyn.</span>
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(event) => setAcceptedTerms(event.target.checked)}
+                />
+              </label>
             </div>
           )}
 
-          <div className="onboarding-actions">
-            {step > 1 && (
-              <button
-                type="button"
-                className="onboarding-back"
-                aria-label="Föregående steg"
-                onClick={() => setStep((s) => Math.max(1, s - 1))}
-              >
-                <ArrowLeft size={18} />
-              </button>
-            )}
-            {step < 3 ? (
+          {step < 3 && (
+            <div className="onboarding-actions">
               <button
                 type="button"
                 className="onboarding-primary"
@@ -314,35 +306,14 @@ export function Onboarding({
               >
                 Nästa steg <ArrowRight size={16} />
               </button>
-            ) : (
-              // Two buttons of equal weight. Regulators have been consistent
-              // since the cookie-banner enforcement that "accept all" must not
-              // be easier to reach than the refusal, so these share a class and
-              // differ only in fill.
-              <div className="consent-choice">
-                <button
-                  type="button"
-                  className="onboarding-primary"
-                  disabled={!acceptedTerms}
-                  onClick={() => finish({ personal: true, analytics: true, email: true })}
-                >
-                  Slå på allt
-                </button>
-                <button
-                  type="button"
-                  className="onboarding-primary onboarding-primary--ghost"
-                  disabled={!acceptedTerms}
-                  onClick={() => finish(consent)}
-                >
-                  {anyConsent ? "Spara mina val" : "Fortsätt utan"}
-                </button>
-              </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          <button type="button" className="onboarding-skip" onClick={onSkip}>
-            Hoppa över — visa Senaste
-          </button>
+          {step < 3 && (
+            <button type="button" className="onboarding-skip" onClick={onSkip}>
+              Hoppa över — visa Senaste
+            </button>
+          )}
         </div>
       </div>
     </div>

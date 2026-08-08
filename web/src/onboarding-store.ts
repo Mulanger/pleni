@@ -53,8 +53,11 @@ export function readOnboarding(): OnboardingState {
         : [],
       consent: {
         personal: value.consent?.personal === true,
-        analytics: value.consent?.analytics === true,
-        email: value.consent?.email === true
+        // These purposes are not offered in the current product. Keep the
+        // legacy fields off so an older localStorage value cannot re-enable
+        // a consent that is no longer presented to the viewer.
+        analytics: false,
+        email: false
       },
       acceptedTerms: value.acceptedTerms === true,
       completedAt: typeof value.completedAt === "string" ? value.completedAt : null

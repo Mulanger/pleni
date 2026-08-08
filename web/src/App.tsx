@@ -1998,9 +1998,11 @@ function ProfileScreen({
   onToggleConsent: (key: keyof typeof consent) => void;
 }) {
   const consentRows = [
-    { key: "personal" as const, title: "Personaliserat flöde", help: "Använder tittarbeteende för att välja klipp." },
-    { key: "analytics" as const, title: "Analys & statistik", help: "Anonym statistik som förbättrar appen." },
-    { key: "email" as const, title: "Aviseringar via e-post", help: "Nya klipp från personer och partier du följer." }
+    {
+      key: "personal" as const,
+      title: "Personaliserat flöde",
+      help: "Använder dina val och ditt tittande för att välja klipp."
+    }
   ];
   return (
     <section className="panel-screen">

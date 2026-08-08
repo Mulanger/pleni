@@ -2170,6 +2170,7 @@ a {
   border-bottom: 1px solid var(--surface-2);
 }
 
+.onboarding-progress-start { display: flex; align-items: center; gap: 10px; }
 .onboarding-bars { display: flex; gap: 6px; }
 
 .onboarding-bar {
@@ -2309,7 +2310,15 @@ a {
   gap: 12px;
   cursor: pointer;
 }
-.terms-row { align-items: flex-start; margin-bottom: 18px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.terms-row {
+  align-items: flex-start;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--surface-2);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
 .terms-row input,
 .consent-row input { position: absolute; opacity: 0; pointer-events: none; }
 
@@ -2329,6 +2338,11 @@ a {
 
 .consent-list { display: flex; flex-direction: column; gap: 4px; }
 .consent-row { padding: 12px 0; border-top: 1px solid var(--surface-2); }
+.consent-row--personal {
+  margin-bottom: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--surface-2);
+}
 .consent-copy { flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .consent-copy strong { font-size: 14px; font-weight: 600; }
 .consent-copy small { font-size: 12px; color: var(--muted); line-height: 1.4; }
@@ -2377,12 +2391,16 @@ a {
 }
 .onboarding-primary:disabled { background: var(--surface-2); color: var(--muted-2); cursor: not-allowed; }
 .onboarding-back {
-  padding: 0 16px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: #fff;
   color: var(--muted);
   cursor: pointer;
+  display: grid;
+  place-items: center;
 }
 .onboarding-skip {
   margin-top: 14px;
@@ -2458,7 +2476,7 @@ a {
 /* Consent choice: two buttons of equal weight. Regulators have been firm since
    the cookie-banner enforcement that the accept path must not be easier to
    reach than the refusal, so these share a size and differ only in fill. */
-.consent-choice { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.consent-choice { display: flex; flex-direction: column; gap: 9px; }
 .consent-choice .onboarding-primary { width: 100%; }
 .onboarding-primary--ghost {
   background: #fff;
