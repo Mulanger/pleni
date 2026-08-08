@@ -24,7 +24,7 @@ This file is the source of truth for chunk status and handoff notes.
 | C13 - Observability & runbook | TODO | Depends on C12 |
 | UI2 - Feed swipe & autoplay | DONE | Completed 2026-08-06 |
 | V1 - YuNet replaces the Haar cascade | DONE | Completed 2026-08-07 |
-| V2 - Speaker identity verification | TODO | Depends on V1 |
+| V2 - Speaker identity verification | DONE | Completed 2026-08-08 |
 
 ## C0 - Foundations - DONE 2026-08-01
 
@@ -2369,3 +2369,117 @@ wide, and YuNet's is ~20% tighter in width.
 - V2 is the whole remaining defect surface and needs an ADR before code:
   `FaceSample`/`FaceTrack` cannot carry confidence, landmarks, provenance, scene
   id or identity evidence.
+
+## V2 — Speaker identity verification — DONE 2026-08-08
+
+**Built:** `src/vision/identity.py`, `src/vision/models/face_recognition_sface_2021dec.onnx`,
+scene-terminated tracking and `select_verified_track` in `src/vision/track.py`,
+`IdentityVerifiedBackend` in `src/vision/asd.py`, enrolment and per-frame identity
+scoring in `src/stages/track.py`, unsupported-span handling in `src/camera/plan.py`,
+identity settings in `src/config.py`, `docs/adr/012-speaker-identity-verified-framing.md`,
+`tests/unit/test_vision_identity.py`, `tests/fixtures/debates/betankande/speaker_enrolment.jpg`.
+**Tests:** `python tasks.py test lint typecheck` green — **296 passed** (was 274),
+67 deselected, 1 pre-existing `audioop` warning; ruff clean; mypy strict clean on
+75 files. Slow e2e green after a reviewed golden regeneration.
+**Contracts touched:** yes — see ADR 012.
+
+### What V1 left behind
+
+After the detector swap, every remaining defect was identity or scene
+continuity, not detection. On a debate two-shot YuNet tracks *both* people in
+~100% of frames, so geometry has no information about which one is speaking. And
+`merge_fragmented_tracks` was not scene-aware, so on `HD10392_ebe6af7e…` two
+speakers who used the same lectern across a cut were tracked as one person.
+
+### The measurement that shaped the design
+
+Closed-set rank-1 identification, ground truth from Riksdagen's own metadata,
+nothing hand-labelled: **30/30 across three debates**. Two findings changed the
+plan:
+
+- **Margin beats absolute similarity.** A correct match landed at **0.366** — on
+  top of OpenCV's documented 0.363 LFW threshold — while beating the runner-up by
+  **+0.299**. Gating on the published absolute figure would have thrown that clip
+  away. `IdentityThresholds` therefore keeps permissive absolute floors and lets
+  the competitor margin discriminate.
+- **480×270 frames are sufficient for identity too.** All 30 succeeded on ~46 px
+  faces. `speaker_verified_crop_design.md` §3.2 assumed 960×540 would be
+  required; measured, it is not — for detection (V1) or identity (V2). The
+  re-decode of 87 masters is cancelled for good.
+
+### Measured yield: 67.4%
+
+Real C8 path, read-only, over **319 clips across 14 random debates**.
+
+| Outcome | Clips | Share |
+|---|---:|---:|
+| accepted | 215 | **67.4%** |
+| no verified speaker in a long shot | 76 | 23.8% |
+| no official portrait to enrol | 27 | 8.5% |
+| identity mismatch | 1 | 0.3% |
+
+Against the 40% floor `speaker_verified_crop_design.md` §7.5 set for a viable
+gate. **The first debate I tried (`HD10392`) gave 36% and was not
+representative** — per-debate yield runs from 34.5% (frågestund, constant cutting
+and wide shots) to 100% (single-speaker podium).
+
+**The rejections are real.** Per-shot analysis of the two worst debates: 83–96%
+of no-evidence shots have *no face detected at all*, the rest are single spurious
+detections below the coverage floor, and **zero** are "track fine but embedding
+lost". The gate rejects clips where the speaker is genuinely off screen — the
+complaint this work exists to fix.
+
+**Decisions made:**
+- Tracks terminate at every scene cut; cross-shot association is identity only.
+  Within a shot, fragment merging is *safe by construction* now, so it was kept.
+- Acceptance is per shot, and the clip's timeline is the union of accepted shots.
+  A cutaway shorter than `identity_max_unsupported_gap_s` (1.0 s) is tolerated —
+  Riksdagen's feed cuts constantly and holding the crop for half a second is
+  invisible, while rejecting every clip containing a cut would reject nearly all
+  of them.
+- Shot **edges** are always identity-sampled, not just the 1 Hz grid. Without
+  that a short shot got no embeddings purely because no frame landed on the grid,
+  and read as "no evidence" when the truth was "never asked".
+- The geometric selector is deleted rather than kept as a fallback. Its history
+  is the argument: a raw persistence vote that gave clips to a motionless face in
+  the gallery, reweighted toward size, then giving them to chamber furniture.
+- `is_speaking` removed rather than repurposed (ADR 012). Per-sample
+  `identity_verified` was considered and rejected — SFace samples at ~1 Hz, so it
+  would read `False` on most samples of a properly verified track.
+
+**Observations (not fixed, out of scope):**
+- **The cheapest remaining yield is not a vision problem.** 27 clips (8.5%) were
+  rejected *only* because no portrait could be enrolled — the non-sitting minister
+  `intressent_id` gap already recorded in the March and February backfills.
+  `personlista?...&rdlstatus=samtliga` returns those ids. Closing it takes yield
+  **67.4% → 75.9%** with no vision work. Worth doing before reconsidering
+  vision-aware window selection.
+- Yield is not precision. These numbers say how many clips survive the gate, not
+  how many survivors are correctly framed. The shot-level validation set of
+  `speaker_verified_crop_design.md` §9.2 is still owed; until it exists the honest
+  claim is "known failure modes fixed, gate rejects real absences", not "output
+  verified correct".
+- `face_height_frac` is still hardcoded to `1.0` in `src/scoring/text_features.py`
+  against `MIN_FACE_HEIGHT_FRAC = 0.0`. C8 now has the real value; nothing feeds
+  it back to C7.
+- Vertical composition remains unmanaged: the crop is full source height with
+  `y=0`. Third-order — head height p25–p75 is 0.294–0.370, which is fine; the p90
+  tail of 0.765 is not.
+
+**Blocked / needs a decision:**
+- **The 1,762 live clips are all old-detector output**, ~74% with a framing
+  defect. Nothing has been re-processed or re-published. The owner deferred this
+  until after phase 3; the yield number needed to make that call now exists.
+- `P0-9` — five credentials in chat transcripts. Still open, carried over.
+
+**Next agent should know:**
+- **This workstation hard power-cycled five times under sustained all-core load**
+  (2026-08-07, 19:30–20:51). No BSOD, no minidump, no WHEA — the signature of
+  power being cut, not a software crash. `cv2.setNumThreads(3)` in the audit
+  scripts kept it stable for the rest of the run. Suspect PSU or cooling;
+  unresolved, and worth knowing before launching a full backfill.
+- C8 is ~3 s per clip at 3 threads including SFace, and portraits cache to
+  `<work_dir>/_portraits`, so a debate re-run costs one request per politician.
+- Tests must not hit the network: `track_dokid(..., portraits=...)` is the
+  injection seam, and the e2e and C8 integration tests enrol from a crop of the
+  committed fixture footage rather than an official portrait.

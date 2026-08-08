@@ -376,3 +376,74 @@ Phase 1 stands as adopted (YuNet @ 480). Phases 2 and 3 merge in priority: after
 the detector swap, **every remaining measured defect is an identity or
 scene-continuity problem**, and both are §3.2 + §3.3. The body detector is
 dropped from the plan. 960×540 is deferred to a Phase 2 identity decision.
+
+---
+
+## 7. Phase 2 result — measured 2026-08-08
+
+Identity verification shipped as ADR 012. Yield measured by running the real C8
+path read-only over 319 published clips across 14 randomly chosen debates.
+
+| Outcome | Clips | Share |
+|---|---:|---:|
+| **accepted** | **215** | **67.4%** |
+| rejected — no verified speaker in a long shot | 76 | 23.8% |
+| rejected — no official portrait to enrol | 27 | 8.5% |
+| rejected — identity mismatch | 1 | 0.3% |
+
+**67.4% against the 40% floor §7.5 set for a viable gate.** The pessimistic
+36% seen on the first debate tried (`HD10392`) was not representative.
+
+### 7.1 The rejections are real absences, not a mechanical fault
+
+The largest single cause is a shot with no identity evidence, which could mean
+either "the speaker genuinely is not on screen" (correct) or "faces were there
+and the sampling lost them" (a defect). Measured per shot on the two debates
+where it fires most:
+
+| | `HD10384` | `HDC120260319fs` |
+|---|---:|---:|
+| no faces detected at all | 83.3% | 95.6% |
+| track below the per-shot coverage floor | 16.7% | 4.4% |
+| **track fine but no embedding produced** | **0** | **0** |
+
+Zero cases of the defect mode. The coverage-floor cases were single detections
+in 1 of 26 and 1 of 47 frames — spurious, correctly dropped. **The clips being
+rejected are clips where the expected speaker is genuinely off screen**, which
+is exactly the complaint this work exists to fix.
+
+### 7.2 Yield varies by debate type, and the floor is structural
+
+| debate | yield | |
+|---|---:|---|
+| `HD10335`, `HD10364` | 100% | single-speaker podium throughout |
+| `HD10406`, `HD10319` | 88% | |
+| `HD10359` | 50% | |
+| `HDC120260319fs` | **34.5%** | frågestund |
+
+Frågestund is the worst case and the reason is structural: many short ministerial
+answers, constant cutting between questioner, minister and chamber, and a high
+share of wide shots where no face is detectable at all. Committee debates with a
+speaker at the lectern approach 100%.
+
+### 7.3 The cheapest remaining yield is not a vision problem
+
+**27 clips (8.5%) were rejected only because no portrait could be enrolled** —
+`intressent_id` is absent for ministers who are not sitting members, a gap
+already recorded in the March and February backfill notes. Riksdagen does
+publish these ids; the default `anforandelista` query omits them and
+`personlista?...&rdlstatus=samtliga` returns them.
+
+**Closing that alone takes yield from 67.4% to 75.9%**, and it is a C1 metadata
+fix with no vision work in it. That is a far better return than reordering the
+stage graph for vision-aware window selection (§3.4), which should therefore be
+reconsidered rather than assumed necessary.
+
+### 7.4 What is not yet established
+
+Yield is not precision. These numbers say how many clips survive the gate, not
+how many surviving clips are correctly framed. Under the rule of three, zero
+observed failures in an audit of *N* accepted clips bounds the true failure rate
+at about 3/*N* — so the shot-level validation set of §9.2 is still owed, and
+until it exists the honest claim is "the known failure modes are fixed and the
+gate rejects real absences", not "the output is verified correct".
