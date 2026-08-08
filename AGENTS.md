@@ -28,6 +28,7 @@ work/<dokid>/
   04_transcript/<speech_id>.json      # C4
   05_audio_features/<speech_id>.json  # C5
   06_candidates/<speech_id>.json      # C6
+  06_vision/<speech_id>.json          # C6v  speaker visibility, feeds C7
   07_selected/<speech_id>.json        # C7
   08_track/<clip_id>.json             # C8
   09_camera/<clip_id>.json            # C9
@@ -36,6 +37,14 @@ work/<dokid>/
 ```
 
 This layout is not incidental. It is what makes each stage independently runnable, testable and resumable, and what lets you work on stage 7 without ever running stage 2.
+
+**`06_vision` must exist before C7 runs.** It is the only artifact whose absence
+does not raise: C7 falls back to choosing clip windows blind, exactly as it did
+before ADR 013, and yield drops by roughly half without anything failing. The
+fallback is deliberate — it keeps old work dirs and the fixture runner working —
+but it means *running the stages by hand in the wrong order silently produces a
+worse catalogue*. C7 logs `vision_timeline_missing` at warning level for every
+speech it cannot find one for. If you see that line, you skipped C6v.
 
 ## Current state snapshot
 

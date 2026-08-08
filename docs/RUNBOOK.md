@@ -130,6 +130,34 @@ only mean three terminals to forget about.
 Leave it running. Stop it with Ctrl-C — an interrupted job is reclaimed by the
 lease reaper on the next start.
 
+### Running stages by hand: C6v must come before C7
+
+The stage order is `discover, acquire, segment, transcribe, audio_features,
+candidates, **vision**, select, track, camera, render, publish`. The daemon gets
+this right on its own; the hazard is running stages manually.
+
+```bash
+python -m src.stages.vision --dokid <dokid> --work-dir <root>   # writes 06_vision/
+python -m src.stages.select --dokid <dokid> --work-dir <root>
+```
+
+`06_vision/<speech_id>.json` is **the one artifact whose absence does not raise.**
+Every other stage fails loudly on a missing input. C7 instead falls back to
+picking clip windows with no framing evidence, exactly as it did before ADR 013,
+and on a hard debate that roughly halves the number of usable clips — with
+nothing in the output to say so.
+
+That fallback is deliberate: it keeps older work directories and the fixture
+runner working. It is also easy to trip over, so C7 logs a warning per speech:
+
+```
+vision_timeline_missing  speech_id=... consequence=clip windows chosen without framing evidence
+```
+
+**If you see that line, you skipped C6v.** Re-run it and then re-run `select`;
+everything downstream of `select` has to be redone too, because the chosen
+windows change.
+
 ### If you run bare workers instead, nothing reaps
 
 `run --pool <pool>` does **not** reap expired leases; only `daemon` does. A worker

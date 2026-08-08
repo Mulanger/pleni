@@ -27,15 +27,27 @@ from src.stages._io import read_json_object, read_model, read_model_list, write_
 from src.vision.timeline import SpeechVisibility, visibility_from_payload
 
 
-def _read_visibility(path: Path) -> SpeechVisibility | None:
+def _read_visibility(path: Path, *, dokid: str, speech_id: str) -> SpeechVisibility | None:
     """C6v timeline for a speech, or None when the stage has not been run.
 
     Absent is not "everything is visible": without a timeline the framing
     features stay at their neutral placeholders and selection behaves exactly as
-    it did before, which keeps the fixture runner and older work dirs working.
+    it did before ADR 013. That fallback is deliberate -- it keeps old work dirs
+    and the fixture runner working -- but it is also the one artifact whose
+    absence does not raise, so running the stages by hand in the wrong order
+    quietly produces a worse catalogue instead of failing.
+
+    Hence the warning. A silent degradation that halves yield is exactly the kind
+    of thing this pipeline has been bitten by before.
     """
 
     if not path.exists():
+        stage_logger("C7_select", dokid=dokid).warning(
+            "vision_timeline_missing",
+            speech_id=speech_id,
+            expected=str(path),
+            consequence="clip windows chosen without framing evidence; run C6v first",
+        )
         return None
     payload = read_json_object(path, "C6v vision artifact")
     return visibility_from_payload(dict(payload))
@@ -96,7 +108,11 @@ def select_dokid(
             transcript=transcript,
             audio_features=audio_features,
             all_speeches=speeches,
-            visibility=_read_visibility(paths.vision_json(speech.speech_id)),
+            visibility=_read_visibility(
+                paths.vision_json(speech.speech_id),
+                dokid=dokid,
+                speech_id=speech.speech_id,
+            ),
             confront_weights=settings.confront_weights,
             explain_weights=settings.explain_weights,
             quotable_weights=settings.quotable_weights,
