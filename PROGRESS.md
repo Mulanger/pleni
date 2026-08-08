@@ -26,6 +26,7 @@ This file is the source of truth for chunk status and handoff notes.
 | V1 - YuNet replaces the Haar cascade | DONE | Completed 2026-08-07 |
 | V2 - Speaker identity verification | DONE | Completed 2026-08-08 |
 | V3 - Portrait recovery + framing-aware selection | DONE | Completed 2026-08-08 |
+| V4 - C3 speaker misattribution | DONE | Completed 2026-08-08 |
 
 ## C0 - Foundations - DONE 2026-08-01
 
@@ -2622,3 +2623,84 @@ before zipping.
   also happens to preserve an independent second check.
 - `python -m src.stages.vision --dokid <id> --work-dir <root>` runs it alone.
   `vision_dokid(..., portraits=...)` is the offline injection seam.
+
+## V4 — C3 misattributed speakers when the two source lists diverge — DONE 2026-08-08
+
+**Built:** `src/segment/pairing.py`, name-aligned pairing in
+`src/stages/segment.py`, `tests/unit/test_segment_pairing.py`.
+**Tests:** `python tasks.py test lint typecheck` green — **326 passed** (was
+319), 68 deselected; ruff clean; mypy strict clean on 79 files. Slow e2e green.
+**Contracts touched:** none.
+
+### The defect
+
+C1 emits two lists describing the same debate from different sides:
+`speaker_entries` (who speaks **when**, the timing authority, one entry per real
+video segment) and `anforanden` (who says **what**, the identity and transcript
+authority). C3 zipped them **by index**, and the official name *overrode* the
+correct one from the video metadata.
+
+The official record can carry an entry with no video segment. `HD10342` has 8
+speaker entries and 9 anföranden — the extra is a `TREDJE VICE TALMANNEN`
+intervention — so from 1236 s onward **every speech carried the wrong speaker,
+party and official text**, and the final anförande was dropped entirely. Because
+the official name overrode the right one, the artifact looked correct.
+
+**Identity verification is what exposed it.** SFace reported a median similarity
+of **0.000** across a whole speech for a politician who verifies at 86–96%
+elsewhere in the same debate — the model correctly reporting that the face on
+screen is not the person named. Nothing else in the pipeline would have noticed.
+
+Blast radius: **1 of 87 debates, 22 clips (1% of the catalogue)** — and it is the
+debate the owner independently reported as problematic.
+
+### The fix
+
+`pair_official_speeches` aligns the two lists by name, walking forward in the
+order the debate happened. An official entry with no video segment is stepped
+over; a segment with no official entry keeps the video metadata's name and party
+and simply has no transcript — silence rather than somebody else's words.
+
+**A first implementation used `difflib`, and the test caught it.** Sequence
+alignment looks right until it meets an interpellation, which is two people
+alternating: `Tenje, Eriksson, Tenje, Eriksson, Tenje`. Several equally long
+matching blocks exist, `SequenceMatcher` takes the leftmost, and on the real
+`HD10342` shape it chose one that silently **deleted two speakers**. It passed on
+the live artifact by luck. A forward walk with a bounded skip is both simpler and
+correct.
+
+### Result on HD10342, the full chain
+
+| | speeches verified | selected | accepted |
+|---|---|---:|---:|
+| identity gate, blind selection | 5 of 8 (three at 0–6%) | 22 | 8 |
+| + framing-aware selection (V3) | 5 of 8 | 15 | 14 |
+| + correct attribution (V4) | **8 of 8, all 86–96%** | 20 | **17** |
+
+The three speeches previously reading 0%, 6% and 6% visible were not framing
+failures at all — the pipeline was looking for the wrong person in them.
+
+**Decisions made:**
+- The video metadata's name is the fallback and never loses a guess. An
+  unmatched segment is described by the source that actually knows who was on
+  screen.
+- `MAX_SKIPPED_OFFICIALS = 4` bounds the forward scan. Chair interventions come
+  in ones and twos; a wider window would let a coincidental match far ahead
+  swallow entries belonging to later speakers, which is the failure being fixed.
+- Two trailing name tokens form the identity key, so "Anna Tenje" matches
+  "Äldre- och socialförsäkringsministern Anna Tenje (M)" without needing a rule
+  for where a Swedish ministerial title ends.
+
+**Blocked / needs a decision:**
+- **`HD10342`'s 22 published clips carry the wrong speaker from 1236 s on.**
+  Re-processing produces different `anforande_id`s and therefore different
+  `clip_id`s, so this is a republish rather than an update. Owner's call.
+- The 1,762 live clips remain old-detector output; nothing re-processed.
+- `P0-9` — five credentials in chat transcripts. Still open.
+
+**Next agent should know:**
+- A length mismatch between `speaker_entries` and `anforanden` is the cheap
+  detector for this shape: 1 of 87 debates today. It is not the only one — the
+  lists could diverge at equal length — but per-speech verified visibility near
+  0% while other speeches in the same debate sit at 90% is the reliable signal,
+  and it is now free to compute from `06_vision`.

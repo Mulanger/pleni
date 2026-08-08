@@ -15,6 +15,7 @@ from src.contracts import MediaInfo, Scene, Source, SpeakerEntry, Speech
 from src.errors import ArtifactError, ContractValidationError
 from src.logging import configure_logging, stage_logger
 from src.paths import work_paths
+from src.segment.pairing import pair_official_speeches
 from src.segment.refine import MetadataSpeech, RefinedBoundary, refine_boundaries
 from src.segment.vad import detect_voice_activity
 from src.stages._io import read_json_object, read_model, read_model_list, write_json
@@ -71,10 +72,17 @@ def _metadata_speeches(
     official_speeches: list[Mapping[str, Any]],
 ) -> list[MetadataSpeech]:
     metadata: list[MetadataSpeech] = []
-    for index, speaker in enumerate(speakers):
-        official = official_speeches[index] if index < len(official_speeches) else {}
+    # Aligned by name, not by index. The official record can carry an entry with
+    # no video segment -- a chair announcement -- and zipping by index then
+    # shifted every later speech onto the wrong speaker. See src/segment/pairing.
+    paired = pair_official_speeches(speakers, official_speeches)
+    for index, (speaker, matched) in enumerate(zip(speakers, paired, strict=True)):
+        official: Mapping[str, Any] = matched or {}
         anforande_id = _optional_str(official.get("anforande_id")) or f"{index + 1:04d}"
         official_text = _optional_str(official.get("official_text"))
+        # The video metadata's name is the fallback, never the loser of a guess:
+        # an unmatched segment keeps the name and party that describe the person
+        # actually on screen, and simply has no official transcript.
         speaker_name = _optional_str(official.get("speaker_name")) or speaker.name
         party = (
             _optional_str(official.get("party"))
