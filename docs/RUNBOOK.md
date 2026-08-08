@@ -100,9 +100,11 @@ Retrying the dead job restarts the chain from there.
 
 ## Where this actually runs
 
-> **The pipeline runs on one Windows workstation, not in the cloud.** It needs the
-> local GPU for ASR and vision, and a local ffmpeg for rendering. InstaPods hosts
-> the *static frontend only* and knows nothing about any of this.
+> **The pipeline runs on one Windows workstation, not in the cloud.** It needs
+> local CPU for vision and a local ffmpeg for rendering. InstaPods hosts the
+> *static frontend only* and knows nothing about any of this. No GPU is involved:
+> ASR does not run (C4 uses the official transcript, ADR 011) and OpenCV vision is
+> CPU-only, so the GTX 1080 in the box sits idle.
 >
 > That single fact shapes the design. The machine sleeps, reboots, and gets shut
 > for the weekend, so:
@@ -388,9 +390,10 @@ table in `docs/ARCHITECTURE.md`.
 | Symptom | Cause | What to do |
 |---|---|---|
 | Clip starts mid-sentence | Riksdagen metadata start time off by 30s+ | C3 widens the search window and fuzzy-matches; check `alignment_confidence` on the speech. Below 0.60 it should not have produced clips. |
-| Wrong person on screen during a replik | Two speakers visible; the C8 heuristic picked the larger/centred face | Known limitation. Real ASD (TalkNet) is unimplemented — `src/vision/asd.py` has the seam. Reject the clip by hand for now. |
+| Wrong person on screen during a replik | Was the geometric C8 heuristic picking the largest/most-centred face | **Fixed (ADR 012).** C8 now verifies the track against the speaker's Riksdagen portrait with SFace and fails closed, so a mismatch drops the clip rather than mis-framing it. If you still see one, the clip predates the rebuild — republish it. |
+| Whole speech rejected, no clips at all | No track cleared the identity thresholds | Expected for chamber-wide shots and fast reply exchanges. Read `decision` in `08_track/<clip_id>.json`: `rejected_no_portrait` (Riksdagen has no portrait for this person), `rejected_no_evidence` (no face detected at all), `rejected_identity_mismatch` (faces found, none is them), `rejected_ambiguous` (two candidates too close to separate). Yield near 35% is normal for frågestund and interpellation. |
 | Sign-language interpreter framed as the speaker | Interpreter inset not excluded | Set `RIKET_SIGN_LANGUAGE_INSET_*` in `src/config.py` to exclude that region. |
-| Speaker tiny in a wide chamber shot | Wide shot, no close-up available | The C7 gate penalises low `face_height_frac`. If it slipped through, the gate threshold is too loose. |
+| Speaker tiny in a wide chamber shot | Wide shot, no close-up available | The C7 gate rejects below `MIN_FACE_WIDTH_FRAC` (0.02) in `src/scoring/gate.py`. **Naming trap:** the feature dict key is still `face_height_frac`, but since ADR 013 it carries a face *width* fraction from C6v (`archetypes.py:152`). The key is legacy; the constant name is the truthful one. Without C6v it stays at the placeholder `1.0` and this gate silently passes everything. |
 | Clip is silent or garbled | Mic failure or crosstalk | Low ASR confidence should skip the speech. Check `mean_word_probability` in `06_candidates`. |
 | Speaker name misspelled | ASR heard it wrong | The official transcript is authoritative. Re-run C4 with `--prefer-official-text`. |
 | A debate appears twice | Riksdagen re-published an edited video | `master_sha256` differs → new `sources` row and new clip IDs by design. Soft-retire the old clips; do not delete them, the old IDs may be in someone's history. |

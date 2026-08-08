@@ -3126,3 +3126,84 @@ downstream artifact before measuring anything against it.
   with CUDA — this box has `2.11.0+cpu` and an idle GTX 1080. Read V6 first: the
   benefit will not show up in cut quality, so measure transcript-to-audio
   correspondence instead.
+
+## HANDOFF — re-backfill after the framing rebuild (2026-08-08)
+
+For the next agent, whose job is wiping Bunny and re-publishing the catalogue.
+Everything below is a consequence of V1-V7; none of it is optional.
+
+### The catalogue on Bunny and Supabase is stale in three separate ways
+
+1. **Framing.** All 1,762 published clips came from the Haar-era pipeline. 74.3%
+   carried at least one framing defect — measured, not estimated (see
+   `docs/CLIPPING_V2_DESIGN.md` §1). Nothing has been re-rendered.
+2. **Attribution.** `HD10342` carries the **wrong speaker** from 1236 s onward
+   (V4). Its 22 clips name the wrong politician, party and transcript.
+3. **Two clips are test artifacts.** `HD01SfU35_90051909-…_c01` and `_c02` were
+   published by accident on 2026-08-07 from the 854x480 fixture trim, taking the
+   catalogue 1,762 → 1,764. The hole is closed (V-fix `1dfabff`), the clips are
+   not. Delete them and the `HD01SfU35` `sources` row.
+
+### Clip IDs will change, so this is a republish and not an update
+
+`clip_id` is `{dokid}_{anforande_id}_c{NN}`. V4 changed which `anforande_id` a
+speech gets when the two C1 lists diverge, and V5/V7 changed which windows are
+selected, so `c01` is not the same 45 seconds it used to be. **Do not try to
+update rows in place.** Delete, re-process, re-publish.
+
+Order matters when deleting: **Supabase rows first, then Bunny objects.** C11's
+invariant is that a `clips` row never points at a missing file, and the reverse
+order breaks it for as long as the deletion runs.
+
+### Re-processing: what must be re-run, and from where
+
+Old artifacts on `D:/riketvideos` are **not** reusable from C3 onward:
+
+| Stage | Why it must re-run |
+|---|---|
+| C1 discover | recovers `intressent_id` for non-sitting ministers (V3) |
+| C3 segment | name-based speaker pairing (V4) |
+| C4 transcribe | cheap, and downstream of C3 |
+| C5 audio features | cheap, and C6 needs the pauses |
+| C6 candidates | edges snap to measured silence (V5) |
+| **C6v vision** | **new stage**, and C7 silently degrades without it |
+| C7 select | framing- and cut-aware selection (V3, V7) |
+| C8 track | `FaceTrack` contract changed; old `08_track/*.json` **will not load** |
+| C9, C10, C11 | downstream of all of the above |
+
+Only C2's `master.mp4`, `analysis.wav`, `frames/` and `02_scenes.json` survive.
+That is the expensive part, so a re-run is much cheaper than a cold backfill —
+no re-download.
+
+### Expectations
+
+- **Yield will be well below 100% and that is the point.** A clip is rejected
+  when the expected speaker cannot be verified on screen; the old pipeline
+  published those mis-framed. Corpus yield measured **40.8%** before V3, and V3
+  raised it substantially on the one debate re-measured (`HD10342`: 8 → 17
+  accepted). **The corpus figure has not been re-measured since V3 and is stale
+  — measure it early rather than trusting 40.8%.**
+- Yield tracks debate *format*: near 100% for a single speaker at a lectern,
+  ~35% for frågestund and interpellation, which cut constantly between people.
+- Budget roughly 12-15 minutes per debate, up from 9.
+
+### Traps that have already bitten someone
+
+- **`RIKET_FFMPEG_THREADS=2`.** The workstation hard power-cycles under
+  sustained all-core load and has corrupted a file mid-write. See `AGENTS.md`.
+- **`run_fixture` publishes.** It did, to production, because `publish_dokid`
+  falls through to `settings.publish_backend` and `.env` says `remote`. Now
+  pinned to `local` with a test guarding it — do not undo that.
+- **`git add -A` is unsafe here.** Other agents work in this repo concurrently;
+  an earlier commit swept up an unrelated in-progress feature. Stage by path.
+- **Re-measure after reverting anything.** A headroom figure was reported at 62%
+  because it was computed against artifacts from a reverted change; the real
+  number was 39%.
+
+### Still open
+
+- `P0-9` — five credentials in chat transcripts, unrotated.
+- No shot-level audit set exists, so precision among *accepted* clips is
+  unverified. Yield is not precision. `speaker_verified_crop_design.md` §9.2
+  specifies the set; the rule of three means zero failures in 100 audited clips
+  bounds the true failure rate at ~3%, not 0.

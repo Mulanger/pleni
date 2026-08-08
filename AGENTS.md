@@ -48,18 +48,25 @@ speech it cannot find one for. If you see that line, you skipped C6v.
 
 ## Current state snapshot
 
-Last updated: 2026-08-02.
+Last updated: 2026-08-08.
 
 ### Repository and deployment
 
 - **The pipeline runs on the owner's local Windows workstation, not in the cloud.** It needs
   local ffmpeg. InstaPods hosts the *static frontend only* and knows nothing about the
   pipeline, the job queue or the orchestrator.
-- **There is no GPU on that machine, and nothing currently needs one.** `torch` is installed
-  as `2.11.0+cpu`; `cuda.is_available()` is False. Earlier revisions of this file claimed the
-  pipeline needs a GPU for ASR — it does not, because ASR does not run: C4 uses Riksdagen's
-  official transcript with distributed word timings (ADR 011). The `gpu` worker pool is a
-  naming artifact, not a hardware requirement. One debate takes about 9 minutes end to end.
+- **There is a GTX 1080 in that machine but nothing uses it.** `torch` is installed as
+  `2.11.0+cpu` and `cuda.is_available()` is False. Nothing currently needs it: ASR does not
+  run, because C4 uses Riksdagen's official transcript with distributed word timings
+  (ADR 011). The `gpu` worker pool is a naming artifact, not a hardware requirement. Vision
+  (C6v and C8) is OpenCV on CPU. A debate now takes roughly 12-15 minutes end to end, up
+  from 9, because C6v runs detection and identity over whole speeches.
+- **⚠ That workstation cannot sustain all-core load.** Seven hard power-offs in one session,
+  every one under sustained multi-core work, with no bugcheck, no minidump and no WHEA
+  entry — power being cut, not software crashing. One of them zeroed a golden file
+  mid-write. Kernel-Power 41 events go back to January, so it predates any of this. Until
+  it is diagnosed, **set `RIKET_FFMPEG_THREADS=2`** in `.env`; it caps decode and encode and
+  defaults to `0`, meaning ffmpeg uses everything. Suspect PSU or cooling.
 - Because that machine sleeps and reboots, discovery is catch-up (watermark-based), never
   tick-based, and every job is idempotent and resumable. Start everything with
   `python -m src.orchestrator.cli daemon`. See `docs/RUNBOOK.md`.
@@ -100,10 +107,12 @@ Last updated: 2026-08-02.
 
 ### Pipeline completion
 
-- Completed chunks: C0, C1, C1b, C2, S1, C3, R1, C4, C5, C6, C7, C8, C9, C10, C11.
+- Completed chunks: C0, C1, C1b, C2, S1, C3, R1, C4, C5, C6, C7, C8, C9, C10, C11,
+  plus the framing rebuild V1-V7 (see `PROGRESS.md`, and ADRs 012 and 013).
 - Next planned chunks in `docs/BUILD_PLAN.md`: C12 orchestration, then C13 hardening/observability/runbook.
 - Current default acceptance command: `python tasks.py test lint typecheck`.
-- Latest full local acceptance result: 138 passed, 2 deselected, 1 `audioop` deprecation warning.
+- Latest full local acceptance result: **348 passed**, 68 deselected, 1 `audioop`
+  deprecation warning. The slow e2e is a separate `pytest tests/e2e -m slow` run.
 - `python tasks.py run-fixture` is the local end-to-end fixture runner. Use a fresh `--work-dir` when inspecting generated artifacts to avoid stale files from old runs.
 
 ### Important architecture facts already discovered
