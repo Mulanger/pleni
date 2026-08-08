@@ -8,7 +8,7 @@ from pathlib import Path
 from src.camera.plan import crop_size_for_media
 from src.contracts import CameraPlan, MediaInfo, SelectedClip
 from src.errors import ArtifactError, StageExecutionError
-from src.media.ffprobe import ffmpeg_executable
+from src.media.ffprobe import ffmpeg_executable, ffmpeg_thread_args
 
 
 def write_thumbnail(
@@ -45,6 +45,7 @@ def write_thumbnail(
         "-loglevel",
         "error",
         "-y",
+        *ffmpeg_thread_args(),
         "-ss",
         f"{seek_s:.3f}",
         "-i",

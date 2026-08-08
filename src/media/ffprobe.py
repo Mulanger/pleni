@@ -24,6 +24,19 @@ VIDEO_STREAM_RE = re.compile(
 AUDIO_STREAM_RE = re.compile(r"Audio:\s*[^,\s]+")
 
 
+def ffmpeg_thread_args() -> list[str]:
+    """`-threads` arguments for an ffmpeg invocation, or nothing.
+
+    Empty by default, so ffmpeg decides for itself exactly as before. See
+    `Settings.ffmpeg_threads` for why the cap exists.
+    """
+
+    from src.config import get_settings
+
+    threads = get_settings().ffmpeg_threads
+    return [] if threads <= 0 else ["-threads", str(threads)]
+
+
 def ffmpeg_executable() -> str:
     """Return a usable ffmpeg executable path.
 

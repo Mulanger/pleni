@@ -28,6 +28,7 @@ This file is the source of truth for chunk status and handoff notes.
 | V1 - YuNet replaces the Haar cascade | DONE | Completed 2026-08-07 |
 | V2 - Speaker identity verification | DONE | Completed 2026-08-08 |
 | V3 - Portrait recovery + framing-aware selection | DONE | Completed 2026-08-08 |
+| V5 - Clip edges land on measured silence | DONE | Completed 2026-08-08 |
 | V4 - C3 speaker misattribution | DONE | Completed 2026-08-08 |
 
 ## C0 - Foundations - DONE 2026-08-01
@@ -2904,3 +2905,90 @@ videos plus 0 playing detached media; the same check passed on Profil.
 - Do not restore the JSX `autoPlay` attribute. `FeedScreen` must remain the
   single playback owner so screen and visibility cleanup can cancel every
   pending fallback deterministically.
+
+## V5 — Clip edges land on measured silence — DONE 2026-08-08
+
+**Built:** pause snapping with lead-in/tail in `src/candidates/windows.py`, wiring
+and settings through `src/stages/candidates.py` and `src/config.py`, an ffmpeg
+thread cap in `src/media/ffprobe.py` applied at all three call sites, tests in
+`tests/unit/test_candidates_windows.py`.
+**Tests:** `python tasks.py test lint typecheck` green — **346 passed**, 68
+deselected; ruff clean; mypy strict clean on 80 files. Slow e2e green after a
+reviewed golden regeneration.
+**Contracts touched:** none.
+
+### The complaint, and why it was real
+
+The owner reported clips "ending at very random places". Measured against the
+waveform rather than against metadata — C5's RMS comes from the audio, so it can
+be asked whether a cut point is real — over 517 published clips in 30 debates:
+
+| | before | after |
+|---|---:|---:|
+| clip **starts** mid-speech | 63% | **22%** |
+| clip **ends** mid-speech | 60% | **22%** |
+| ends landing inside a real pause | 11% | **78%** |
+| median distance from end to nearest pause | 1.35 s | **0.00 s** |
+
+The cause is ADR 011. C4 distributes the official transcript's words evenly
+across the speech window, so the "sentence boundaries" C6 builds candidates on
+are linear interpolations, not observations of when anyone stopped talking. Same
+defect class as the framing work: a derived guess treated as evidence.
+
+C5's pauses come from the waveform, so snapping to them replaces the guess with a
+measurement — the move `src/segment/refine.py` already makes with scene cuts.
+
+**Clip count held**: 21 vs 20 on `HD10342`, so no yield was traded for it. The
+fixture golden shows the same thing in miniature: both clips still accepted, with
+*more* detected samples (296→301 and 189→208) and no unsupported spans, because
+the chosen windows moved to better-bounded positions.
+
+**Decisions made:**
+- Snapping runs *before* the duration filters, so a window is admitted on the
+  length it will actually be rendered at rather than on its interpolated one.
+- The start snaps to a pause's **end** and the end to a pause's **start**, then
+  `cut_lead_in_s` (0.20) and `cut_tail_s` (0.30) back each edge into that
+  silence. Landing exactly on the first phoneme clips it; the padding is clamped
+  inside the pause so it never reaches into the neighbouring sentence.
+- `cut_snap_max_s` is 2.0 s. A pause exists within 1 s of a cut for 40% of clips
+  and within 2 s for 65%; beyond that the timings are simply wrong and no snap
+  distance rescues them.
+- Off by default in the function signature (`max_snap_s=0.0`), so callers that do
+  not pass pauses behave exactly as before.
+
+### A measurement trap worth remembering
+
+The first version snapped without padding, and the start metric got *worse*:
+59% → 76% "at more than half of speaking level". That was the metric being wrong,
+not the code — snapping the start to the instant speech resumes makes it loud **by
+construction**. Sampling 0.15 s either side of the boundary instead measures what
+was actually wanted: quiet before the start, quiet after the end. Both baseline
+and result were then re-measured with the corrected metric.
+
+**Observations (not fixed, out of scope):**
+- This closes roughly two thirds of the problem. For the ~35% of cuts with no
+  pause within 2 s the word timings are simply wrong, and only real alignment
+  fixes them. Forced alignment is the tier-2 option: the authoritative text
+  already exists, so it needs mapping rather than recognition, which is far
+  cheaper than ASR. `torch` here is `2.11.0+cpu` while a GTX 1080 sits unused —
+  a CUDA build would make that practical.
+
+**Blocked / needs a decision:**
+- **The development workstation cannot sustain all-core load.** Seven hard
+  power-offs in one session, every one under sustained multi-core work, with no
+  bugcheck, no minidump and no WHEA entry — power being cut, not software
+  crashing. One of them **zeroed `08_track_fixture_summary.json` mid-write**
+  (1033 bytes of NUL; restored from git). Kernel-Power 41 events go back to
+  January, so this predates the session. Suspect PSU or cooling. Until it is
+  resolved, run anything ffmpeg-heavy with `RIKET_FFMPEG_THREADS=2`.
+- Carried over: the `HD10342` republish, the 1,762 old-detector clips, and P0-9.
+
+**Next agent should know:**
+- `RIKET_FFMPEG_THREADS` caps decode and encode. Default `0` is ffmpeg's own
+  "use everything", i.e. unchanged. At 2 threads the slow e2e takes 103 s instead
+  of 77 s and the machine survives it, which is the only reason the golden could
+  be regenerated at all.
+- The cut-quality measurement is worth keeping as a regression check: sample RMS
+  0.15 s either side of every clip boundary and compare against that speech's
+  own 60th-percentile loudness. Both the baseline and the result above were
+  produced that way.

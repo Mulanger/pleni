@@ -26,6 +26,19 @@ class Settings(BaseSettings):
 
     min_candidate_s: float = Field(default=38.0, gt=0.0)
     max_candidate_s: float = Field(default=62.0, gt=0.0)
+    # Clip edges are snapped onto measured silence within this window. C4 spreads
+    # the official transcript's words evenly over the speech (ADR 011), so
+    # sentence times are interpolations: measured over 517 clips, 61% of ends
+    # landed mid-utterance and only 11% inside a real pause. 2.0 s reaches a pause
+    # for about two thirds of them while staying inside the 38-62 s slack.
+    # Set to 0.0 to disable snapping.
+    cut_snap_max_s: float = Field(default=2.0, ge=0.0)
+    # Having snapped to silence, back each edge slightly into it. Opening exactly
+    # on the first phoneme clips it; closing on the last is equally abrupt. Both
+    # are clamped inside the pause they came from, so neither reaches into the
+    # neighbouring sentence.
+    cut_lead_in_s: float = Field(default=0.20, ge=0.0)
+    cut_tail_s: float = Field(default=0.30, ge=0.0)
     max_clip_overlap_frac: float = Field(default=0.20, ge=0.0, le=1.0)
     # `fallback` (deterministic first sentence), `ollama` (local), or `api`
     # (any OpenAI-compatible provider — DeepSeek, MiniMax, z.ai, ...).
@@ -93,6 +106,17 @@ class Settings(BaseSettings):
     camera_dead_zone_frac: float = Field(default=0.12, gt=0.0, lt=1.0)
     camera_max_pan_px_s_1080: float = Field(default=60.0, gt=0.0)
     thumbnail_offset_s: float = Field(default=1.5, ge=0.0)
+    # Cap on ffmpeg's worker threads for decode and encode. 0 is ffmpeg's own
+    # "use every core", which is the right default on a healthy machine and the
+    # behaviour this has always had.
+    #
+    # It exists because sustained all-core encoding hard power-cycled the
+    # development workstation seven times in one session -- no bugcheck, no
+    # minidump, no WHEA entry, i.e. power being cut rather than software
+    # crashing, and on one occasion it zeroed a file mid-write. On a box with a
+    # marginal PSU or heat-soaked cooler, `RIKET_FFMPEG_THREADS=2` makes the
+    # suite runnable at all. It is a workaround for hardware, not a tuning knob.
+    ffmpeg_threads: int = Field(default=0, ge=0)
     render_crf: int = Field(default=20, ge=0, le=51)
     render_preset: str = Field(default="medium")
     publish_backend: str = Field(default="local")

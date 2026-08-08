@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.errors import ArtifactError, StageExecutionError
-from src.media.ffprobe import ffmpeg_executable
+from src.media.ffprobe import ffmpeg_executable, ffmpeg_thread_args
 
 ANALYSIS_SAMPLE_RATE_HZ = 16_000
 ANALYSIS_AUDIO_CHANNELS = 1
@@ -53,6 +53,7 @@ def extract_analysis_assets(
         "-loglevel",
         "error",
         "-y",
+        *ffmpeg_thread_args(),
         "-i",
         str(master),
         "-map",

@@ -8,7 +8,7 @@ from pathlib import Path
 from src.camera.plan import crop_size_for_media
 from src.contracts import CameraKeyframe, CameraPlan, MediaInfo, SelectedClip
 from src.errors import ArtifactError, StageExecutionError
-from src.media.ffprobe import ffmpeg_executable
+from src.media.ffprobe import ffmpeg_executable, ffmpeg_thread_args
 
 
 def write_sendcmd_file(path: Path, camera_plan: CameraPlan, clip: SelectedClip) -> None:
@@ -74,6 +74,7 @@ def render_primary_clip(
         "-loglevel",
         "error",
         "-y",
+        *ffmpeg_thread_args(),
         "-ss",
         f"{float(clip.start_s):.3f}",
         "-i",
@@ -106,6 +107,9 @@ def render_primary_clip(
         "1",
         "-movflags",
         "+faststart",
+        # again before the output: the first occurrence caps decoding, this one
+        # caps libx264, which is what actually saturates the machine.
+        *ffmpeg_thread_args(),
         str(output.resolve()),
     ]
     completed = subprocess.run(

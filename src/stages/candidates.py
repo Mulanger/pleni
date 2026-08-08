@@ -45,6 +45,9 @@ def generate_candidates_dokid(dokid: str, *, work_dir: Path | str) -> list[Path]
             scenes,
             min_duration_s=settings.min_candidate_s,
             max_duration_s=settings.max_candidate_s,
+            max_snap_s=settings.cut_snap_max_s,
+            lead_in_s=settings.cut_lead_in_s,
+            tail_s=settings.cut_tail_s,
         )
         artifact = paths.candidates_json(speech.speech_id)
         write_json(artifact, [candidate.model_dump(mode="json") for candidate in candidates])
@@ -60,13 +63,25 @@ def build_candidates_for_speech(
     *,
     min_duration_s: float,
     max_duration_s: float,
+    max_snap_s: float = 0.0,
+    lead_in_s: float = 0.0,
+    tail_s: float = 0.0,
 ) -> list[Candidate]:
-    """Build C6 candidates for one speech from sentence-boundary windows."""
+    """Build C6 candidates for one speech from sentence-boundary windows.
+
+    `audio_features.pauses` come from the waveform, so they are the only
+    evidence available here about when anyone actually stopped talking; the
+    sentence times are interpolated. See `src.candidates.windows`.
+    """
 
     windows = generate_sentence_windows(
         transcript.sentences,
         min_duration_s=min_duration_s,
         max_duration_s=max_duration_s,
+        pauses=audio_features.pauses,
+        max_snap_s=max_snap_s,
+        lead_in_s=lead_in_s,
+        tail_s=tail_s,
     )
     return [
         _candidate_from_window(
