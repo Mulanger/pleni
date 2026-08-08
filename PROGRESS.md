@@ -2992,3 +2992,70 @@ and result were then re-measured with the corrected metric.
   0.15 s either side of every clip boundary and compare against that speech's
   own 60th-percentile loudness. Both the baseline and the result above were
   produced that way.
+
+## V6 — Tier-2 timing: tried, measured, reverted — 2026-08-08
+
+**Built:** nothing shipped. This entry exists so the next agent does not spend the
+same day rediscovering it.
+**Tests:** `python tasks.py test lint typecheck` green — 346 passed, unchanged.
+**Contracts touched:** none.
+
+### The idea
+
+V5 snapped clip edges onto measured pauses and fixed about two thirds of the bad
+cuts. The remaining third had no pause within the 2 s snap window, meaning the
+interpolated sentence times were simply too wrong to rescue.
+
+The obvious cause: C4 spreads the official transcript's words evenly over
+**wall-clock** time (ADR 011), which assumes the speaker never stops. A 10 s pause
+consumes a tenth of a 100 s speech while consuming no words, so every later word
+is placed early and the error accumulates. The obvious fix, and much cheaper than
+adding a neural forced aligner to a machine that cannot run one: spread the words
+over **voiced** time instead, using the VAD C3 already owns, and map back onto the
+clock so silence costs no words.
+
+### It did not work
+
+Measured on `HD10342`, cut quality by the same waveform metric as V5:
+
+| | V5 only | + voiced timing | + voiced timing, silence definitions aligned |
+|---|---:|---:|---:|
+| starts mid-speech | **22%** | 45% | 24% |
+| ends mid-speech | **22%** | 40% | 43% |
+| ends inside a real pause | **78%** | 70% | 57% |
+
+The middle column had a genuine bug behind it — C4's VAD splits speech at 0.35 s
+gaps while C5 calls a gap a pause at 0.40 s, so words were distributed against one
+model of the speech and edges snapped against another. Aligning them recovered
+the starts. **The ends still got worse.**
+
+The reason is structural, and it is why more tuning will not save it. Changing
+word timings shifts every sentence boundary, which changes the whole candidate
+set, so C7 selects *different windows*. Selection ranks on text and audio, not on
+cut quality, so the reshuffle is effectively random with respect to the metric.
+Meanwhile V5's snapping already puts an edge on a measured pause whenever one is
+within 2 s — regardless of how wrong the interpolation was. Improving the
+interpolation therefore buys almost nothing that snapping had not already bought,
+while destabilising which clips get chosen.
+
+**Reverted rather than shipped.** There was no measured upside and a consistent
+downside, and a config flag to hide it would be a decision not made.
+
+**Observations (not fixed, out of scope):**
+- Sample was 21 clips in 2 debates, which is small. The direction was consistent
+  across three runs, but a larger sample would make the negative result firmer.
+- Voiced-proportional timing may still be right for something this metric cannot
+  see: the correspondence between `clips.transcript` and what is actually said.
+  That matters for titles and search, not for where the cut lands. If it is
+  retried, measure *that*, not cut quality.
+- Real forced alignment (CTC, e.g. `torchaudio.functional.forced_align` with an
+  MMS bundle) remains the only thing that fixes the underlying timings. It needs
+  torch with CUDA; this box has `2.11.0+cpu` and an idle GTX 1080.
+
+**Next agent should know:**
+- Do not re-attempt voiced-proportional word distribution expecting better cuts.
+  The blocker is that selection is not cut-quality aware, not the timing model.
+- The cut-quality measurement is worth keeping: sample RMS 0.15 s either side of
+  each clip boundary, compare against that speech's own 60th-percentile loudness,
+  and report the share above 50%. Sampling *at* the boundary measures the wrong
+  thing and will tell you a correct fix made things worse.
