@@ -102,7 +102,7 @@ export function Onboarding({
   return (
     <div className="onboarding-backdrop">
       <div
-        className="onboarding-card"
+        className={`onboarding-card onboarding-card--step-${step}`}
         role="dialog"
         aria-modal="true"
         aria-label={`Onboarding, steg ${step} av 3`}
@@ -205,13 +205,13 @@ export function Onboarding({
                       className={selected ? "party-tile party-tile--on" : "party-tile"}
                       onClick={() => toggleParty(code)}
                     >
-                      <span className="party-tile-top">
-                        <span className="party-chip" style={{ background: party.color }}>
-                          {code}
-                        </span>
-                        {selected && <Check size={16} />}
+                      <span className="party-chip" style={{ background: party.color }}>
+                        {code}
                       </span>
                       <span className="party-tile-name">{party.name}</span>
+                      <span className="party-tile-check">
+                        {selected && <Check size={14} />}
+                      </span>
                     </button>
                   );
                 })}
@@ -226,9 +226,23 @@ export function Onboarding({
               </span>
               <h2>Villkor & samtycke</h2>
               <p className="onboarding-lede">
-                Dina partival och din politiska inriktning räknas som känsliga personuppgifter.
-                Personalisering är därför avstängd tills du själv slår på den.
+                Personaliserat flöde kräver att du slår på personalisering. Utan den ser du{" "}
+                <strong>Senaste</strong> — alla klipp, senaste först.
               </p>
+
+              <label className="terms-row">
+                <span className="terms-copy">
+                  Jag har läst och godkänner användarvillkoren och integritetspolicyn.
+                </span>
+                <span className={acceptedTerms ? "tick tick--on" : "tick"}>
+                  {acceptedTerms && <Check size={14} />}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(event) => setAcceptedTerms(event.target.checked)}
+                />
+              </label>
 
               <label className="consent-row consent-row--personal">
                 <span className="consent-copy">
@@ -246,18 +260,6 @@ export function Onboarding({
                   }
                 />
               </label>
-
-              {/* The consequence is stated here, beside both choices, rather
-                  than in a dialog after someone declines. EDPB Guidelines
-                  03/2022 name "questioning a refusal to grant consent" as a
-                  deceptive pattern — continuous prompting — because a user may
-                  simply give in to the second ask. Saying it once, up front and
-                  neutrally, is the informed half of informed consent; saying it
-                  again afterwards is pressure. */}
-              <p className="consent-consequence">
-                Personaliserat flöde kräver att du slår på personalisering. Utan den ser du{" "}
-                <strong>Senaste</strong> — alla klipp, senaste först.
-              </p>
 
               <div className="consent-choice">
                 <button
@@ -279,21 +281,8 @@ export function Onboarding({
               </div>
 
               <p className="onboarding-fineprint">
-                Dina val stannar på enheten. Du kan stänga av personalisering när som helst
-                under Profil.
+                Du kan stänga av personalisering när som helst under Profil.
               </p>
-
-              <label className="terms-row">
-                <span className={acceptedTerms ? "tick tick--on" : "tick"}>
-                  {acceptedTerms && <Check size={14} />}
-                </span>
-                <span>Jag har läst och godkänner användarvillkoren och integritetspolicyn.</span>
-                <input
-                  type="checkbox"
-                  checked={acceptedTerms}
-                  onChange={(event) => setAcceptedTerms(event.target.checked)}
-                />
-              </label>
             </div>
           )}
 
