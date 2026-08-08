@@ -435,6 +435,7 @@ function App() {
                 clips={clips}
                 feedMode={feedMode}
                 setFeedMode={setFeedMode}
+                playbackSuspended={showOnboarding}
                 muted={muted}
                 setMuted={setMuted}
                 liked={liked}
@@ -503,6 +504,7 @@ function FeedScreen({
   clips,
   feedMode,
   setFeedMode,
+  playbackSuspended = false,
   muted,
   setMuted,
   liked,
@@ -522,6 +524,8 @@ function FeedScreen({
   clips: ClipItem[];
   feedMode: FeedMode;
   setFeedMode: (mode: FeedMode) => void;
+  /** Keeps the visible frame in place while a modal surface covers the feed. */
+  playbackSuspended?: boolean;
   muted: boolean;
   setMuted: (muted: boolean) => void;
   liked: BooleanMap;
@@ -562,9 +566,11 @@ function FeedScreen({
   const resumeAfterVisibility = useRef(false);
   const playbackGeneration = useRef(0);
   const playbackMounted = useRef(false);
+  const playbackSuspendedRef = useRef(playbackSuspended);
   const activeIdRef = useRef(activeId);
   const commentClipRef = useRef(commentClip);
   activeIdRef.current = activeId;
+  playbackSuspendedRef.current = playbackSuspended;
   commentClipRef.current = commentClip;
   /**
    * FE-3. Loop boundaries per clip. A completion is the first `ended`; every
@@ -639,6 +645,7 @@ function FeedScreen({
   const playWithMutedFallback = (clipId: string, video: HTMLVideoElement) => {
     if (
       !playbackMounted.current ||
+      playbackSuspendedRef.current ||
       document.visibilityState !== "visible" ||
       videoRefs.current[clipId] !== video ||
       !video.isConnected ||
@@ -650,6 +657,7 @@ function FeedScreen({
     const generation = ++playbackGeneration.current;
     const isCurrentRequest = () =>
       playbackMounted.current &&
+      !playbackSuspendedRef.current &&
       playbackGeneration.current === generation &&
       document.visibilityState === "visible" &&
       videoRefs.current[clipId] === video &&
@@ -711,7 +719,11 @@ function FeedScreen({
         return;
       }
 
-      if (!resumeAfterVisibility.current || commentClipRef.current !== null) {
+      if (
+        !resumeAfterVisibility.current ||
+        playbackSuspendedRef.current ||
+        commentClipRef.current !== null
+      ) {
         return;
       }
       resumeAfterVisibility.current = false;
@@ -862,7 +874,11 @@ function FeedScreen({
 
   useEffect(() => {
     pauseAllPlayback();
-    if (document.visibilityState !== "visible" || commentClipRef.current !== null) {
+    if (
+      playbackSuspended ||
+      document.visibilityState !== "visible" ||
+      commentClipRef.current !== null
+    ) {
       return;
     }
     Object.entries(videoRefs.current).forEach(([clipId, video]) => {
@@ -877,7 +893,7 @@ function FeedScreen({
       }
     });
     return pauseAllPlayback;
-  }, [activeId, clips]);
+  }, [activeId, clips, playbackSuspended]);
 
   useEffect(() => {
     Object.values(videoRefs.current).forEach((video) => {

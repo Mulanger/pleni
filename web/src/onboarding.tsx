@@ -98,7 +98,12 @@ export function Onboarding({
   if (done) {
     return (
       <div className="onboarding-backdrop">
-        <div className="onboarding-card onboarding-card--done">
+        <div
+          className="onboarding-card onboarding-card--done"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Välkommen till Pleni"
+        >
           <div className="onboarding-badge">
             <Sparkles size={28} />
           </div>
@@ -118,7 +123,12 @@ export function Onboarding({
 
   return (
     <div className="onboarding-backdrop">
-      <div className="onboarding-card">
+      <div
+        className="onboarding-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Onboarding, steg ${step} av 3`}
+      >
         <div className="onboarding-progress">
           <div className="onboarding-bars">
             {[1, 2, 3].map((index) => (
