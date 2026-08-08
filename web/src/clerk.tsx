@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ClerkProvider, useClerk, useUser } from "@clerk/react";
+import { ClerkProvider, useClerk, useSession, useUser } from "@clerk/react";
 import { svSE } from "@clerk/localizations";
 
 /**
@@ -46,20 +46,34 @@ const appearance = {
 export function useViewer(): {
   signedIn: boolean;
   userId: string | null;
+  suggestedUsername: string | null;
+  getAccessToken: () => Promise<string | null>;
   requireSignIn: () => void;
 } {
   if (!clerkEnabled) {
-    return { signedIn: false, userId: null, requireSignIn: () => {} };
+    return {
+      signedIn: false,
+      userId: null,
+      suggestedUsername: null,
+      getAccessToken: async () => null,
+      requireSignIn: () => {}
+    };
   }
 
   // eslint-disable-next-line react-hooks/rules-of-hooks -- build-time constant, see above.
   const { isSignedIn, user } = useUser();
   // eslint-disable-next-line react-hooks/rules-of-hooks -- build-time constant, see above.
   const clerk = useClerk();
+  // eslint-disable-next-line react-hooks/rules-of-hooks -- build-time constant, see above.
+  const { session } = useSession();
 
   return {
     signedIn: !!isSignedIn,
     userId: user?.id ?? null,
+    // Only Clerk's explicit username is suggested. A full name or email local
+    // part must never be turned into a public comment identity implicitly.
+    suggestedUsername: user?.username ?? null,
+    getAccessToken: async () => (await session?.getToken()) ?? null,
     requireSignIn: () => clerk.openSignIn({})
   };
 }

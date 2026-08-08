@@ -663,6 +663,57 @@ in Supabase; Python acceptance, TypeScript typecheck and Vite build are green.
 
 ---
 
+## UI4 — Per-video comments and moderation
+
+**Depends on:** A-3/A-4 (verified Clerk → Supabase authentication) and UI1.
+**Size:** medium.
+
+**Objective.** Give every published clip a readable public discussion without
+exposing account photos, email addresses or Clerk subjects. Signed-in viewers
+post under a unique `@username`; everyone can read and report. Posting,
+deletion, rate limiting and moderation are enforced in Postgres RPCs rather than
+trusted to the static client.
+
+**Scope — may create or modify:**
+
+```
+migrations/01{2_video_comments,3_comment_reporter_identity}.{up,down}.sql
+scripts/moderate_comments.py
+tests/unit/test_comment_migration.py
+web/src/comments.ts
+web/src/clerk.tsx
+web/src/App.tsx
+web/src/styles.css
+docs/BUILD_PLAN.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** `src/contracts.py`, any numbered video stage,
+candidate selection, vision, rendering, Bunny storage, feed ordering/media
+windowing, onboarding or consent collection, and F1's reserved migrations 010
+and 011.
+
+**Build.** Add inaccessible-by-default comment/profile/report/moderation tables
+plus narrowly granted RPCs. Public reads return only comment id, `@username`,
+body, time and whether the authenticated caller owns the row. Clerk `sub` stays
+inside protected tables. The write RPC validates a 3–24 character handle,
+500-character text limit, link-free first-version policy, published clip,
+account suspension and rate limits. Users can delete their own comments;
+reports never auto-hide content; service-role moderation can hide/restore/delete
+comments and suspend an author with an append-only audit event.
+
+The frontend opens a restrained bottom sheet over the active video, pauses and
+resumes playback around it, renders no user imagery, supports first-comment
+username selection, authenticated posting, own-comment deletion and reasoned
+reporting. Anonymous playback and comment reading remain available.
+
+**Acceptance:** anon can read but cannot post or delete; authenticated A cannot
+delete B; no public response contains a Clerk id; reporting and moderator actions
+are persisted; rate and content limits fail closed; the production TypeScript
+build and the full Python acceptance command are green.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.

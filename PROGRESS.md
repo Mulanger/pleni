@@ -2778,3 +2778,80 @@ portrait URLs returned HTTP 200 with real JPEG byte lengths.
   use fits that context; do not reuse these portraits as advertising creative.
 - F1 migration numbers moved from `009`/`010` to `010`/`011` because UI3 now
   owns applied migration 009.
+
+## UI4 — Per-video comments and moderation — DONE 2026-08-08
+
+**Built:** `migrations/012_video_comments.{up,down}.sql`, forward fix
+`013_comment_reporter_identity`, `web/src/comments.ts`, the comment sheet in
+`web/src/{App.tsx,styles.css}`, token/username support in `web/src/clerk.tsx`,
+`scripts/moderate_comments.py` and focused migration security tests.
+**Tests:** `python tasks.py test lint typecheck` green — **346 passed**, 68
+deselected, one pre-existing `audioop` warning; ruff and mypy clean. Frontend
+`tsc --noEmit` and Vite production build green (437.19 kB JS, 126.56 kB gzip).
+**Contracts touched:** none.
+
+### What changed
+
+- Every published clip now opens a mobile comment sheet from the existing
+  action rail. The sheet pauses the active video, resumes it on close, loads the
+  real per-clip thread and keeps the composer above the mobile safe area.
+- Comments render only `@username`, relative time and text. There is no user
+  image field or avatar component. A viewer without a comment identity chooses
+  a unique 3–24 character handle on the first post; Clerk subjects never leave
+  the protected database projection.
+- Anyone can read and report. Posting and own-comment deletion require the
+  verified Clerk → Supabase session. The database enforces published-clip
+  membership, 500 characters, no links in the first version, three posts per
+  minute / 100 per day, account suspension and immutable ownership.
+- Reports never auto-hide political speech. Service-role-only functions hide,
+  restore or delete after review and can suspend an author. Each action writes
+  an append-only moderation event. `scripts/moderate_comments.py` lists open
+  reports and performs those actions without exposing moderator powers to the
+  static app.
+
+### Live result
+
+Migrations `012_video_comments` and `013_comment_reporter_identity` are applied
+to project `nlooigmwuqqhhnontlgp`. Public-key REST verification returned HTTP
+200 for anonymous listing and HTTP 401 for anonymous posting. A rollback-only
+live transaction proved safe public projection, A-cannot-delete-B, reporting
+before a reporter has posted, hide/restore, suspension and own deletion. No test
+comments or reports remain in the database.
+
+### Decisions made
+
+- The static frontend calls small Postgres RPCs rather than receiving direct
+  table write grants. The tables have RLS enabled, no public policies and no
+  privileges for `anon` or `authenticated`; public reads are a five-field safe
+  projection.
+- Username choice is separate from Clerk full name and email. Clerk's explicit
+  username may be suggested, but Pleni never derives a public handle from a real
+  name or email address.
+- The visual system is a restrained near-black sheet over the full-bleed video,
+  with a single blue identity/action accent, plain divided rows instead of
+  avatar cards, and short sheet/row/composer motion with a reduced-motion path.
+- `012` was already live when the signed-in-report-before-first-comment edge
+  case was found. The fix is migration `013`, not an edit to the ledgered file.
+  F1's reserved `010`/`011` numbers remain untouched.
+
+### Observations (not fixed, out of scope)
+
+- The onboarding terms/privacy acceptance remains device-local placeholder
+  work for the later F0/F1 session, by owner request. UI4 does not persist or
+  reinterpret those consent switches.
+- Browser-control tooling was unavailable for a rendered 375×812 capture. CSS,
+  accessibility structure, TypeScript and the production bundle were verified;
+  final feel should be checked on the owner's live phone after deploy.
+
+### Blocked / needs a decision
+
+- `P0-9` — five credentials in chat transcripts remain open for rotation.
+
+### Next agent should know
+
+- Use `python scripts/moderate_comments.py reports` for the queue, then
+  `hide|restore|delete <comment-uuid> --reason ...` or
+  `suspend|unsuspend @username --reason ...`.
+- Comments cascade with `clips` and comment profiles. A later account-deletion
+  workflow can delete one `comment_profiles` row and remove that account's
+  comments without searching public text.

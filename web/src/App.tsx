@@ -7,12 +7,16 @@ import {
   ChevronRight,
   Clock3,
   Download,
+  Flag,
   Heart,
   Home,
+  LoaderCircle,
   MessageCircle,
+  MoreHorizontal,
   Pause,
   Play,
   Search,
+  Send,
   Share2,
   ShieldCheck,
   Sliders,
@@ -34,6 +38,18 @@ import {
   useUser
 } from "@clerk/react";
 import { clerkEnabled, useViewer } from "./clerk";
+import {
+  COMMENT_MAX_LENGTH,
+  COMMENT_USERNAME_PATTERN,
+  commentErrorMessage,
+  createVideoComment,
+  deleteVideoComment,
+  loadMyCommentUsername,
+  loadVideoComments,
+  normalizeCommentUsername,
+  reportVideoComment
+} from "./comments";
+import type { CommentReportReason, CommentThread, VideoComment } from "./comments";
 import { initials, PARTIES, partyInk, partyTint, TRENDING } from "./data";
 import { Onboarding } from "./onboarding";
 import { EMPTY_ONBOARDING, readOnboarding, writeOnboarding } from "./onboarding-store";
@@ -536,8 +552,10 @@ function FeedScreen({
   const [currentTimes, setCurrentTimes] = useState<NumberMap>({});
   const [durations, setDurations] = useState<NumberMap>({});
   const [playbackFlash, setPlaybackFlash] = useState<PlaybackFlash | null>(null);
+  const [commentClip, setCommentClip] = useState<ClipItem | null>(null);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const flashTimer = useRef<number | null>(null);
+  const resumeAfterComments = useRef(false);
   /**
    * FE-3. Loop boundaries per clip. A completion is the first `ended`; every
    * later one is a deliberate replay of a clip the viewer chose not to scroll
@@ -627,6 +645,40 @@ function FeedScreen({
     video.currentTime = 0;
     playWithMutedFallback(clipId, video);
   };
+
+  const openComments = (clip: ClipItem) => {
+    const video = videoRefs.current[clip.id];
+    resumeAfterComments.current = clip.id === activeId && video != null && !video.paused;
+    video?.pause();
+    setCommentClip(clip);
+  };
+
+  const closeComments = () => {
+    const clipId = commentClip?.id;
+    setCommentClip(null);
+    if (!clipId || !resumeAfterComments.current || clipId !== activeId) {
+      resumeAfterComments.current = false;
+      return;
+    }
+    const video = videoRefs.current[clipId];
+    resumeAfterComments.current = false;
+    if (video) {
+      playWithMutedFallback(clipId, video);
+    }
+  };
+
+  useEffect(() => {
+    if (!commentClip) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeComments();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
 
   useEffect(() => {
     return () => {
@@ -914,6 +966,7 @@ function FeedScreen({
                 liked={isLiked}
                 saved={isSaved}
                 onLike={() => onLike(clip.id)}
+                onComments={() => openComments(clip)}
                 onSave={() => onSave(clip.id)}
               />
               <ClipMeta
@@ -932,6 +985,7 @@ function FeedScreen({
           );
         })}
       </div>
+      {commentClip && <CommentSheet clip={commentClip} onClose={closeComments} />}
     </section>
   );
 }
@@ -1016,12 +1070,14 @@ function ActionRail({
   liked,
   saved,
   onLike,
+  onComments,
   onSave
 }: {
   clip: ClipItem;
   liked: boolean;
   saved: boolean;
   onLike: () => void;
+  onComments: () => void;
   onSave: () => void;
 }) {
   return (
@@ -1033,7 +1089,7 @@ function ActionRail({
       </ActionButton>
       {/* Icon only: no Swedish word for this fits the 54px rail, and there is
           no real count to put there. The accessible name still describes it. */}
-      <ActionButton label="Kommentarer" hideLabel>
+      <ActionButton label="Kommentarer" hideLabel onClick={onComments}>
         <MessageCircle size={21} />
       </ActionButton>
       <ActionButton label="Spara" active={saved} onClick={onSave}>
@@ -1068,6 +1124,360 @@ function ActionButton({
       {!hideLabel && <span>{label}</span>}
     </div>
   );
+}
+
+const EMPTY_COMMENT_THREAD: CommentThread = { count: 0, comments: [] };
+
+const COMMENT_REPORT_OPTIONS: Array<{ reason: CommentReportReason; label: string }> = [
+  { reason: "spam", label: "Spam" },
+  { reason: "harassment", label: "Hot eller trakasserier" },
+  { reason: "hate", label: "Hat mot en grupp" },
+  { reason: "private_information", label: "Privat information" },
+  { reason: "illegal", label: "Misstänkt olagligt" },
+  { reason: "other", label: "Annat" }
+];
+
+function CommentSheet({ clip, onClose }: { clip: ClipItem; onClose: () => void }) {
+  const viewer = useViewer();
+  const [thread, setThread] = useState<CommentThread>(EMPTY_COMMENT_THREAD);
+  const [loading, setLoading] = useState(true);
+  const [profileReady, setProfileReady] = useState(!viewer.signedIn);
+  const [commentUsername, setCommentUsername] = useState<string | null>(null);
+  const [handleDraft, setHandleDraft] = useState("");
+  const [body, setBody] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [posting, setPosting] = useState(false);
+  const [menuCommentId, setMenuCommentId] = useState<string | null>(null);
+  const [reportCommentId, setReportCommentId] = useState<string | null>(null);
+  const [busyCommentId, setBusyCommentId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setThread(EMPTY_COMMENT_THREAD);
+    setLoading(true);
+    setProfileReady(!viewer.signedIn);
+    setCommentUsername(null);
+    setError(null);
+    setNotice(null);
+    setMenuCommentId(null);
+    setReportCommentId(null);
+
+    const load = async () => {
+      const accessToken = viewer.signedIn ? await viewer.getAccessToken() : null;
+      const loadedThread = await loadVideoComments(clip.id, accessToken);
+      let loadedUsername: string | null = null;
+      if (accessToken) {
+        try {
+          loadedUsername = await loadMyCommentUsername(accessToken);
+        } catch {
+          // Reading comments stays available even if the optional profile read
+          // fails. Posting will surface the authenticated error precisely.
+        }
+      }
+      if (!active) {
+        return;
+      }
+      setThread(loadedThread);
+      setCommentUsername(loadedUsername);
+      const suggestion = normalizeCommentUsername(viewer.suggestedUsername ?? "");
+      setHandleDraft(
+        loadedUsername ?? (COMMENT_USERNAME_PATTERN.test(suggestion) ? suggestion : "")
+      );
+      setProfileReady(true);
+    };
+
+    void load()
+      .catch((loadError: unknown) => {
+        if (active) {
+          setError(commentErrorMessage(loadError));
+          setProfileReady(true);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [clip.id, viewer.signedIn]);
+
+  const submitComment = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    setNotice(null);
+    if (!viewer.signedIn) {
+      viewer.requireSignIn();
+      return;
+    }
+
+    const normalizedUsername = normalizeCommentUsername(handleDraft);
+    if (!commentUsername && !COMMENT_USERNAME_PATTERN.test(normalizedUsername)) {
+      setError("Använd 3–24 små bokstäver, siffror eller understreck.");
+      return;
+    }
+
+    setPosting(true);
+    try {
+      const accessToken = await viewer.getAccessToken();
+      if (!accessToken) {
+        viewer.requireSignIn();
+        return;
+      }
+      const comment = await createVideoComment(
+        clip.id,
+        body,
+        commentUsername ? null : normalizedUsername,
+        accessToken
+      );
+      setThread((current) => ({
+        count: current.count + 1,
+        comments: [comment, ...current.comments]
+      }));
+      setCommentUsername(comment.authorUsername);
+      setHandleDraft(comment.authorUsername);
+      setBody("");
+      setNotice("Kommentaren är publicerad.");
+    } catch (submitError: unknown) {
+      setError(commentErrorMessage(submitError));
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  const removeComment = async (comment: VideoComment) => {
+    setBusyCommentId(comment.id);
+    setError(null);
+    try {
+      const accessToken = await viewer.getAccessToken();
+      if (!accessToken) {
+        viewer.requireSignIn();
+        return;
+      }
+      await deleteVideoComment(comment.id, accessToken);
+      setThread((current) => ({
+        count: Math.max(0, current.count - 1),
+        comments: current.comments.filter((item) => item.id !== comment.id)
+      }));
+      setNotice("Kommentaren är borttagen.");
+      setMenuCommentId(null);
+    } catch (deleteError: unknown) {
+      setError(commentErrorMessage(deleteError));
+    } finally {
+      setBusyCommentId(null);
+    }
+  };
+
+  const reportComment = async (commentId: string, reason: CommentReportReason) => {
+    setBusyCommentId(commentId);
+    setError(null);
+    try {
+      const accessToken = viewer.signedIn ? await viewer.getAccessToken() : null;
+      await reportVideoComment(commentId, reason, accessToken);
+      setNotice("Tack. Rapporten har skickats till granskning.");
+      setReportCommentId(null);
+      setMenuCommentId(null);
+    } catch (reportError: unknown) {
+      setError(commentErrorMessage(reportError));
+    } finally {
+      setBusyCommentId(null);
+    }
+  };
+
+  const normalizedDraft = normalizeCommentUsername(handleDraft);
+  const handleIsReady = commentUsername !== null || COMMENT_USERNAME_PATTERN.test(normalizedDraft);
+  const canPost = body.trim().length > 0 && body.length <= COMMENT_MAX_LENGTH && handleIsReady;
+
+  return (
+    <div className="comment-backdrop" onClick={onClose}>
+      <section
+        className="comment-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="comment-sheet-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="comment-grabber" aria-hidden="true" />
+        <header className="comment-header">
+          <div>
+            <h2 id="comment-sheet-title">Kommentarer</h2>
+            <span>{thread.count === 1 ? "1 kommentar" : `${thread.count} kommentarer`}</span>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Stäng kommentarer">
+            <X size={21} />
+          </button>
+        </header>
+
+        <div className="comment-stream" aria-live="polite">
+          {loading && (
+            <div className="comment-state">
+              <LoaderCircle className="comment-spinner" size={24} />
+              <span>Hämtar samtalet</span>
+            </div>
+          )}
+          {!loading && thread.comments.length === 0 && (
+            <div className="comment-state comment-state--empty">
+              <MessageCircle size={28} />
+              <strong>Starta samtalet</strong>
+              <span>Var först med en kommentar om klippet.</span>
+            </div>
+          )}
+          {thread.comments.map((comment, index) => (
+            <article
+              className="comment-row"
+              key={comment.id}
+              style={{ "--comment-index": Math.min(index, 8) } as React.CSSProperties}
+            >
+              <div className="comment-copy">
+                <div className="comment-byline">
+                  <strong>@{comment.authorUsername}</strong>
+                  <time dateTime={comment.createdAt}>{relativeCommentTime(comment.createdAt)}</time>
+                </div>
+                <p>{comment.body}</p>
+                {reportCommentId === comment.id && (
+                  <div className="comment-report-panel">
+                    <span>Varför rapporterar du?</span>
+                    <div>
+                      {COMMENT_REPORT_OPTIONS.map((option) => (
+                        <button
+                          type="button"
+                          key={option.reason}
+                          disabled={busyCommentId === comment.id}
+                          onClick={() => void reportComment(comment.id, option.reason)}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="comment-menu">
+                <button
+                  type="button"
+                  aria-label={`Åtgärder för @${comment.authorUsername}`}
+                  aria-expanded={menuCommentId === comment.id}
+                  onClick={() => {
+                    setReportCommentId(null);
+                    setMenuCommentId((current) => (current === comment.id ? null : comment.id));
+                  }}
+                >
+                  <MoreHorizontal size={19} />
+                </button>
+                {menuCommentId === comment.id && (
+                  <div className="comment-menu-popover">
+                    {comment.isOwn ? (
+                      <button
+                        type="button"
+                        className="danger"
+                        disabled={busyCommentId === comment.id}
+                        onClick={() => void removeComment(comment)}
+                      >
+                        <Trash2 size={15} />
+                        Ta bort
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReportCommentId(comment.id);
+                          setMenuCommentId(null);
+                        }}
+                      >
+                        <Flag size={15} />
+                        Rapportera
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <footer className="comment-composer">
+          {(error || notice) && (
+            <div className={error ? "comment-feedback error" : "comment-feedback"} role={error ? "alert" : "status"}>
+              {error ?? notice}
+            </div>
+          )}
+          {!viewer.signedIn ? (
+            <button className="comment-sign-in" type="button" onClick={viewer.requireSignIn}>
+              Logga in för att kommentera
+            </button>
+          ) : !profileReady ? (
+            <div className="comment-profile-loading">Förbereder din kommentar…</div>
+          ) : (
+            <form onSubmit={(event) => void submitComment(event)}>
+              {!commentUsername && (
+                <label className="comment-handle-field">
+                  <span>Välj offentligt användarnamn</span>
+                  <div>
+                    <b>@</b>
+                    <input
+                      value={handleDraft}
+                      onChange={(event) => setHandleDraft(event.target.value)}
+                      maxLength={24}
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      placeholder="användarnamn"
+                    />
+                  </div>
+                </label>
+              )}
+              <div className="comment-input-row">
+                <label>
+                  <span className="sr-only">Skriv en kommentar</span>
+                  <textarea
+                    value={body}
+                    onChange={(event) => setBody(event.target.value)}
+                    maxLength={COMMENT_MAX_LENGTH}
+                    rows={1}
+                    placeholder={commentUsername ? `Kommentera som @${commentUsername}` : "Skriv en kommentar"}
+                  />
+                </label>
+                <button type="submit" disabled={!canPost || posting} aria-label="Publicera kommentar">
+                  {posting ? <LoaderCircle className="comment-spinner" size={18} /> : <Send size={18} />}
+                </button>
+              </div>
+              <div className="comment-composer-meta">
+                <span>Kommentarer är offentliga · inga länkar</span>
+                {body.length >= 400 && <b>{body.length}/{COMMENT_MAX_LENGTH}</b>}
+              </div>
+            </form>
+          )}
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function relativeCommentTime(value: string): string {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    return "";
+  }
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (elapsedSeconds < 60) {
+    return "nyss";
+  }
+  const minutes = Math.floor(elapsedSeconds / 60);
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours} h`;
+  }
+  const days = Math.floor(hours / 24);
+  if (days < 7) {
+    return `${days} d`;
+  }
+  return new Intl.DateTimeFormat("sv-SE", { day: "numeric", month: "short" }).format(timestamp);
 }
 
 function ClipMeta({
