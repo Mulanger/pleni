@@ -29,6 +29,7 @@ This file is the source of truth for chunk status and handoff notes.
 | V2 - Speaker identity verification | DONE | Completed 2026-08-08 |
 | V3 - Portrait recovery + framing-aware selection | DONE | Completed 2026-08-08 |
 | V5 - Clip edges land on measured silence | DONE | Completed 2026-08-08 |
+| V7 - Selection prefers windows that cut cleanly | DONE | Completed 2026-08-08 |
 | V4 - C3 speaker misattribution | DONE | Completed 2026-08-08 |
 
 ## C0 - Foundations - DONE 2026-08-01
@@ -3059,3 +3060,69 @@ downside, and a config flag to hide it would be a decision not made.
   each clip boundary, compare against that speech's own 60th-percentile loudness,
   and report the share above 50%. Sampling *at* the boundary measures the wrong
   thing and will tell you a correct fix made things worse.
+
+## V7 — Selection prefers windows that cut cleanly — DONE 2026-08-08
+
+**Built:** `edge_gap_s` feature in `src/scoring/archetypes.py`, cut-aware ordering
+in `src/scoring/select.py`, `max_clip_edge_gap_s` in `src/config.py`, wiring in
+`src/stages/select.py`, tests in `tests/unit/test_scoring_select.py`.
+**Tests:** `python tasks.py test lint typecheck` green — **348 passed**; slow e2e
+green after a reviewed golden regeneration.
+**Contracts touched:** none — the feature rides in the open `Candidate.features`.
+
+### Why this and not forced alignment
+
+V6 established that improving word timings does not improve cuts, because
+selection ranks on text and audio and cannot see where a window cuts. That
+diagnosis points somewhere much cheaper than a neural aligner: a speech offers
+hundreds of admissible windows, some of which already end on real silence, and
+nothing preferred them.
+
+### Measured before building
+
+On the shipped V5 artifacts for `HD10342`: **39% of chosen clips had a materially
+cleaner window available in the same speech**, sometimes cutting several seconds
+from any pause when a perfect alternative existed among the same passing
+candidates. That headroom is what justified the work.
+
+### Result
+
+| | V5 only | + V7 |
+|---|---:|---:|
+| clips cutting on silence (edge within 0.25 s) | 56% | **68%** |
+| clips that passed over a cleaner window | 39% | **26%** |
+| clips produced | 18 | **19** |
+
+Modest, not transformational — the big win was V5 (11% → 78% of ends landing in a
+pause). This is polish on top, and it costs nothing: no dependency, no model, no
+extra compute, and no clips lost.
+
+**Decisions made:**
+- Cut quality is expressed as an **ordering**, not a filter. The first attempt
+  used a filter with a relaxation ladder and produced *byte-identical* output,
+  because a filter is all-or-nothing: a clean-only pass filling three of four
+  slots was discarded whole and the unrestricted retry threw the partial win away
+  with it. Sorting cleanly-cut windows first lets the greedy fill take them while
+  they last and top up from the rest, so the preference can never cost a clip.
+- Score still breaks ties within each group, so a clean window does not beat a
+  much better one by an unbounded margin — it wins the ordering, not the ranking.
+
+**A measurement error worth not repeating:** the first headroom check reported
+62%, run against candidates still built from the reverted V6 timings. Re-run on
+the shipped artifacts it was 39%. When a change is reverted, regenerate every
+downstream artifact before measuring anything against it.
+
+**Observations (not fixed, out of scope):**
+- 26% of clips still pass over a cleaner window. Those lose on overlap, the
+  archetype ceiling, or a large score gap — which is the intended trade, not a
+  bug. Pushing further would start sacrificing content quality for cut placement.
+- The loudness metric and the pause-membership metric disagreed slightly on this
+  19-clip sample. Pause membership is the more robust of the two at this size;
+  neither should be trusted alone below a few hundred clips.
+
+**Next agent should know:**
+- Real forced alignment (CTC, `torchaudio.functional.forced_align`) is still the
+  only thing that fixes the underlying word timings, and is still gated on torch
+  with CUDA — this box has `2.11.0+cpu` and an idle GTX 1080. Read V6 first: the
+  benefit will not show up in cut quality, so measure transcript-to-audio
+  correspondence instead.

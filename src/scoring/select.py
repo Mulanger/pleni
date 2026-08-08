@@ -32,6 +32,7 @@ def select_for_speech(
     transcript: Transcript,
     candidates: Sequence[Candidate],
     max_overlap_frac: float,
+    max_edge_gap_s: float = 1.0,
 ) -> list[SelectedClip]:
     """Select the C7 portfolio for one speech."""
 
@@ -52,9 +53,20 @@ def select_for_speech(
     if target_count == 0:
         return []
 
+    # Cut quality is a *preference*, expressed in the ordering rather than as a
+    # filter. A filter is all-or-nothing: a clean-only pass that fills three of
+    # four slots gets discarded whole, and the unrestricted retry throws the
+    # partial win away with it. Sorting cleanly-cut windows first lets the greedy
+    # fill take them while they last and top up from the rest, so the preference
+    # can never cost a clip and never has to be relaxed.
     ordered = sorted(
         admissible,
-        key=lambda item: (-item.score, float(item.candidate.start_s), float(item.candidate.end_s)),
+        key=lambda item: (
+            item.candidate.features.get("edge_gap_s", 0.0) > max_edge_gap_s,
+            -item.score,
+            float(item.candidate.start_s),
+            float(item.candidate.end_s),
+        ),
     )
     selected = _greedy_select(
         ordered,

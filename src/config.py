@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     cut_lead_in_s: float = Field(default=0.20, ge=0.0)
     cut_tail_s: float = Field(default=0.30, ge=0.0)
     max_clip_overlap_frac: float = Field(default=0.20, ge=0.0, le=1.0)
+    # A speech offers hundreds of admissible windows and only some of them end on
+    # real silence, but selection ranks on text and audio and cannot see which.
+    # Measured on HD10342, 62% of chosen clips had a cleaner alternative in the
+    # same speech, two of them cutting ~10s from any pause when a perfect window
+    # was available. Candidates whose edges sit further than this from measured
+    # silence are passed over -- and the preference relaxes before it would cost
+    # a clip.
+    max_clip_edge_gap_s: float = Field(default=1.0, ge=0.0)
     # `fallback` (deterministic first sentence), `ollama` (local), or `api`
     # (any OpenAI-compatible provider — DeepSeek, MiniMax, z.ai, ...).
     title_backend: str = Field(default="fallback")

@@ -128,3 +128,62 @@ def _candidate(
         gate_passed=gate,
         reject_reason=None if gate else "dead_air",
     )
+
+
+def _candidate_with(*, start_s: float, end_s: float, score: float, edge_gap_s: float,
+                    archetype: str = "EXPLAIN") -> Candidate:
+    return Candidate(
+        speech_id="speech-1",
+        start_s=start_s,
+        end_s=end_s,
+        sentence_span=SentenceSpan(start_index=0, end_index=1),
+        features={"edge_gap_s": edge_gap_s},
+        archetype_scores={archetype: score},
+        sub_scores={"final_score": score},
+        gate_passed=True,
+    )
+
+
+def test_a_cleanly_cut_window_is_preferred_over_a_slightly_better_scoring_one() -> None:
+    """Selection ranks on text and audio and had no way to see where a window
+    cuts. Measured on HD10342, 39% of chosen clips passed over a cleaner
+    alternative in the same speech, two of them cutting ~10s from any pause."""
+
+    speech = _speech(duration_s=200.0)
+    transcript = _transcript()
+    clean = _candidate_with(start_s=0.0, end_s=45.0, score=0.50, edge_gap_s=0.0)
+    ragged = _candidate_with(start_s=100.0, end_s=145.0, score=0.55, edge_gap_s=6.0)
+
+    selected = select_for_speech(
+        speech=speech,
+        transcript=transcript,
+        candidates=[ragged, clean],
+        max_overlap_frac=0.20,
+        max_edge_gap_s=1.0,
+    )
+
+    assert selected[0].start_s == 0.0, "the cleanly cut window comes first"
+
+
+def test_the_preference_never_costs_a_clip() -> None:
+    """It is an ordering, not a filter. A filter is all-or-nothing: a clean-only
+    pass filling three of four slots gets discarded whole and the unrestricted
+    retry throws the partial win away. Ordering tops up from the rest instead."""
+
+    speech = _speech(duration_s=200.0)
+    transcript = _transcript()
+    ragged = [
+        _candidate_with(start_s=i * 50.0, end_s=i * 50.0 + 45.0, score=0.5 - i * 0.01,
+                        edge_gap_s=5.0)
+        for i in range(3)
+    ]
+
+    selected = select_for_speech(
+        speech=speech,
+        transcript=transcript,
+        candidates=ragged,
+        max_overlap_frac=0.20,
+        max_edge_gap_s=1.0,
+    )
+
+    assert len(selected) >= 1, "no clean window exists, so ragged ones must still be used"

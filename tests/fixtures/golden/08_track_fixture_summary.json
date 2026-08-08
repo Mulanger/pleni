@@ -1,47 +1,47 @@
 {
   "HD01SfU35_90051909-8a5f-f111-8b6f-6805cafea079_c01.json": {
     "decision": "accepted",
-    "detected_count": 301,
+    "detected_count": 303,
     "first": {
-      "h": 97.712,
+      "h": 104.551,
       "source": "detected",
-      "t": 108.6,
-      "w": 72.528,
-      "x": 388.763,
-      "y": 91.417
+      "t": 102.0,
+      "w": 77.35,
+      "x": 389.432,
+      "y": 73.71
     },
     "last": {
-      "h": 113.464,
+      "h": 103.344,
       "source": "detected",
-      "t": 168.6,
-      "w": 89.493,
-      "x": 380.52,
-      "y": 60.43
+      "t": 162.4,
+      "w": 78.664,
+      "x": 376.062,
+      "y": 82.995
     },
-    "sample_count": 301,
+    "sample_count": 303,
     "track_id": "track-001",
     "unsupported_spans": 0
   },
   "HD01SfU35_90051909-8a5f-f111-8b6f-6805cafea079_c02.json": {
     "decision": "accepted",
-    "detected_count": 208,
+    "detected_count": 216,
     "first": {
-      "h": 109.006,
+      "h": 106.697,
       "source": "detected",
-      "t": 60.2,
-      "w": 81.793,
-      "x": 378.479,
-      "y": 86.368
+      "t": 53.0,
+      "w": 80.335,
+      "x": 372.931,
+      "y": 79.85
     },
     "last": {
-      "h": 106.101,
+      "h": 111.78,
       "source": "detected",
-      "t": 101.6,
-      "w": 79.745,
-      "x": 386.403,
-      "y": 70.204
+      "t": 96.0,
+      "w": 81.339,
+      "x": 400.309,
+      "y": 62.626
     },
-    "sample_count": 208,
+    "sample_count": 216,
     "track_id": "track-001",
     "unsupported_spans": 0
   }

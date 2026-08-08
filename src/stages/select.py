@@ -123,6 +123,7 @@ def select_dokid(
             transcript=transcript,
             candidates=scored,
             max_overlap_frac=settings.max_clip_overlap_frac,
+            max_edge_gap_s=settings.max_clip_edge_gap_s,
         )
         if generator is not None:
             selected = _generate_titles(

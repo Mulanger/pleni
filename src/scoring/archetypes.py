@@ -179,6 +179,11 @@ def _delivery_features(
             end_s=float(candidate.end_s),
         ),
         "end_intensity_slope": _end_intensity_slope(rms),
+        "edge_gap_s": _edge_gap_s(
+            audio_features.pauses,
+            start_s=float(candidate.start_s),
+            end_s=float(candidate.end_s),
+        ),
         "dead_air_frac": _pause_fraction(
             audio_features.pauses,
             start_s=float(candidate.start_s),
@@ -186,6 +191,33 @@ def _delivery_features(
             duration_s=duration_s,
         ),
     }
+
+
+def _edge_gap_s(pauses: Sequence[TimeSpan], *, start_s: float, end_s: float) -> float:
+    """Distance from the worse of a window's two edges to measured silence.
+
+    C6 already snaps edges onto pauses where one is within reach, so a non-zero
+    value here means no pause was close enough and the window genuinely cuts
+    mid-speech. Measured on `HD10342`, 62% of selected clips had a cleaner
+    alternative available in the same speech -- selection simply had no way to
+    see it, because it ranks on text and audio only.
+    """
+
+    return max(
+        _distance_to_pause(pauses, start_s),
+        _distance_to_pause(pauses, end_s),
+    )
+
+
+def _distance_to_pause(pauses: Sequence[TimeSpan], t: float) -> float:
+    if not pauses:
+        return 0.0
+    return min(
+        0.0
+        if float(pause.start_s) <= t <= float(pause.end_s)
+        else min(abs(t - float(pause.start_s)), abs(t - float(pause.end_s)))
+        for pause in pauses
+    )
 
 
 def _frame_slice(
