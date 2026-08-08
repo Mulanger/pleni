@@ -386,13 +386,32 @@ path read-only over 319 published clips across 14 randomly chosen debates.
 
 | Outcome | Clips | Share |
 |---|---:|---:|
-| **accepted** | **215** | **67.4%** |
-| rejected — no verified speaker in a long shot | 76 | 23.8% |
+| **accepted** | **130** | **40.8%** |
+| rejected — no verified speaker in a long shot | 161 | 50.5% |
 | rejected — no official portrait to enrol | 27 | 8.5% |
 | rejected — identity mismatch | 1 | 0.3% |
 
-**67.4% against the 40% floor §7.5 set for a viable gate.** The pessimistic
-36% seen on the first debate tried (`HD10392`) was not representative.
+**40.8%, sitting exactly on the 40% floor §7.5 set for a viable gate.**
+
+### 7.0 A first measurement of 67.4% was wrong, and why
+
+The first run of this audit reported **67.4%**. It was counting a decision that
+did not survive contact with the renderer.
+
+C8 accepted any clip clearing `min_verified_frac`, *even when it had recorded an
+unsupported span longer than the tolerated cutaway* — while C9 refuses to plan a
+camera across exactly such a span. The two gates disagreed, so `08_track`
+asserted `accepted` for clips that silently never rendered. A full run of
+`HD10342` exposed it: **C8 reported 15 accepted, C10 emitted 8**, and the other
+seven vanished with no record anywhere.
+
+That is the same defect class as ADR 010's fabricated face box — an artifact
+claiming a success that never happened — and it is worth noting that it survived
+a green unit suite and was only caught by processing one real debate end to end.
+The long span now decides and `min_verified_frac` is a backstop;
+`test_an_accepted_clip_never_carries_a_span_c9_will_refuse` pins it.
+
+Every yield figure in this document is the post-fix one.
 
 ### 7.1 The rejections are real absences, not a mechanical fault
 
@@ -412,21 +431,39 @@ in 1 of 26 and 1 of 47 frames — spurious, correctly dropped. **The clips being
 rejected are clips where the expected speaker is genuinely off screen**, which
 is exactly the complaint this work exists to fix.
 
-### 7.2 Yield varies by debate type, and the floor is structural
+### 7.2 The dominant cause is a real absence, not a mis-set threshold
 
-| debate | yield | |
-|---|---:|---|
-| `HD10335`, `HD10364` | 100% | single-speaker podium throughout |
-| `HD10406`, `HD10319` | 88% | |
-| `HD10359` | 50% | |
-| `HDC120260319fs` | **34.5%** | frågestund |
+`unsupported_span_exceeds_1.0s` fires on 160 of the 189 rejections, so the
+obvious question is whether the 1.0 s cutaway tolerance is simply too strict.
+Measured on `HD10342`'s rejected clips, the **longest** unsupported span in each:
 
-Frågestund is the worst case and the reason is structural: many short ministerial
-answers, constant cutting between questioner, minister and chamber, and a high
-share of wide shots where no face is detectable at all. Committee debates with a
-speaker at the lectern approach 100%.
+```
+2.6  3.5  3.6  4.0  4.4  4.6  5.2  6.2  6.2  8.6  18.2  20.8  32.5  37.1
+```
 
-### 7.3 The cheapest remaining yield is not a vision problem
+Median 5.7 s, and the shortest is 2.6 s. Raising the tolerance to 3 s recovers
+1 of 14; to 5 s recovers 6, but a five-second stretch is roughly an eighth of a
+45-second clip spent on somebody else, which is the defect this exists to stop.
+
+**The tolerance is not what is costing yield — the footage genuinely cuts away.**
+Loosening it would buy volume by re-admitting the original complaint.
+
+### 7.3 Yield varies by debate type, and the floor is structural
+
+Debate format predicts yield far better than any threshold:
+
+| format | example | yield |
+|---|---|---:|
+| single speaker at the lectern | committee debates | approaching 100% |
+| interpellation, two people trading turns | `HD10342` | **36.4%** |
+| frågestund, many short ministerial answers | `HDC120260319fs` | **34.5%** |
+
+Interpellation and frågestund cut constantly between questioner, minister and
+chamber, and carry a high share of wide shots where no face is detectable at
+all. Those formats are where the old pipeline's mis-framing was worst, so the low
+yield is the gate working, not failing.
+
+### 7.4 The cheapest remaining yield is not a vision problem
 
 **27 clips (8.5%) were rejected only because no portrait could be enrolled** —
 `intressent_id` is absent for ministers who are not sitting members, a gap
@@ -434,12 +471,18 @@ already recorded in the March and February backfill notes. Riksdagen does
 publish these ids; the default `anforandelista` query omits them and
 `personlista?...&rdlstatus=samtliga` returns them.
 
-**Closing that alone takes yield from 67.4% to 75.9%**, and it is a C1 metadata
-fix with no vision work in it. That is a far better return than reordering the
-stage graph for vision-aware window selection (§3.4), which should therefore be
-reconsidered rather than assumed necessary.
+**Closing that alone takes yield from 40.8% to 49.3%**, and it is a C1 metadata
+fix with no vision work in it — the best return available per unit of effort.
 
-### 7.4 What is not yet established
+It is no longer, however, a *substitute* for vision-aware window selection
+(§3.4). At 40.8% the gate is on the floor rather than comfortably above it, and
+§3.4 is the one remaining lever that raises yield without weakening the identity
+gate: a speech contains hundreds of admissible windows, and choosing one that is
+also visually clean costs nothing extra because the vision pass is per speech.
+The earlier reading of this document — that §3.4 could probably be skipped —
+rested on the 67.4% figure and does not survive its correction.
+
+### 7.5 What is not yet established
 
 Yield is not precision. These numbers say how many clips survive the gate, not
 how many surviving clips are correctly framed. Under the rule of three, zero

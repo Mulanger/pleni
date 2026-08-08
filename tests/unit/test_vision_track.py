@@ -316,3 +316,33 @@ def _selection(tracks: tuple, *, times: tuple[float, float]) -> object:
         unsupported_spans=(),
         verified_frac=1.0,
     )
+
+
+def test_an_accepted_clip_never_carries_a_span_c9_will_refuse() -> None:
+    """C8's verdict has to mean what C10 will do.
+
+    C8 used to accept any clip clearing `min_verified_frac`, even one holding a
+    long unsupported span, while C9 refuses to plan a camera across such a span.
+    On HD10342 that produced 15 "accepted" tracks and 8 rendered files, the other
+    7 disappearing with no record anywhere. An artifact asserting success about a
+    clip nothing renders is the defect class this pipeline exists to remove.
+    """
+
+    verified = _track_with(x=560.0, size=90.0, count=40, similarity=0.62, shot=0)
+    stranger = _track_with(x=560.0, size=90.0, count=5, similarity=0.02, shot=1, t0=8.0)
+
+    selection = select_verified_track(
+        (verified, stranger),
+        shot_bounds={0: (0.0, 8.0), 1: (8.0, 12.0)},
+        shot_frame_counts={0: 40, 1: 5},
+        intressent_id="123",
+        portrait_sha256=PORTRAIT,
+        thresholds=THRESHOLDS,
+        min_verified_frac=0.0,          # would have accepted on coverage alone
+        max_unsupported_gap_s=1.0,
+    )
+
+    assert selection.unsupported_spans, "a 4s absence is past the tolerated cutaway"
+    assert selection.decision is not VerificationDecision.ACCEPTED
+    assert selection.samples == ()
+    assert any("unsupported_span_exceeds" in reason for reason in selection.reasons)

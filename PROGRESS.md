@@ -2407,21 +2407,25 @@ plan:
   required; measured, it is not — for detection (V1) or identity (V2). The
   re-decode of 87 masters is cancelled for good.
 
-### Measured yield: 67.4%
+### Measured yield: 40.8%
 
 Real C8 path, read-only, over **319 clips across 14 random debates**.
 
 | Outcome | Clips | Share |
 |---|---:|---:|
-| accepted | 215 | **67.4%** |
-| no verified speaker in a long shot | 76 | 23.8% |
+| accepted | 130 | **40.8%** |
+| no verified speaker in a long shot | 161 | 50.5% |
 | no official portrait to enrol | 27 | 8.5% |
 | identity mismatch | 1 | 0.3% |
 
-Against the 40% floor `speaker_verified_crop_design.md` §7.5 set for a viable
-gate. **The first debate I tried (`HD10392`) gave 36% and was not
-representative** — per-debate yield runs from 34.5% (frågestund, constant cutting
-and wide shots) to 100% (single-speaker podium).
+Sitting exactly on the 40% floor `speaker_verified_crop_design.md` §7.5 set for
+a viable gate. Yield tracks debate *format*, not any threshold: near 100% for a
+single speaker at a lectern, **36.4%** for an interpellation (`HD10342`),
+**34.5%** for a frågestund — the formats that cut constantly between people and
+carry the most wide shots, which is exactly where the old pipeline mis-framed
+worst.
+
+**An earlier figure of 67.4% was wrong; see the C8/C10 disagreement below.**
 
 **The rejections are real.** Per-shot analysis of the two worst debates: 83–96%
 of no-evidence shots have *no face detected at all*, the rest are single spurious
@@ -2452,8 +2456,17 @@ complaint this work exists to fix.
   rejected *only* because no portrait could be enrolled — the non-sitting minister
   `intressent_id` gap already recorded in the March and February backfills.
   `personlista?...&rdlstatus=samtliga` returns those ids. Closing it takes yield
-  **67.4% → 75.9%** with no vision work. Worth doing before reconsidering
-  vision-aware window selection.
+  **40.8% → 49.3%** with no vision work, the best return per unit of effort
+  available. It is no longer a *substitute* for vision-aware window selection
+  though: at 40.8% the gate sits on the floor, and that is the only remaining
+  lever that raises yield without weakening the identity gate.
+- **Loosening the cutaway tolerance would not help.** `unsupported_span_exceeds_1.0s`
+  is the dominant rejection cause (160 of 189), so the obvious move is to relax
+  it. Measured on `HD10342`'s rejected clips the longest gap per clip runs
+  2.6, 3.5, 3.6, 4.0, 4.4, 4.6, 5.2, 6.2, 6.2, 8.6, 18.2, 20.8, 32.5, 37.1 s —
+  median 5.7 s, shortest 2.6 s. A 3 s tolerance recovers 1 of 14. The footage
+  genuinely cuts away; relaxing the threshold buys volume by re-admitting the
+  original complaint.
 - Yield is not precision. These numbers say how many clips survive the gate, not
   how many survivors are correctly framed. The shot-level validation set of
   `speaker_verified_crop_design.md` §9.2 is still owed; until it exists the honest
@@ -2471,6 +2484,22 @@ complaint this work exists to fix.
   defect. Nothing has been re-processed or re-published. The owner deferred this
   until after phase 3; the yield number needed to make that call now exists.
 - `P0-9` — five credentials in chat transcripts. Still open, carried over.
+
+### The bug a full debate run caught that the unit suite did not
+
+C8 accepted any clip clearing `min_verified_frac` *even when it had recorded an
+unsupported span longer than the tolerated cutaway*, while C9 refuses to plan a
+camera across exactly such a span. The gates disagreed, so `08_track` asserted
+`accepted` about clips that silently never rendered. Processing `HD10342` end to
+end exposed it: **C8 reported 15 accepted, C10 emitted 8**, seven vanishing with
+no record anywhere. Same defect class as ADR 010's fabricated box — an artifact
+claiming a success that did not happen.
+
+The long span now decides; `min_verified_frac` is a backstop.
+`test_an_accepted_clip_never_carries_a_span_c9_will_refuse` pins it. **This is
+why the first yield measurement read 67.4% instead of 40.8%** — it counted
+phantom accepts. Nothing here was caught by a green unit suite; it took one real
+debate.
 
 **Next agent should know:**
 - **This workstation hard power-cycled five times under sustained all-core load**

@@ -9,7 +9,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.contracts import MediaInfo, SelectedClip, Speech
+from src.contracts import FaceTrack, MediaInfo, SelectedClip, Speech
 from src.media.ffprobe import probe_media
 from src.paths import work_paths
 from src.render.ffmpeg import has_faststart_moov
@@ -51,11 +51,37 @@ def export_mobile_clips(
 
     exported: list[ExportedClip] = []
     manifest: list[dict[str, object]] = []
+    rejected: list[dict[str, object]] = []
     for index, clip in enumerate(
         sorted(clips, key=lambda item: (item.start_s, item.rank)), start=1
     ):
         source_mp4 = paths.render_primary_mp4(clip.clip_id)
+        track = _read_track(paths.track_json(clip.clip_id))
         if not source_mp4.exists():
+            # A clip C7 chose but C8 refused to verify. Reviewing only what
+            # survived hides half of what the pipeline decided, so the reason is
+            # recorded rather than the clip silently vanishing.
+            speech = speeches.get(clip.speech_id)
+            rejected.append(
+                {
+                    "clip_id": clip.clip_id,
+                    "speaker_name": speech.speaker_name if speech is not None else None,
+                    "start_s": round(float(clip.start_s), 3),
+                    "end_s": round(float(clip.end_s), 3),
+                    "title": clip.title,
+                    "decision": track.decision.value if track is not None else "not_tracked",
+                    "reasons": list(track.reasons) if track is not None else [],
+                    "unverified_s": round(
+                        sum(
+                            float(span.end_s) - float(span.start_s)
+                            for span in track.unsupported_spans
+                        ),
+                        1,
+                    )
+                    if track is not None
+                    else None,
+                }
+            )
             continue
         speech = speeches.get(clip.speech_id)
         mp4_name = _review_mp4_name(index, clip)
@@ -76,23 +102,84 @@ def export_mobile_clips(
             thumb_name=thumb_name if copied_thumb.exists() else None,
             faststart=faststart_probe(copied_mp4),
             bytes_size=copied_mp4.stat().st_size,
+            track=track,
         )
         manifest.append(entry)
         exported.append(ExportedClip(manifest_entry=entry, mp4_path=copied_mp4))
 
     (destination / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+        json.dumps({"accepted": manifest, "rejected": rejected}, indent=2, ensure_ascii=False)
+        + "\n",
         encoding="utf-8",
     )
     (destination / "README.md").write_text(
-        f"# {dokid} mobile clip test\n\n"
-        f"Generated {len(manifest)} no-caption 540x960 mobile MP4 clips from local "
-        "pipeline artifacts.\n"
-        "The manifest joins selected clips back to speeches, so every row includes "
-        "speaker metadata.\n",
+        _review_readme(dokid, manifest, rejected),
         encoding="utf-8",
     )
     return exported
+
+
+def _review_readme(
+    dokid: str,
+    manifest: Sequence[dict[str, object]],
+    rejected: Sequence[dict[str, object]],
+) -> str:
+    """A review sheet, not a summary.
+
+    It names the question a reviewer should hold each clip against, because
+    "does this look nice" and "does the crop ever attribute speech to the wrong
+    visible person" are different questions and only the second one is what this
+    pipeline was rebuilt to answer.
+    """
+
+    total = len(manifest) + len(rejected)
+    yield_pct = 100.0 * len(manifest) / total if total else 0.0
+    lines = [
+        f"# {dokid} — clip review",
+        "",
+        f"**{len(manifest)} rendered**, {len(rejected)} rejected "
+        f"({yield_pct:.0f}% yield). 540x960, no captions.",
+        "",
+        "Watch them in order. For each clip the question is **does the crop ever",
+        "attribute speech to the wrong visible person** — a clip that is merely",
+        "off-centre is a lesser, separate problem. Note anything where you see a",
+        "listener, an empty chamber, or a body part instead of the named speaker.",
+        "",
+        "## Rendered",
+        "",
+        "| # | speaker | type | dur | id-sim | margin | title |",
+        "|---|---|---|---:|---:|---:|---|",
+    ]
+    for row in manifest:
+        lines.append(
+            f"| {row['index']} | {row['speaker_name']} ({row['party']}) "
+            f"| {row['anforandetyp']} | {row['duration_s']:.0f}s "
+            f"| {row['identity_similarity']} | {row['identity_margin']} | {row['title']} |"
+        )
+    if rejected:
+        lines += [
+            "",
+            "## Rejected, and why",
+            "",
+            "Clips C7 selected on text and audio, then C8 refused to verify. A",
+            "rejection means the expected speaker could not be confirmed on screen",
+            "for a material stretch — usually a cutaway to somebody else. These are",
+            "the clips the old pipeline would have published mis-framed.",
+            "",
+            "| speaker | window | unverified | decision |",
+            "|---|---|---:|---|",
+        ]
+        for row in rejected:
+            lines.append(
+                f"| {row['speaker_name']} | {row['start_s']:.0f}-{row['end_s']:.0f}s "
+                f"| {row['unverified_s']}s | {row['decision']} |"
+            )
+    lines += [
+        "",
+        "`manifest.json` has the full detail, including per-shot rejection reasons.",
+        "",
+    ]
+    return "\n".join(lines)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -136,6 +223,7 @@ def _manifest_entry(
     thumb_name: str | None,
     faststart: bool,
     bytes_size: int,
+    track: FaceTrack | None = None,
 ) -> dict[str, object]:
     return {
         "index": index,
@@ -156,7 +244,29 @@ def _manifest_entry(
         "bytes": bytes_size,
         "mp4": mp4_name,
         "thumbnail": thumb_name,
+        "decision": track.decision.value if track is not None else None,
+        "identity_similarity": (
+            round(track.identity.median_similarity, 3)
+            if track is not None and track.identity is not None
+            else None
+        ),
+        "identity_margin": (
+            round(track.identity.competitor_margin, 3)
+            if track is not None and track.identity is not None
+            else None
+        ),
     }
+
+
+def _read_track(path: Path) -> FaceTrack | None:
+    """C8 verdict for a clip, or None when the stage never ran."""
+
+    if not path.exists():
+        return None
+    try:
+        return FaceTrack.model_validate_json(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
 
 
 def _review_mp4_name(index: int, clip: SelectedClip) -> str:

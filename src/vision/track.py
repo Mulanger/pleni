@@ -348,17 +348,20 @@ def select_verified_track(
             tuple(reasons) or ("no_verified_target_in_any_shot",),
             shot_bounds,
         )
+    # Any span that survived `_record_unverified` is longer than the tolerated
+    # cutaway, and C9 will not plan a camera across one. Accepting the clip here
+    # anyway made `decision` disagree with what actually got rendered: on
+    # HD10342, C8 reported 15 accepted and C10 emitted 8, with the other 7
+    # vanishing silently. An artifact that says "accepted" about a clip nothing
+    # will render is the same defect class this pipeline was rebuilt to remove,
+    # so the long gap decides and `min_verified_frac` is only a backstop for
+    # tolerated ones accumulating.
+    if unsupported:
+        reasons.append(f"unsupported_span_exceeds_{max_unsupported_gap_s:.1f}s")
+        return _unrenderable(reasons, unsupported, best_evidence, verified_frac)
     if verified_frac < min_verified_frac:
         reasons.append(f"verified_only_{verified_frac:.2f}_of_clip")
-        return VerifiedSelection(
-            samples=(),
-            track_id="unverified",
-            evidence=best_evidence,
-            decision=VerificationDecision.REJECTED_NO_EVIDENCE,
-            reasons=tuple(reasons),
-            unsupported_spans=tuple(unsupported),
-            verified_frac=verified_frac,
-        )
+        return _unrenderable(reasons, unsupported, best_evidence, verified_frac)
 
     samples = tuple(
         sorted(
@@ -371,6 +374,25 @@ def select_verified_track(
         track_id="+".join(track.track_id for track in accepted),
         evidence=best_evidence,
         decision=VerificationDecision.ACCEPTED,
+        reasons=tuple(reasons),
+        unsupported_spans=tuple(unsupported),
+        verified_frac=verified_frac,
+    )
+
+
+def _unrenderable(
+    reasons: Sequence[str],
+    unsupported: Sequence[TimeSpan],
+    evidence: IdentityEvidence | None,
+    verified_frac: float,
+) -> VerifiedSelection:
+    """A clip with real identity evidence that still cannot be framed."""
+
+    return VerifiedSelection(
+        samples=(),
+        track_id="unverified",
+        evidence=evidence,
+        decision=VerificationDecision.REJECTED_NO_EVIDENCE,
         reasons=tuple(reasons),
         unsupported_spans=tuple(unsupported),
         verified_frac=verified_frac,
