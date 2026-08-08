@@ -53,7 +53,15 @@ def run_fixture(
     work_dir: Path | str | None = None,
     portraits: object | None = None,
 ) -> SkeletonResult:
-    """Run the S1 skeleton over a local fixture without network access."""
+    """Run the S1 skeleton over a local fixture without network access.
+
+    **Publishing is pinned to `local` and must stay that way.** `publish_dokid`
+    otherwise falls through to `settings.publish_backend`, and a working `.env`
+    sets that to `remote` — so running this fixture, or the slow e2e that calls
+    it, uploaded the trimmed 854x480 test clips of `HD01SfU35` to the live Bunny
+    zone and wrote them into the public `clips` table. That happened on
+    2026-08-07. A fixture runner must not be able to reach production.
+    """
 
     settings = get_settings()
     root = Path(work_dir) if work_dir is not None else settings.work_dir / "s1_fixture"
@@ -77,7 +85,7 @@ def run_fixture(
     track_dokid(FIXTURE_DOKID, work_dir=root, portraits=portraits)  # type: ignore[arg-type]
     plan_camera_dokid(FIXTURE_DOKID, work_dir=root)
     rendered = tuple(render_dokid(FIXTURE_DOKID, work_dir=root))
-    published = tuple(publish_dokid(FIXTURE_DOKID, work_dir=root))
+    published = tuple(publish_dokid(FIXTURE_DOKID, work_dir=root, backend="local"))
     return SkeletonResult(
         paths=paths,
         media_info=media_info,

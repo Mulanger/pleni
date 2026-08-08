@@ -93,3 +93,29 @@ def _sample_summary(sample: object) -> dict[str, object]:
         "h": round(float(sample["h"]), 3),
         "source": sample["source"],
     }
+
+
+@pytest.mark.slow
+def test_the_fixture_runner_cannot_publish_to_production(tmp_path: Path) -> None:
+    """A regression guard with an incident behind it.
+
+    `publish_dokid` falls through to `settings.publish_backend` when given no
+    backend, and a working `.env` sets that to `remote`. So every run of this
+    fixture -- including the slow e2e above -- uploaded the trimmed 854x480 test
+    clips of HD01SfU35 to the live Bunny zone and inserted them into the public
+    `clips` table, alongside 1,762 real ones. Two clips reached pleni.se on
+    2026-08-07 before anyone noticed.
+
+    The fixture runner now pins `backend="local"`. This asserts the published
+    artifacts carry `file://` URLs, which no remote publish can produce.
+    """
+
+    result = run_fixture(work_dir=tmp_path, portraits=_FixturePortrait())
+
+    assert result.publish_artifacts, "the fixture should still publish locally"
+    for artifact in result.publish_artifacts:
+        published = PublishResult.model_validate_json(artifact.read_text(encoding="utf-8"))
+        for rendition, url in published.cdn_urls.items():
+            assert url.startswith("file://"), (
+                f"{rendition} points at {url} -- the fixture reached a remote backend"
+            )
