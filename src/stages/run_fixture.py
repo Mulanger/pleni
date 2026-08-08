@@ -48,7 +48,11 @@ class SkeletonResult:
     publish_artifacts: tuple[Path, ...]
 
 
-def run_fixture(*, work_dir: Path | str | None = None) -> SkeletonResult:
+def run_fixture(
+    *,
+    work_dir: Path | str | None = None,
+    portraits: object | None = None,
+) -> SkeletonResult:
     """Run the S1 skeleton over a local fixture without network access."""
 
     settings = get_settings()
@@ -70,7 +74,7 @@ def run_fixture(*, work_dir: Path | str | None = None) -> SkeletonResult:
     extract_audio_features_dokid(FIXTURE_DOKID, work_dir=root)
     generate_candidates_dokid(FIXTURE_DOKID, work_dir=root)
     select_dokid(FIXTURE_DOKID, work_dir=root)
-    track_dokid(FIXTURE_DOKID, work_dir=root)
+    track_dokid(FIXTURE_DOKID, work_dir=root, portraits=portraits)  # type: ignore[arg-type]
     plan_camera_dokid(FIXTURE_DOKID, work_dir=root)
     rendered = tuple(render_dokid(FIXTURE_DOKID, work_dir=root))
     published = tuple(publish_dokid(FIXTURE_DOKID, work_dir=root))

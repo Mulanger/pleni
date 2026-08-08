@@ -1,16 +1,20 @@
-"""Tests for C8 face tracking and active-speaker selection."""
+"""Tests for C8 face tracking and verified-speaker selection."""
 
 from __future__ import annotations
 
-from src.contracts import FaceSample
+from src.contracts import FaceSample, ObservationSource, VerificationDecision
 from src.vision.detect import DetectedFace, FrameDetections
+from src.vision.identity import IdentityThresholds
 from src.vision.track import (
-    active_face_track,
     build_face_tracks,
     iou,
     merge_fragmented_tracks,
-    select_active_track,
+    select_verified_track,
+    verified_face_track,
 )
+
+THRESHOLDS = IdentityThresholds()
+PORTRAIT = "a" * 64
 
 
 def test_tracking_keeps_identity_across_short_occlusion_gap() -> None:
@@ -23,165 +27,226 @@ def test_tracking_keeps_identity_across_short_occlusion_gap() -> None:
     )
 
     tracks = build_face_tracks(frames, iou_threshold=0.2, max_gap_s=1.0)
-    active = active_face_track(
+    track = verified_face_track(
         "clip-1",
-        tracks,
-        frame_width=1000.0,
-        frame_height=500.0,
+        _selection(tracks, times=(0.0, 0.8)),
         expected_times=tuple(frame.t for frame in frames),
         max_gap_s=1.0,
     )
 
     assert len(tracks) == 1
-    assert len(active.samples) == 5
-    assert all(sample.is_speaking for sample in active.samples)
-    assert {sample.t for sample in active.samples} == {0.0, 0.2, 0.4, 0.6, 0.8}
+    assert len(track.samples) == 5
+    assert {sample.t for sample in track.samples} == {0.0, 0.2, 0.4, 0.6, 0.8}
 
 
-def test_active_speaker_heuristic_prefers_persistent_centered_track() -> None:
-    side_track = build_face_tracks(
-        (
-            FrameDetections(t=0.0, faces=(DetectedFace(850.0, 100.0, 120.0, 120.0, 1.0),)),
-            FrameDetections(t=0.2, faces=(DetectedFace(852.0, 100.0, 120.0, 120.0, 1.0),)),
-        ),
-        iou_threshold=0.2,
-        max_gap_s=1.0,
-    )[0]
-    center_track = build_face_tracks(
-        (
-            FrameDetections(t=0.0, faces=(DetectedFace(450.0, 100.0, 95.0, 95.0, 1.0),)),
-            FrameDetections(t=0.2, faces=(DetectedFace(452.0, 100.0, 95.0, 95.0, 1.0),)),
-            FrameDetections(t=0.4, faces=(DetectedFace(454.0, 100.0, 95.0, 95.0, 1.0),)),
-        ),
-        iou_threshold=0.2,
-        max_gap_s=1.0,
-    )[0]
+def test_interpolated_samples_are_marked_and_detected_ones_are_not() -> None:
+    """Interpolation is camera support, never evidence. A filled sample may steer
+    the crop between two real observations but must not be counted as having seen
+    anything -- otherwise coverage and identity thresholds measure themselves.
+    """
 
-    assert (
-        select_active_track(
-            (side_track, center_track),
-            frame_width=1000.0,
-            frame_height=500.0,
-        )
-        == center_track
+    frames = (
+        FrameDetections(t=0.0, faces=(_face(100.0),)),
+        FrameDetections(t=0.2, faces=()),
+        FrameDetections(t=0.4, faces=(_face(108.0),)),
     )
+    tracks = build_face_tracks(frames, iou_threshold=0.2, max_gap_s=1.0)
 
-
-def test_active_face_track_handles_no_faces() -> None:
-    track = active_face_track(
+    track = verified_face_track(
         "clip-1",
-        (),
-        frame_width=1000.0,
-        frame_height=500.0,
-        expected_times=(0.0, 0.2),
+        _selection(tracks, times=(0.0, 0.4)),
+        expected_times=(0.0, 0.2, 0.4),
         max_gap_s=1.0,
     )
 
-    assert track.track_id == "no-face"
-    assert track.samples == ()
+    by_t = {sample.t: sample for sample in track.samples}
+    assert by_t[0.0].source is ObservationSource.DETECTED
+    assert by_t[0.2].source is ObservationSource.INTERPOLATED
+    assert by_t[0.4].source is ObservationSource.DETECTED
+
+
+def test_a_track_never_spans_a_scene_cut() -> None:
+    """The `HD10392_ebe6af7e...` defect: two speakers used the same lectern, so
+    the box barely moved across the cut and the tracker fused them into one
+    person. A cut is a hard boundary; only identity may rejoin shots.
+    """
+
+    frames = tuple(
+        FrameDetections(t=index * 0.2, faces=(_face(500.0),)) for index in range(10)
+    )
+
+    without_cut = build_face_tracks(frames, iou_threshold=0.2, max_gap_s=1.0)
+    with_cut = build_face_tracks(frames, iou_threshold=0.2, max_gap_s=1.0, cuts=(1.0,))
+
+    assert len(without_cut) == 1, "identical boxes track as one person in one shot"
+    assert len(with_cut) == 2, "the same boxes must not be joined across a cut"
+    assert {track.shot_index for track in with_cut} == {0, 1}
+
+
+def test_a_bigger_longer_wrong_face_loses_to_the_verified_speaker() -> None:
+    """The whole point of ADR 012.
+
+    Geometry said this clip belongs to the large, centred, fully-tracked face.
+    Identity says that face is somebody else. Identity wins.
+    """
+
+    speaker = _track_with(x=560.0, size=90.0, count=20, similarity=0.62)
+    bystander = _track_with(x=640.0, size=200.0, count=40, similarity=0.11)
+
+    selection = select_verified_track(
+        (bystander, speaker),
+        shot_bounds={0: (0.0, 8.0)},
+        shot_frame_counts={0: 40},
+        intressent_id="123",
+        portrait_sha256=PORTRAIT,
+        thresholds=THRESHOLDS,
+        min_verified_frac=0.0,
+        max_unsupported_gap_s=1.0,
+    )
+
+    assert selection.decision is VerificationDecision.ACCEPTED
+    assert selection.samples[0].w == 90.0, "the verified speaker, not the bigger face"
+
+
+def test_an_ambiguous_margin_is_rejected_even_when_similarity_clears_the_floor() -> None:
+    """Two faces that both look like the portrait is not a match, it is a doubt.
+    Measured on this footage the margin separates far better than the absolute
+    score, so a thin margin rejects regardless of how high both scores are.
+    """
+
+    first = _track_with(x=500.0, size=90.0, count=20, similarity=0.55)
+    second = _track_with(x=700.0, size=90.0, count=20, similarity=0.54)
+
+    selection = select_verified_track(
+        (first, second),
+        shot_bounds={0: (0.0, 8.0)},
+        shot_frame_counts={0: 20},
+        intressent_id="123",
+        portrait_sha256=PORTRAIT,
+        thresholds=THRESHOLDS,
+        min_verified_frac=0.0,
+        max_unsupported_gap_s=1.0,
+    )
+
+    assert selection.decision is VerificationDecision.REJECTED_AMBIGUOUS
+
+
+def test_no_portrait_means_unverifiable_not_a_guess() -> None:
+    speaker = _track_with(x=560.0, size=90.0, count=20, similarity=0.62)
+
+    selection = select_verified_track(
+        (speaker,),
+        shot_bounds={0: (0.0, 8.0)},
+        shot_frame_counts={0: 20},
+        intressent_id=None,
+        portrait_sha256=None,
+        thresholds=THRESHOLDS,
+        min_verified_frac=0.0,
+        max_unsupported_gap_s=1.0,
+    )
+
+    assert selection.decision is VerificationDecision.REJECTED_NO_PORTRAIT
+    assert selection.samples == ()
+
+
+def test_a_long_shot_without_the_speaker_makes_the_clip_unsupported() -> None:
+    """C9 used to hold the previous crop through exactly this, which points the
+    camera at where the speaker stood in the *last* shot. Half the published
+    catalogue hit it."""
+
+    verified = _track_with(x=560.0, size=90.0, count=20, similarity=0.62, shot=0)
+    stranger = _track_with(x=560.0, size=90.0, count=20, similarity=0.05, shot=1)
+
+    selection = select_verified_track(
+        (verified, stranger),
+        shot_bounds={0: (0.0, 8.0), 1: (8.0, 16.0)},
+        shot_frame_counts={0: 20, 1: 20},
+        intressent_id="123",
+        portrait_sha256=PORTRAIT,
+        thresholds=THRESHOLDS,
+        min_verified_frac=0.0,
+        max_unsupported_gap_s=1.0,
+    )
+
+    assert len(selection.unsupported_spans) == 1
+    assert selection.unsupported_spans[0].start_s == 8.0
+
+
+def test_a_sub_second_cutaway_is_tolerated() -> None:
+    """Riksdagen's feed cuts constantly. Holding the crop across half a second is
+    invisible; rejecting every clip containing one would reject nearly all of
+    them. The long absence is the defect, not the existence of a cut.
+    """
+
+    verified = _track_with(x=560.0, size=90.0, count=20, similarity=0.62, shot=0)
+    blip = _track_with(x=560.0, size=90.0, count=2, similarity=0.05, shot=1)
+
+    selection = select_verified_track(
+        (verified, blip),
+        shot_bounds={0: (0.0, 8.0), 1: (8.0, 8.4)},
+        shot_frame_counts={0: 20, 1: 2},
+        intressent_id="123",
+        portrait_sha256=PORTRAIT,
+        thresholds=THRESHOLDS,
+        min_verified_frac=0.0,
+        max_unsupported_gap_s=1.0,
+    )
+
+    assert selection.unsupported_spans == ()
+    assert any("tolerated" in reason for reason in selection.reasons)
+
+
+def test_interpolation_never_bridges_an_unsupported_span() -> None:
+    """Filling across a shot the speaker is absent from would manufacture a
+    smooth camera path over footage they are not in -- the stale-crop defect
+    wearing a different hat."""
+
+    verified = _track_with(x=560.0, size=90.0, count=5, similarity=0.62, shot=0)
+    stranger = _track_with(x=560.0, size=90.0, count=5, similarity=0.05, shot=1, t0=4.0)
+
+    selection = select_verified_track(
+        (verified, stranger),
+        shot_bounds={0: (0.0, 2.0), 1: (2.0, 6.0)},
+        shot_frame_counts={0: 5, 1: 5},
+        intressent_id="123",
+        portrait_sha256=PORTRAIT,
+        thresholds=THRESHOLDS,
+        min_verified_frac=0.0,
+        max_unsupported_gap_s=1.0,
+    )
+    track = verified_face_track(
+        "clip-1",
+        selection,
+        expected_times=tuple(index * 0.2 for index in range(30)),
+        max_gap_s=10.0,
+    )
+
+    assert all(float(sample.t) < 2.0 for sample in track.samples)
 
 
 def test_iou_returns_expected_overlap() -> None:
-    first = FaceSample(t=0.0, x=0.0, y=0.0, w=100.0, h=100.0, is_speaking=False)
-    second = FaceSample(t=0.0, x=50.0, y=0.0, w=100.0, h=100.0, is_speaking=False)
+    first = FaceSample(t=0.0, x=0.0, y=0.0, w=100.0, h=100.0)
+    second = FaceSample(t=0.0, x=50.0, y=0.0, w=100.0, h=100.0)
 
     assert round(iou(first, second), 3) == 0.333
-
-
-def _face(x: float) -> DetectedFace:
-    return DetectedFace(x=x, y=100.0, w=80.0, h=80.0, score=1.0)
-
-
-def test_a_big_centred_speaker_beats_a_small_persistent_face_in_the_gallery() -> None:
-    """The bug this scoring change exists for.
-
-    Under the old formula coverage was a raw frame count worth 2.0 each, so a
-    face detected 20 times scored 40 while size contributed about 2 and centring
-    3. A motionless face up in the chamber therefore beat the speaker, who Haar
-    keeps losing. Measured on HD10540: two of sixteen published clips tracked a
-    face half the normal size, far off to the left.
-    """
-
-    speaker = build_face_tracks(
-        tuple(
-            FrameDetections(
-                t=index * 0.2,
-                faces=(DetectedFace(600.0 + index, 300.0, 150.0, 150.0, 1.0),),
-            )
-            for index in range(6)
-        ),
-        iou_threshold=0.2,
-        max_gap_s=1.0,
-    )[0]
-    gallery = build_face_tracks(
-        tuple(
-            FrameDetections(
-                t=index * 0.2,
-                faces=(DetectedFace(120.0, 80.0, 55.0, 55.0, 1.0),),
-            )
-            for index in range(20)
-        ),
-        iou_threshold=0.2,
-        max_gap_s=1.0,
-    )[0]
-
-    assert gallery.coverage > speaker.coverage, "the wrong face is on screen longer"
-    assert (
-        select_active_track((gallery, speaker), frame_width=1280.0, frame_height=720.0)
-        is speaker
-    )
 
 
 def test_merging_rejoins_a_speaker_who_looked_away() -> None:
     """A 2.4 s dropout used to split one speaker into two competing fragments."""
 
-    before = build_face_tracks(
-        tuple(
-            FrameDetections(t=index * 0.2, faces=(_face(500.0 + index),))
-            for index in range(5)
-        ),
-        iou_threshold=0.2,
-        max_gap_s=1.0,
-    )[0]
-    after = build_face_tracks(
-        tuple(
-            FrameDetections(t=3.2 + index * 0.2, faces=(_face(506.0 + index),))
-            for index in range(5)
-        ),
-        iou_threshold=0.2,
-        max_gap_s=1.0,
-    )[0]
-
-    merged = merge_fragmented_tracks((before, after), max_gap_s=4.0, min_iou=0.30)
-
-    assert len(merged) == 1
-    assert merged[0].coverage == 10
-    assert [sample.t for sample in merged[0].samples] == sorted(
-        sample.t for sample in merged[0].samples
+    frames = tuple(
+        FrameDetections(t=index * 0.2, faces=(_face(500.0 + index),)) for index in range(5)
+    ) + tuple(
+        FrameDetections(t=3.2 + index * 0.2, faces=(_face(506.0 + index),))
+        for index in range(5)
     )
 
+    tracks = build_face_tracks(
+        frames, iou_threshold=0.2, max_gap_s=1.0, merge_gap_s=4.0, merge_iou=0.30
+    )
 
-def test_merging_does_not_stitch_across_a_shot_change() -> None:
-    """A cut moves the box, so IoU at the seam collapses and the tracks stay apart."""
-
-    podium = build_face_tracks(
-        tuple(
-            FrameDetections(t=index * 0.2, faces=(_face(500.0),))
-            for index in range(5)
-        ),
-        iou_threshold=0.2,
-        max_gap_s=1.0,
-    )[0]
-    elsewhere = build_face_tracks(
-        tuple(
-            FrameDetections(t=2.0 + index * 0.2, faces=(_face(120.0),))
-            for index in range(5)
-        ),
-        iou_threshold=0.2,
-        max_gap_s=1.0,
-    )[0]
-
-    assert len(merge_fragmented_tracks((podium, elsewhere), max_gap_s=4.0, min_iou=0.30)) == 2
+    assert len(tracks) == 1
+    assert tracks[0].coverage == 10
 
 
 def test_merging_never_joins_faces_visible_at_the_same_time() -> None:
@@ -201,75 +266,53 @@ def test_merging_never_joins_faces_visible_at_the_same_time() -> None:
     assert len(merge_fragmented_tracks((left, right), max_gap_s=4.0, min_iou=0.30)) == 2
 
 
-def test_a_one_frame_false_positive_cannot_win_on_size() -> None:
-    """Measured on HD10540 clip 1 before the coverage floor existed.
-
-    Haar fired once on something 27% of frame width — a torso or a fitting, not
-    a head. Relative area scoring handed it the clip over a speaker tracked in
-    226 of 242 frames. Size has to be earned over time.
-    """
-
-    speaker = build_face_tracks(
-        tuple(
-            FrameDetections(t=index * 0.2, faces=(DetectedFace(560.0, 180.0, 143.0, 144.0, 1.0),))
-            for index in range(226)
-        ),
-        iou_threshold=0.2,
-        max_gap_s=1.0,
-    )[0]
-    artifact = build_face_tracks(
-        (FrameDetections(t=0.0, faces=(DetectedFace(560.0, 180.0, 352.0, 352.0, 1.0),)),),
-        iou_threshold=0.2,
-        max_gap_s=1.0,
-    )[0]
-
-    selected = select_active_track(
-        (artifact, speaker),
-        frame_width=1280.0,
-        frame_height=720.0,
-        total_frames=242,
-    )
-
-    assert selected is speaker
+def _face(x: float) -> DetectedFace:
+    return DetectedFace(x=x, y=100.0, w=80.0, h=80.0, score=0.9)
 
 
-def test_nothing_clears_the_floor_selects_nothing() -> None:
-    """Fail closed. This assertion was the other way round until ADR 010.
+def _track_with(
+    *,
+    x: float,
+    size: float,
+    count: int,
+    similarity: float,
+    shot: int = 0,
+    t0: float = 0.0,
+) -> object:
+    from src.vision.track import TrackCandidate
 
-    Falling back to a best guess meant a clip with one stray detection still got
-    a "speaker", and that guess was published under a named politician's byline.
-    Source material is abundant enough to reject instead.
-    """
-
-    brief = build_face_tracks(
-        (FrameDetections(t=0.0, faces=(DetectedFace(560.0, 180.0, 143.0, 144.0, 1.0),)),),
-        iou_threshold=0.2,
-        max_gap_s=1.0,
-    )[0]
-
-    assert (
-        select_active_track(
-            (brief,), frame_width=1280.0, frame_height=720.0, total_frames=242
+    samples = tuple(
+        FaceSample(
+            t=t0 + index * 0.2,
+            x=x,
+            y=100.0,
+            w=size,
+            h=size,
+            score=0.9,
+            source=ObservationSource.DETECTED,
         )
-        is None
+        for index in range(count)
+    )
+    return TrackCandidate(
+        track_id=f"shot-{shot:03d}-track-{int(x)}",
+        samples=samples,
+        mean_score=0.9,
+        shot_index=shot,
+        similarities=(similarity,) * max(3, count // 4),
     )
 
 
-def test_a_clip_with_no_eligible_track_reports_no_face() -> None:
-    brief = build_face_tracks(
-        (FrameDetections(t=0.0, faces=(DetectedFace(560.0, 180.0, 143.0, 144.0, 1.0),)),),
-        iou_threshold=0.2,
-        max_gap_s=1.0,
-    )[0]
+def _selection(tracks: tuple, *, times: tuple[float, float]) -> object:
+    """Wrap plain tracks as an accepted single-shot selection."""
 
-    track = active_face_track(
-        "clip-1",
-        (brief,),
-        frame_width=1280.0,
-        frame_height=720.0,
-        expected_times=tuple(index * 0.2 for index in range(242)),
-        max_gap_s=1.0,
+    from src.vision.track import VerifiedSelection
+
+    return VerifiedSelection(
+        samples=tuple(sample for track in tracks for sample in track.samples),
+        track_id="test",
+        evidence=None,
+        decision=VerificationDecision.ACCEPTED,
+        reasons=(),
+        unsupported_spans=(),
+        verified_frac=1.0,
     )
-
-    assert track.track_id == "no-face"
-    assert track.samples == ()

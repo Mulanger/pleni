@@ -23,6 +23,8 @@ This file is the source of truth for chunk status and handoff notes.
 | C12 - Orchestration | TODO | Depends on C11 |
 | C13 - Observability & runbook | TODO | Depends on C12 |
 | UI2 - Feed swipe & autoplay | DONE | Completed 2026-08-06 |
+| V1 - YuNet replaces the Haar cascade | DONE | Completed 2026-08-07 |
+| V2 - Speaker identity verification | TODO | Depends on V1 |
 
 ## C0 - Foundations - DONE 2026-08-01
 
@@ -2249,3 +2251,121 @@ shipped, not after.
   cache and the server becomes the source of truth, exactly as
   `library-store.ts` has said since UI1.
 - Do not delete either Supabase Clerk entry.
+
+## V1 — YuNet replaces the Haar cascade — DONE 2026-08-07
+
+**Built:** `src/vision/models/{face_detection_yunet_2023mar.onnx,MODELS.md}`,
+`FaceDetector` protocol + `YuNetFaceDetector` + `verify_model_checksum` in
+`src/vision/detect.py`, YuNet settings in `src/config.py`, detector wiring and a
+single-detect inset path in `src/stages/track.py`, package-data in
+`pyproject.toml`, `docs/CLIPPING_V2_DESIGN.md`, V1/V2 chunk entries in
+`docs/BUILD_PLAN.md`.
+**Tests:** `python tasks.py test lint typecheck` green — **281 passed** (was
+274), 67 deselected, 1 pre-existing `audioop` warning; ruff clean; mypy strict
+clean on 74 files. Slow e2e green after a reviewed golden regeneration.
+**Contracts touched:** none.
+
+### The complaint was measurable, and it was not the camera
+
+The owner reported clips "only filming a shoulder or missing the speaker".
+Measured over the entire published catalogue — 1,746 clips, 87 debates, read
+from existing artifacts with no re-processing:
+
+| Defect | Clips | Share |
+|---|---:|---:|
+| Tracked box too large to be a face (>205 px on a 1280 px frame) | 435 | 24.9% |
+| ≥1 shot with **zero** face evidence, C9 holding a stale crop | 867 | 49.7% |
+| Track covers <50% of the clip | 607 | 34.8% |
+| **At least one of the above** | **1,297** | **74.3%** |
+
+The number that redirected the whole session: **face-centre-inside-crop is
+1.000 at p10, p50 and p90**, with 0.002 of samples in the outer 15%. The camera
+obeys its target perfectly. Every smoothing-side fix — Kalman, EMA, one-euro,
+padded gesture-aware bounding boxes — acts on a signal that is already 100%
+obeyed and cannot move that number. The target was simply not a person.
+
+Two published examples, confirmed by drawing the boxes on the analysis frames:
+`HD10392_ebe6af7e…_c01` is 45 s of a seated bystander's lap while Erik Slottner
+speaks off-frame; `HDC120260305fs_35dc833f…_c01` is rows of empty blue seats.
+
+### Root cause
+
+`haarcascade_frontalface_default` returns **no confidence**, so `detect.py`
+synthesised one from box area plus distance from frame centre. That score
+*rewards* precisely what a large central false positive has. Haar also emits
+square boxes and cannot see a profile, which is where the 62% median coverage
+came from.
+
+### Bake-off — 22 clips, stratified, through the real C8 code path
+
+| config | frames w/ a face | median box width | track coverage | box >0.16 |
+|---|---:|---:|---:|---:|
+| `haar480` | 0.925 | 0.176 | 0.581 | **15/22** |
+| `yunet480` | 0.974 | 0.099 | **0.858** | **0/22** |
+| `yunet960` | 1.000 | 0.097 | **0.858** | **0/22** |
+
+**Decisions made:**
+- **Haar is deleted, not demoted.** A backend that selects chamber furniture as
+  the speaker, reachable by an env var, is a trap for a future session — the same
+  reasoning as ADR 010's refusal to keep a lower-weighted fallback. A fresh
+  checkout with no model now fails loudly instead of degrading silently.
+- **960×540 rejected for detection.** `speaker_verified_crop_design.md` §3.2
+  predicted it would become default. It does not: frame detection gains 2.6 pp
+  but median box width and track coverage are *identical* to 480×270 — the same
+  track is chosen. That cancels a re-decode of 87 masters. Re-open it as a **V2
+  identity** question: a 0.097 box is ~124 px at master scale but only ~46 px on
+  a 480-wide analysis frame, which is marginal for SFace.
+- **The body/pose detector was dropped after measuring.** It was in the plan (and
+  in external advice) on the assumption that low coverage meant faces vanishing
+  on head-turns. It does not: YuNet detects a face in 97–100% of frames. On
+  single-speaker podium clips it is 1 track at coverage 1.00; on debate two-shots
+  it is 2.50 faces/frame with top-1 **and** top-2 both ≥0.98. The residual is two
+  people both tracked perfectly and no signal saying which is speaking. A body
+  detector adds evidence where evidence is already complete.
+- The inset is resolved once per clip from the first frame instead of detecting
+  every frame twice, which halved detector calls on any debate with an inset
+  configured.
+
+**Golden diff, reviewed rather than accepted:** `08_track_fixture_summary.json`
+keeps its `sample_count` (296, 153) and `track_id` (`track-001`), so the same
+track with the same coverage is still selected. Box geometry changed from square
+(106.75×106.667) to taller-than-wide (84.6×111.4, ratio ~0.74). Haar is trained
+on square windows and can only emit squares; a real face box is taller than
+wide, and YuNet's is ~20% tighter in width.
+
+**Observations (not fixed, out of scope):**
+- **The track merger fuses two people who use the same podium.** On
+  `HD10392_ebe6af7e…_c01` the selected track alternates between Slottner and a
+  later speaker at the same lectern: `merge_fragmented_tracks` is not scene-aware,
+  so a cut that swaps the person while preserving screen position gives a high
+  seam IoU and the two stitch into one identity. Theoretical in the design doc,
+  now the *dominant* residual defect. V2.
+- `FaceSample.is_speaking` is still set `True` for every sample of the selected
+  track and has never carried an active-speaker decision.
+- `face_height_frac` is still hardcoded to `1.0` in `src/scoring/text_features.py`
+  against `MIN_FACE_HEIGHT_FRAC = 0.0` in `src/scoring/gate.py`. That gate has
+  never been able to fire. V2/phase 3 supplies the real value.
+- C9 still holds the previous crop through a shot with no samples
+  (`src/camera/plan.py:65-69`). Half the catalogue hits it. V2.
+- OpenCV Zoo's NanoDet ONNX emits GFL distribution bins, not `xyxy`; it needs DFL
+  decoding and is not a drop-in, should a person detector ever be wanted.
+
+**Blocked / needs a decision:**
+- **The 1,762 live clips were all produced by the old detector**, ~74% with at
+  least one defect. Owner deferred the re-render/republish decision until after
+  phase 3, so nothing on Bunny or Supabase changed in this session.
+- `P0-9` — five credentials in chat transcripts. Still open, carried over.
+
+**Next agent should know:**
+- Nothing has been re-processed. The catalogue on disk and the live site are
+  still entirely old-detector output; the numbers above describe what *is*
+  published, not what the code now produces.
+- `python tasks.py golden` does **not** cover the C8 summary — it lives in the
+  slow e2e. Regenerate with
+  `UPDATE_GOLDEN=1 RIKET_TITLE_BACKEND=fallback python -m pytest tests/e2e -m slow`,
+  and set `RIKET_TITLE_BACKEND=fallback` or the run bills the DeepSeek API.
+- YuNet boxes can extend past the frame edge; `FaceSample.x/y` are
+  `NonNegativeFloat`, so `scale_detections_to_media` clamps. Do not remove it.
+- V2 is the whole remaining defect surface and needs an ADR before code:
+  `FaceSample`/`FaceTrack` cannot carry confidence, landmarks, provenance, scene
+  id or identity evidence.

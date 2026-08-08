@@ -247,6 +247,45 @@ dangling opener · procedural boilerplate (`Herr/Fru talman`, `yrkar bifall`, re
 
 ---
 
+## V1 — YuNet replaces the Haar cascade — DONE
+
+**Depends on:** C8. **Size:** small. **CPU.** Phase 1 of `docs/CLIPPING_V2_DESIGN.md`.
+
+**Objective.** Stop the detector selecting furniture as the speaker. Measured over
+the whole published catalogue, 24.9% of clips were framed on a box too large to
+be a face and 74.3% carried at least one framing defect (design doc §1).
+
+**Scope:** `src/vision/detect.py`, `src/vision/models/`, `src/stages/track.py`,
+`src/config.py`, `tests/unit/test_vision_detect.py`, `pyproject.toml`.
+**Do not touch:** `src/vision/track.py` selection weights, `src/camera/`,
+`src/contracts.py`, anything in C6/C7.
+
+**Build:** `FaceDetector` protocol; `YuNetFaceDetector` over a checksum-pinned
+vendored ONNX; delete `HaarFaceDetector` and the area+centrality score it
+required; clamp boxes into frame; resolve the sign-language inset once per clip
+instead of detecting every frame twice.
+
+**Tests.** Detector miss returns `()`. Score is the model's, not derived from
+geometry. Out-of-frame boxes clamp; degenerate boxes drop. Sub-minimum faces
+drop regardless of confidence. Missing or tampered model fails loudly. Golden
+C8 track summary regenerated and diffed.
+
+**Acceptance:** zero impossible boxes on the Phase 1 sample; track coverage up
+from 0.58 to 0.86. Met — design doc §6.
+
+---
+
+## V2 — Speaker identity verification
+
+**Depends on:** V1. **Size:** large. **CPU.** Phases 2–3 of `docs/CLIPPING_V2_DESIGN.md`.
+
+**Objective.** After V1, every remaining measured defect is identity or scene
+continuity: two people on screen, both tracked perfectly, nothing saying which
+one is speaking. Needs an ADR — `FaceSample`/`FaceTrack` cannot express detector
+confidence, landmarks, provenance, scene id or identity evidence.
+
+---
+
 ## C9 — Camera planning
 
 **Depends on:** C8. **Size:** small–medium. **Pure function — no video IO.**

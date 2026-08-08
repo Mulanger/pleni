@@ -21,6 +21,8 @@ from src.contracts import (
     MediaInfo,
     Scene,
     SelectedClip,
+    TimeSpan,
+    VerificationDecision,
 )
 
 
@@ -50,7 +52,7 @@ def plan_camera_for_clip(
     ADR 010.
     """
 
-    if not face_track.samples:
+    if not face_track.samples or face_track.decision is not VerificationDecision.ACCEPTED:
         return CameraPlan(clip_id=clip.clip_id, keyframes=(), mode=CameraMode.STATIC)
 
     crop_width, _crop_height = crop_size_for_media(media_info)
@@ -63,6 +65,13 @@ def plan_camera_for_clip(
     last_crop_x = center_crop_x
 
     for shot in shot_windows_for_clip(clip, scenes):
+        if _is_unsupported(shot, face_track.unsupported_spans):
+            # Holding `last_crop_x` here does not keep the camera on the speaker.
+            # It keeps it pointed at where the speaker stood in the *previous*
+            # shot, over footage they are not in. Half the published catalogue
+            # hit this. An unsupported shot makes the whole clip unrenderable
+            # rather than silently mis-framed. See ADR 012.
+            return CameraPlan(clip_id=clip.clip_id, keyframes=(), mode=CameraMode.STATIC)
         samples = _samples_in_window(face_track.samples, shot)
         if not samples:
             keyframes.append((shot.start_s, last_crop_x))
@@ -98,6 +107,15 @@ def plan_camera_for_clip(
             for t, x in _dedupe_keyframes(keyframes)
         ),
         mode=mode,
+    )
+
+
+def _is_unsupported(shot: ShotWindow, unsupported_spans: Sequence[TimeSpan]) -> bool:
+    """Whether a shot overlaps a span C8 could not verify the speaker in."""
+
+    return any(
+        min(shot.end_s, float(span.end_s)) - max(shot.start_s, float(span.start_s)) > 0.0
+        for span in unsupported_spans
     )
 
 

@@ -31,12 +31,12 @@ from src.stages.track import track_dokid
 def test_featureless_frames_yield_no_face_and_no_camera_plan(tmp_path: Path) -> None:
     """The analysis frames here are flat grey with two rectangles on them.
 
-    Haar has never detected a face in this fixture. Until ADR 010 the test
+    No detector has ever found a face in this fixture. Until ADR 010 the test
     asserted `len(samples) >= 18` and `all(is_speaking)` and passed anyway,
-    because `estimate_speaker_proxy()` fabricated one box per frame — so the
-    assertion was checking that the placeholder was working, and the C8/C9
-    integration path had no genuine coverage at all. It now asserts what these
-    frames actually support: nothing.
+    because the old fallback fabricated one box per frame — so the assertion was
+    checking that the placeholder was working, and the C8/C9 integration path
+    had no genuine coverage at all. It now asserts what these frames actually
+    support: nothing.
 
     The positive path is covered by
     `test_real_debate_footage_tracks_a_detected_face`, which uses committed
@@ -79,9 +79,15 @@ def test_featureless_frames_yield_no_face_and_no_camera_plan(tmp_path: Path) -> 
 def test_real_debate_footage_tracks_a_detected_face(tmp_path: Path) -> None:
     """Positive path, on committed footage of a real debate.
 
-    Haar finds a face in roughly 77% of sampled frames here, so this exercises
-    detection, tracking and camera planning on genuine evidence rather than on a
-    synthesised box.
+    Exercises the whole chain on genuine evidence: YuNet detection, SFace
+    enrolment and per-frame identity scoring, per-shot verification, tracking and
+    camera planning.
+
+    The enrolment image is a crop from this same fixture rather than an official
+    Riksdagen portrait, because a test must not need the network. That makes this
+    a test of the *mechanism*, not of portrait-to-video generalisation — the
+    latter was measured separately at 30/30 rank-1 (ADR 012) and cannot be
+    asserted offline.
     """
 
     dokid = "realfixture"
@@ -89,7 +95,9 @@ def test_real_debate_footage_tracks_a_detected_face(tmp_path: Path) -> None:
     paths.ensure_directories()
     master = Path("tests/fixtures/debates/betankande/master.mp4")
     media = probe_media(master)
-    clip = _clip(start_s=1.0, end_s=9.0)
+    # The fixture spans a speaker change ~29 s in; this window sits inside the
+    # enrolled speaker's half of it.
+    clip = _clip(start_s=92.0, end_s=100.0)
     _write_common_selected_inputs(paths, media, clip)
     extract_analysis_assets(
         master,
@@ -98,18 +106,26 @@ def test_real_debate_footage_tracks_a_detected_face(tmp_path: Path) -> None:
     )
     paths.scenes_json.write_text(
         json.dumps(
-            [Scene(index=0, start_s=0.0, end_s=12.0).model_dump(mode="json")],
+            [Scene(index=0, start_s=0.0, end_s=180.0).model_dump(mode="json")],
             ensure_ascii=False,
         ),
         encoding="utf-8",
     )
 
-    track_dokid(dokid, work_dir=tmp_path)
+    paths.source_json.write_text(
+        json.dumps({"anforanden": [{"anforande_id": "anf1", "intressent_id": "fixture-1"}]}),
+        encoding="utf-8",
+    )
+
+    track_dokid(dokid, work_dir=tmp_path, portraits=_LocalPortrait())
     plan_camera_dokid(dokid, work_dir=tmp_path)
 
     track_payload = json.loads(paths.track_json(clip.clip_id).read_text(encoding="utf-8"))
+    assert track_payload["decision"] == "accepted"
     assert track_payload["track_id"] != "no-face"
     assert len(track_payload["samples"]) >= 10
+    assert track_payload["identity"]["embedding_count"] >= 3
+    assert track_payload["identity"]["intressent_id"] == "fixture-1"
 
     camera_plan = CameraPlan.model_validate_json(
         paths.camera_json(clip.clip_id).read_text(encoding="utf-8")
@@ -119,6 +135,46 @@ def test_real_debate_footage_tracks_a_detected_face(tmp_path: Path) -> None:
     assert all(
         0.0 <= keyframe.crop_x <= media.width - crop_width for keyframe in camera_plan.keyframes
     )
+
+
+def test_a_clip_with_no_enrollable_speaker_is_rejected_not_guessed(tmp_path: Path) -> None:
+    """No `intressent_id` means the speaker cannot be verified, and an
+    unverifiable clip is rejected rather than framed on whichever face happens to
+    be largest. Non-sitting ministers hit this in production. See ADR 012."""
+
+    dokid = "noportraitfixture"
+    paths = work_paths(dokid, root=tmp_path)
+    paths.ensure_directories()
+    master = Path("tests/fixtures/debates/betankande/master.mp4")
+    media = probe_media(master)
+    # The fixture spans a speaker change ~29 s in; this window sits inside the
+    # enrolled speaker's half of it.
+    clip = _clip(start_s=92.0, end_s=100.0)
+    _write_common_selected_inputs(paths, media, clip)
+    extract_analysis_assets(master, paths.analysis_wav, paths.frames_dir / "%06d.jpg")
+    paths.scenes_json.write_text(
+        json.dumps([Scene(index=0, start_s=0.0, end_s=180.0).model_dump(mode="json")]),
+        encoding="utf-8",
+    )
+
+    track_dokid(dokid, work_dir=tmp_path, portraits=_LocalPortrait())
+    plan_camera_dokid(dokid, work_dir=tmp_path)
+
+    track_payload = json.loads(paths.track_json(clip.clip_id).read_text(encoding="utf-8"))
+    assert track_payload["decision"] == "rejected_no_portrait"
+    assert track_payload["samples"] == []
+
+    camera_plan = CameraPlan.model_validate_json(
+        paths.camera_json(clip.clip_id).read_text(encoding="utf-8")
+    )
+    assert camera_plan.keyframes == ()
+
+
+class _LocalPortrait:
+    """Offline enrolment source; see the note in the positive-path test."""
+
+    def fetch(self, intressent_id: str) -> bytes | None:
+        return Path("tests/fixtures/debates/betankande/speaker_enrolment.jpg").read_bytes()
 
 
 def test_render_refuses_an_unsupported_clip(tmp_path: Path) -> None:

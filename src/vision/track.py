@@ -1,32 +1,31 @@
-"""IoU tracking utilities for C8 face tracks."""
+"""Face tracking and verified-speaker selection for C8.
+
+Tracks are built **within a shot** and never across one, then the expected
+politician's track is chosen in each shot by identity. Geometry no longer
+selects: the previous scorer ranked candidates by size, coverage and centring,
+which describes framing rather than identity, and on a debate two-shot where
+both people are tracked in ~100% of frames it decides nothing. Its own history
+is the argument — it began as a raw persistence vote that handed clips to a
+motionless face in the gallery, was reweighted toward size, and then handed them
+to chamber furniture instead. See ADR 012.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from bisect import bisect_right
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from statistics import median
 
-from src.contracts import FaceSample, FaceTrack
+from src.contracts import (
+    FaceSample,
+    FaceTrack,
+    IdentityEvidence,
+    ObservationSource,
+    TimeSpan,
+    VerificationDecision,
+)
 from src.vision.detect import DetectedFace, FrameDetections
-
-#: Weights for active-speaker selection. Every component is normalised to
-#: `[0, 1]` against the best candidate in the *same clip*, so these are
-#: comparable and sum to 1.0.
-#:
-#: The previous formula was `coverage * 2.0 + area_frac * 100.0 + centre * 3.0`
-#: with `coverage` as a raw frame count. On a 48-second clip that is ~480 points
-#: for coverage against 2.2 for size and 3.0 for centring — about 99% of the
-#: decision was "which face was detected in the most frames". Haar loses the
-#: speaker every time they turn their head or look at their notes, while a
-#: static face up in the chamber is never lost, so the crowd won the vote.
-#:
-#: Size leads now because Riksdagen's feed is directed: the vision mixer frames
-#: whoever is speaking large and everyone else small. Coverage still matters,
-#: but it can no longer outvote a face twice the size on its own.
-AREA_WEIGHT = 0.45
-COVERAGE_WEIGHT = 0.30
-CENTER_WEIGHT = 0.20
-DETECTOR_WEIGHT = 0.05
+from src.vision.identity import IdentityThresholds, build_evidence, decide
 
 #: A face visible in less than this fraction of a clip's frames is not that
 #: clip's speaker, whatever else it scores.
@@ -48,6 +47,11 @@ class TrackCandidate:
     track_id: str
     samples: tuple[FaceSample, ...]
     mean_score: float
+    shot_index: int = 0
+    #: Cosine similarities to the enrolled portrait for the sampled subset of
+    #: this track's faces. Empty means identity was never measured -- which is
+    #: not the same as "did not match", and is treated as no evidence.
+    similarities: tuple[float, ...] = ()
 
     @property
     def coverage(self) -> int:
@@ -67,6 +71,7 @@ class _TrackState:
     track_id: str
     samples: list[FaceSample]
     scores: list[float]
+    similarities: list[float]
 
     @property
     def last_sample(self) -> FaceSample:
@@ -82,9 +87,82 @@ def build_face_tracks(
     *,
     iou_threshold: float,
     max_gap_s: float,
+    cuts: Sequence[float] = (),
+    merge_gap_s: float = 4.0,
+    merge_iou: float = 0.30,
 ) -> tuple[TrackCandidate, ...]:
-    """Track face detections over master-relative frame timestamps."""
+    """Track face detections over master-relative frame timestamps.
 
+    `cuts` are master-relative scene-cut times, and every one of them is a hard
+    boundary: no track may span a cut. A cut can put a different person at the
+    same screen position, so geometric continuity across one is not evidence of
+    identity — measured on `HD10392_ebe6af7e...`, where two speakers who used the
+    same lectern were being tracked as one person. Re-associating a speaker
+    across shots is `src.vision.identity`'s job, not the tracker's.
+    """
+
+    if cuts:
+        return _tracks_per_shot(
+            frames,
+            iou_threshold=iou_threshold,
+            max_gap_s=max_gap_s,
+            cuts=cuts,
+            merge_gap_s=merge_gap_s,
+            merge_iou=merge_iou,
+        )
+    return _tracks_in_one_shot(
+        frames,
+        iou_threshold=iou_threshold,
+        max_gap_s=max_gap_s,
+        merge_gap_s=merge_gap_s,
+        merge_iou=merge_iou,
+    )
+
+
+def _tracks_per_shot(
+    frames: Sequence[FrameDetections],
+    *,
+    iou_threshold: float,
+    max_gap_s: float,
+    cuts: Sequence[float],
+    merge_gap_s: float,
+    merge_iou: float,
+) -> tuple[TrackCandidate, ...]:
+    boundaries = sorted({float(cut) for cut in cuts})
+    shots: dict[int, list[FrameDetections]] = {}
+    for frame in frames:
+        index = bisect_right(boundaries, float(frame.t))
+        shots.setdefault(index, []).append(frame)
+
+    tracks: list[TrackCandidate] = []
+    for shot_index in sorted(shots):
+        for track in _tracks_in_one_shot(
+            shots[shot_index],
+            iou_threshold=iou_threshold,
+            max_gap_s=max_gap_s,
+            merge_gap_s=merge_gap_s,
+            merge_iou=merge_iou,
+        ):
+            tracks.append(
+                TrackCandidate(
+                    track_id=f"shot-{shot_index:03d}-{track.track_id}",
+                    samples=track.samples,
+                    mean_score=track.mean_score,
+                    shot_index=shot_index,
+                    similarities=track.similarities,
+                )
+            )
+    return tuple(tracks)
+
+
+def _tracks_in_one_shot(
+    frames: Sequence[FrameDetections],
+    *,
+    iou_threshold: float,
+    max_gap_s: float,
+    merge_gap_s: float = 4.0,
+    merge_iou: float = 0.30,
+) -> tuple[TrackCandidate, ...]:
     states: list[_TrackState] = []
     for frame in sorted(frames, key=lambda item: item.t):
         detections = sorted(frame.faces, key=lambda face: face.score, reverse=True)
@@ -97,61 +175,37 @@ def build_face_tracks(
                 assigned_tracks=assigned_tracks,
                 max_gap_s=max_gap_s,
             )
-            sample = _sample_from_face(frame.t, face, is_speaking=False)
+            sample = _sample_from_face(frame.t, face)
             if best_state is None or iou(best_state.last_sample, sample) < iou_threshold:
                 state = _TrackState(
                     track_id=f"track-{len(states) + 1:03d}",
                     samples=[sample],
                     scores=[face.score],
+                    similarities=[face.similarity] if face.similarity is not None else [],
                 )
                 states.append(state)
                 assigned_tracks.add(state.track_id)
             else:
                 best_state.samples.append(sample)
                 best_state.scores.append(face.score)
+                if face.similarity is not None:
+                    best_state.similarities.append(face.similarity)
                 assigned_tracks.add(best_state.track_id)
 
-    return tuple(
+    built = tuple(
         TrackCandidate(
             track_id=state.track_id,
             samples=tuple(state.samples),
             mean_score=sum(state.scores) / len(state.scores),
+            similarities=tuple(state.similarities),
         )
         for state in states
         if state.samples
     )
-
-
-def select_active_track(
-    tracks: Sequence[TrackCandidate],
-    *,
-    frame_width: float,
-    frame_height: float,
-    total_frames: int | None = None,
-) -> TrackCandidate | None:
-    """Pick the face most likely to be the speaker: large, centred, persistent.
-
-    Candidates too brief to be a speaker are discarded first (`MIN_COVERAGE_FRAC`),
-    then the survivors are scored *relative to each other*. That is the question
-    actually being asked — not "is this face big" but "is this the biggest face
-    here" — and it means no reference size has to be tuned per debate type or
-    per camera framing.
-
-    `total_frames` is the clip's frame count. Without it the floor falls back to
-    the longest candidate, which is weaker but never wrong-by-construction.
-    """
-
-    if not tracks:
-        return None
-    eligible = _long_enough_to_be_a_speaker(tracks, total_frames=total_frames)
-    if not eligible:
-        return None
-    scores = relative_scores(eligible, frame_width=frame_width, frame_height=frame_height)
-    best = max(
-        range(len(eligible)),
-        key=lambda index: (scores[index], eligible[index].track_id),
-    )
-    return eligible[best]
+    # Rejoining a speaker who looked away is safe here in a way it never was
+    # before: this runs inside a single shot, so there is no cut for it to stitch
+    # across and no chance of fusing two people who used the same lectern.
+    return merge_fragmented_tracks(built, max_gap_s=merge_gap_s, min_iou=merge_iou)
 
 
 def merge_fragmented_tracks(
@@ -183,49 +237,264 @@ def merge_fragmented_tracks(
         if pair is None:
             return tuple(merged)
         first, second = pair
-        remaining = [
-            track for index, track in enumerate(merged) if index not in (first, second)
-        ]
+        remaining = [track for index, track in enumerate(merged) if index not in (first, second)]
         remaining.append(_concatenate(merged[first], merged[second]))
         merged = sorted(remaining, key=lambda track: track.start_t)
 
 
-def active_face_track(
-    clip_id: str,
+@dataclass(frozen=True)
+class VerifiedSelection:
+    """The clip's speaker timeline, assembled from per-shot identity decisions."""
+
+    samples: tuple[FaceSample, ...]
+    track_id: str
+    evidence: IdentityEvidence | None
+    decision: VerificationDecision
+    reasons: tuple[str, ...]
+    unsupported_spans: tuple[TimeSpan, ...]
+    verified_frac: float
+
+
+def select_verified_track(
     tracks: Sequence[TrackCandidate],
     *,
-    frame_width: float,
-    frame_height: float,
+    shot_bounds: Mapping[int, tuple[float, float]],
+    shot_frame_counts: Mapping[int, int],
+    intressent_id: str | None,
+    portrait_sha256: str | None,
+    thresholds: IdentityThresholds,
+    min_verified_frac: float,
+    max_unsupported_gap_s: float,
+) -> VerifiedSelection:
+    """Choose the expected politician's track in every shot, and say so honestly.
+
+    Tracks terminate at scene cuts, so one speaker arrives as one track *per
+    shot*. Selection therefore runs per shot and the accepted shots are unioned
+    into the clip's timeline; a shot with no verified target becomes an
+    unsupported span rather than a stretch of held-over crop pointed at where the
+    speaker used to stand.
+
+    Identity decides which track, not geometry. The geometric selector this
+    replaced — largest, most-covered, most-centred — is a statement about
+    framing, and on a debate two-shot where both people are tracked in ~100% of
+    frames it carries no information at all about who is speaking.
+    """
+
+    if portrait_sha256 is None:
+        return _rejected(
+            VerificationDecision.REJECTED_NO_PORTRAIT,
+            ("no_official_portrait_for_expected_speaker",),
+            shot_bounds,
+        )
+
+    accepted: list[TrackCandidate] = []
+    unsupported: list[TimeSpan] = []
+    reasons: list[str] = []
+    best_evidence: IdentityEvidence | None = None
+    best_median = -1.0
+
+    for shot_index in sorted(shot_bounds):
+        in_shot = [track for track in tracks if track.shot_index == shot_index]
+        eligible = _long_enough_to_be_a_speaker(
+            in_shot, total_frames=shot_frame_counts.get(shot_index)
+        )
+        with_evidence = [
+            (track, [float(value) for value in track.similarities])
+            for track in eligible
+            if track.similarities
+        ]
+        if not with_evidence:
+            _record_unverified(
+                shot_bounds[shot_index],
+                unsupported,
+                reasons,
+                shot_index=shot_index,
+                reason="no_quality_embeddings",
+                max_unsupported_gap_s=max_unsupported_gap_s,
+            )
+            continue
+
+        ranked = sorted(with_evidence, key=lambda item: _quantile_of(item[1], 0.5), reverse=True)
+        winner, winner_sims = ranked[0]
+        competitor_median = _quantile_of(ranked[1][1], 0.5) if len(ranked) > 1 else 0.0
+        evidence = build_evidence(
+            winner_sims,
+            intressent_id=intressent_id,
+            portrait_sha256=portrait_sha256,
+            competitor_median=competitor_median,
+        )
+        reason = thresholds.evaluate(evidence, has_competitor=len(ranked) > 1)
+        if reason is not None:
+            _record_unverified(
+                shot_bounds[shot_index],
+                unsupported,
+                reasons,
+                shot_index=shot_index,
+                reason=reason,
+                max_unsupported_gap_s=max_unsupported_gap_s,
+            )
+            continue
+
+        accepted.append(winner)
+        if evidence.median_similarity > best_median:
+            best_median = evidence.median_similarity
+            best_evidence = evidence
+
+    verified_frac = _verified_fraction(accepted, shot_frame_counts)
+    if not accepted:
+        first = reasons[0].split(":", 1)[1] if reasons else None
+        return _rejected(
+            decide(first) if first else VerificationDecision.REJECTED_NO_EVIDENCE,
+            tuple(reasons) or ("no_verified_target_in_any_shot",),
+            shot_bounds,
+        )
+    if verified_frac < min_verified_frac:
+        reasons.append(f"verified_only_{verified_frac:.2f}_of_clip")
+        return VerifiedSelection(
+            samples=(),
+            track_id="unverified",
+            evidence=best_evidence,
+            decision=VerificationDecision.REJECTED_NO_EVIDENCE,
+            reasons=tuple(reasons),
+            unsupported_spans=tuple(unsupported),
+            verified_frac=verified_frac,
+        )
+
+    samples = tuple(
+        sorted(
+            (sample for track in accepted for sample in track.samples),
+            key=lambda sample: sample.t,
+        )
+    )
+    return VerifiedSelection(
+        samples=samples,
+        track_id="+".join(track.track_id for track in accepted),
+        evidence=best_evidence,
+        decision=VerificationDecision.ACCEPTED,
+        reasons=tuple(reasons),
+        unsupported_spans=tuple(unsupported),
+        verified_frac=verified_frac,
+    )
+
+
+def _record_unverified(
+    bounds: tuple[float, float],
+    unsupported: list[TimeSpan],
+    reasons: list[str],
+    *,
+    shot_index: int,
+    reason: str,
+    max_unsupported_gap_s: float,
+) -> None:
+    """Record a shot the speaker could not be verified in.
+
+    A shot shorter than `max_unsupported_gap_s` is noted but **not** made an
+    unsupported span. Riksdagen's feed cuts constantly, and a sub-second cutaway
+    is not the defect being fixed here — holding the crop across half a second is
+    invisible, while rejecting every clip containing one would reject nearly all
+    of them. A long absence is the real failure and still disqualifies the clip.
+    """
+
+    duration_s = bounds[1] - bounds[0]
+    if duration_s < max_unsupported_gap_s:
+        reasons.append(f"shot_{shot_index}:{reason}:tolerated_{duration_s:.2f}s")
+        return
+    unsupported.append(_span(bounds))
+    reasons.append(f"shot_{shot_index}:{reason}")
+
+
+def _rejected(
+    decision: VerificationDecision,
+    reasons: tuple[str, ...],
+    shot_bounds: Mapping[int, tuple[float, float]],
+) -> VerifiedSelection:
+    return VerifiedSelection(
+        samples=(),
+        track_id="no-face",
+        evidence=None,
+        decision=decision,
+        reasons=reasons,
+        unsupported_spans=tuple(_span(shot_bounds[index]) for index in sorted(shot_bounds)),
+        verified_frac=0.0,
+    )
+
+
+def _span(bounds: tuple[float, float]) -> TimeSpan:
+    start_s, end_s = bounds
+    return TimeSpan(start_s=start_s, end_s=max(end_s, start_s + 1e-3))
+
+
+def _verified_fraction(
+    accepted: Sequence[TrackCandidate],
+    shot_frame_counts: Mapping[int, int],
+) -> float:
+    total = sum(shot_frame_counts.values())
+    if total <= 0:
+        return 0.0
+    covered = sum(
+        1
+        for track in accepted
+        for sample in track.samples
+        if sample.source is ObservationSource.DETECTED
+    )
+    return min(1.0, covered / total)
+
+
+def _quantile_of(values: Sequence[float], quantile: float) -> float:
+    ordered = sorted(float(value) for value in values)
+    if not ordered:
+        return 0.0
+    index = min(len(ordered) - 1, max(0, round((len(ordered) - 1) * quantile)))
+    return ordered[index]
+
+
+def verified_face_track(
+    clip_id: str,
+    selection: VerifiedSelection,
+    *,
     expected_times: Sequence[float],
     max_gap_s: float,
 ) -> FaceTrack:
-    """Build the serializable active-speaker `FaceTrack` for one clip."""
+    """Serialize one clip's verified speaker timeline as a `FaceTrack`.
 
-    selected = select_active_track(
-        tracks,
-        frame_width=frame_width,
-        frame_height=frame_height,
-        total_frames=len(expected_times),
+    Interpolation happens here and only here, and it never crosses an
+    unsupported span: filling across a shot where the target was absent would
+    manufacture a smooth path through footage the speaker is not in, which is the
+    stale-crop defect wearing a different hat. See ADR 012.
+    """
+
+    if not selection.samples:
+        return FaceTrack(
+            clip_id=clip_id,
+            track_id=selection.track_id,
+            samples=(),
+            decision=selection.decision,
+            identity=selection.evidence,
+            unsupported_spans=selection.unsupported_spans,
+            reasons=selection.reasons,
+        )
+    supported_times = tuple(
+        t
+        for t in expected_times
+        if not any(
+            float(span.start_s) <= float(t) < float(span.end_s)
+            for span in selection.unsupported_spans
+        )
     )
-    if selected is None:
-        return FaceTrack(clip_id=clip_id, track_id="no-face", samples=())
     filled = interpolate_missing_samples(
-        selected.samples,
-        expected_times=expected_times,
+        selection.samples,
+        expected_times=supported_times,
         max_gap_s=max_gap_s,
     )
-    speaking_samples = tuple(
-        FaceSample(
-            t=sample.t,
-            x=sample.x,
-            y=sample.y,
-            w=sample.w,
-            h=sample.h,
-            is_speaking=True,
-        )
-        for sample in filled
+    return FaceTrack(
+        clip_id=clip_id,
+        track_id=selection.track_id,
+        samples=filled,
+        decision=selection.decision,
+        identity=selection.evidence,
+        unsupported_spans=selection.unsupported_spans,
+        reasons=selection.reasons,
     )
-    return FaceTrack(clip_id=clip_id, track_id=selected.track_id, samples=speaking_samples)
 
 
 def interpolate_missing_samples(
@@ -287,7 +556,7 @@ def _best_matching_track(
     assigned_tracks: set[str],
     max_gap_s: float,
 ) -> _TrackState | None:
-    sample = _sample_from_face(frame_t, face, is_speaking=False)
+    sample = _sample_from_face(frame_t, face)
     candidates = [
         state
         for state in states
@@ -298,35 +567,15 @@ def _best_matching_track(
     return max(candidates, key=lambda state: iou(state.last_sample, sample))
 
 
-def _sample_from_face(t: float, face: DetectedFace, *, is_speaking: bool) -> FaceSample:
-    return FaceSample(t=t, x=face.x, y=face.y, w=face.w, h=face.h, is_speaking=is_speaking)
-
-
-def relative_scores(
-    tracks: Sequence[TrackCandidate],
-    *,
-    frame_width: float,
-    frame_height: float,
-) -> tuple[float, ...]:
-    """Score every candidate in `[0, 1]`, normalised against the best of them.
-
-    Returned positionally, not keyed by `track_id`: ids are only unique within
-    one `build_face_tracks` call, so a dict keyed on them silently collapses two
-    candidates into one.
-    """
-
-    if not tracks:
-        return ()
-    areas = [_median_area(track) for track in tracks]
-    best_area = max(areas) or 1.0
-    best_coverage = float(max(track.coverage for track in tracks)) or 1.0
-    best_detector = max(track.mean_score for track in tracks) or 1.0
-    return tuple(
-        AREA_WEIGHT * (area / best_area)
-        + COVERAGE_WEIGHT * (track.coverage / best_coverage)
-        + CENTER_WEIGHT * _center_score(track, frame_width=frame_width)
-        + DETECTOR_WEIGHT * (track.mean_score / best_detector)
-        for track, area in zip(tracks, areas, strict=True)
+def _sample_from_face(t: float, face: DetectedFace) -> FaceSample:
+    return FaceSample(
+        t=t,
+        x=face.x,
+        y=face.y,
+        w=face.w,
+        h=face.h,
+        score=min(1.0, max(0.0, float(face.score))),
+        source=ObservationSource.DETECTED,
     )
 
 
@@ -347,16 +596,6 @@ def _long_enough_to_be_a_speaker(
     denominator = total_frames or max(track.coverage for track in tracks)
     floor = MIN_COVERAGE_FRAC * max(denominator, 1)
     return tuple(track for track in tracks if track.coverage >= floor)
-
-
-def _median_area(track: TrackCandidate) -> float:
-    return median(float(sample.w * sample.h) for sample in track.samples)
-
-
-def _center_score(track: TrackCandidate, *, frame_width: float) -> float:
-    centers = [float(sample.x + sample.w / 2.0) for sample in track.samples]
-    distance = abs(median(centers) - frame_width / 2.0) / max(frame_width / 2.0, 1.0)
-    return 1.0 - min(1.0, distance)
 
 
 def _best_merge_pair(
@@ -388,9 +627,7 @@ def _concatenate(earlier: TrackCandidate, later: TrackCandidate) -> TrackCandida
     return TrackCandidate(
         track_id=earlier.track_id,
         samples=samples,
-        mean_score=(
-            earlier.mean_score * earlier.coverage + later.mean_score * later.coverage
-        )
+        mean_score=(earlier.mean_score * earlier.coverage + later.mean_score * later.coverage)
         / max(total, 1),
     )
 
@@ -419,7 +656,8 @@ def _interpolated_sample(
         y=_lerp(float(before.y), float(after.y), ratio),
         w=_lerp(float(before.w), float(after.w), ratio),
         h=_lerp(float(before.h), float(after.h), ratio),
-        is_speaking=False,
+        score=min(float(before.score), float(after.score)),
+        source=ObservationSource.INTERPOLATED,
     )
 
 

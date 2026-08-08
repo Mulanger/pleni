@@ -168,7 +168,7 @@ def test_face_track_round_trip() -> None:
         FaceTrack(
             clip_id="H901AU1_anf1_c01",
             track_id="track-1",
-            samples=(FaceSample(t=20.0, x=500.0, y=100.0, w=160.0, h=220.0, is_speaking=True),),
+            samples=(FaceSample(t=20.0, x=500.0, y=100.0, w=160.0, h=220.0),),
         )
     )
 

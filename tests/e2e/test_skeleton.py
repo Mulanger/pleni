@@ -14,9 +14,24 @@ from src.stages.run_fixture import run_fixture
 from tests.conftest import assert_matches_golden
 
 
+class _FixturePortrait:
+    """Offline enrolment for the e2e.
+
+    The fixture's speakers have real `intressent_id`s, so the production portrait
+    source would fetch from Riksdagen — and this test runs in CI, where a test
+    must not need the network. The enrolment image is cropped from the fixture's
+    own footage, which adds no personal data the committed `master.mp4` does not
+    already contain. Identity *accuracy* is covered by the unit and integration
+    tests; what this asserts is that the chain runs end to end and stays stable.
+    """
+
+    def fetch(self, intressent_id: str) -> bytes | None:
+        return Path("tests/fixtures/debates/betankande/speaker_enrolment.jpg").read_bytes()
+
+
 @pytest.mark.slow
 def test_walking_skeleton_produces_vertical_clip(tmp_path: Path, fixtures_dir: Path) -> None:
-    result = run_fixture(work_dir=tmp_path)
+    result = run_fixture(work_dir=tmp_path, portraits=_FixturePortrait())
 
     assert len(result.rendered_clips) >= 1
     rendered = result.rendered_clips[0]
@@ -55,7 +70,14 @@ def _track_summary(payload: object) -> dict[str, object]:
     assert isinstance(samples, list)
     return {
         "track_id": payload.get("track_id"),
+        "decision": payload.get("decision"),
         "sample_count": len(samples),
+        "detected_count": sum(
+            1
+            for sample in samples
+            if isinstance(sample, dict) and sample.get("source") == "detected"
+        ),
+        "unsupported_spans": len(payload.get("unsupported_spans") or []),
         "first": _sample_summary(samples[0]) if samples else None,
         "last": _sample_summary(samples[-1]) if samples else None,
     }
@@ -69,5 +91,5 @@ def _sample_summary(sample: object) -> dict[str, object]:
         "y": round(float(sample["y"]), 3),
         "w": round(float(sample["w"]), 3),
         "h": round(float(sample["h"]), 3),
-        "is_speaking": sample["is_speaking"],
+        "source": sample["source"],
     }

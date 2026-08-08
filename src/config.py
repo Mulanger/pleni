@@ -49,8 +49,34 @@ class Settings(BaseSettings):
     output_height: int = Field(default=OUTPUT_HEIGHT, gt=0)
     crop_width: int = Field(default=CROP_WIDTH, gt=0)
     crop_height: int = Field(default=CROP_HEIGHT, gt=0)
-    face_detector_backend: str = Field(default="haar")
+    face_detector_backend: str = Field(default="yunet")
     face_min_size_frac: float = Field(default=0.045, gt=0.0, lt=1.0)
+    # YuNet's own confidence, not a derived one. On Riksdagen podium footage a
+    # speaker's face scores 0.89-0.95 and a background face 0.75-0.92, so 0.70
+    # admits real faces generously and leaves "which of them is the speaker" to
+    # the tracker rather than to a detection threshold.
+    face_score_threshold: float = Field(default=0.70, gt=0.0, le=1.0)
+    face_nms_threshold: float = Field(default=0.30, gt=0.0, le=1.0)
+    face_top_k: int = Field(default=500, gt=0)
+    # Speaker identity (ADR 012). Thresholds are a first calibration from the
+    # 30-clip closed-set probe, not a tuned result: a verified correct match
+    # landed at 0.366 absolute while beating the runner-up by +0.299, so the
+    # absolute floors are permissive and the margin does the discriminating.
+    # OpenCV's documented 0.363 LFW figure is a smoke test, not a gate.
+    identity_min_embeddings: int = Field(default=3, ge=1)
+    identity_min_median_similarity: float = Field(default=0.28, ge=0.0, le=1.0)
+    identity_min_p20_similarity: float = Field(default=0.20, ge=0.0, le=1.0)
+    identity_min_competitor_margin: float = Field(default=0.08, ge=0.0, le=1.0)
+    # Share of a clip's sampled frames that must carry a verified target for the
+    # clip to be publishable. Below this it is rejected rather than rendered with
+    # the crop held over footage the speaker is not in.
+    identity_min_verified_frac: float = Field(default=0.85, ge=0.0, le=1.0)
+    # Riksdagen's feed cuts constantly. A cutaway shorter than this is tolerated
+    # -- holding the crop across half a second is invisible -- while a longer
+    # absence of the verified speaker disqualifies the clip.
+    identity_max_unsupported_gap_s: float = Field(default=1.0, gt=0.0)
+    identity_embeddings_per_second: float = Field(default=1.0, gt=0.0)
+    portrait_cache_dirname: str = Field(default="_portraits")
     face_track_iou_threshold: float = Field(default=0.18, ge=0.0, le=1.0)
     face_track_max_gap_s: float = Field(default=1.0, gt=0.0)
     # Track stitching. A speaker who turns their head stops being detected for

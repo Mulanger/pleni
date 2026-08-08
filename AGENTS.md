@@ -154,7 +154,14 @@ Last updated: 2026-08-02.
 ### Known caveats
 
 - `src/segment/vad.py` uses deprecated stdlib `audioop`; tests pass on current Python, but Python 3.13 will require replacing it.
-- The active speaker implementation is a pragmatic C8 heuristic with OpenCV Haar detection plus a center-podium fallback. TalkNet/real ASD is still future work.
+- The C8 detector is **YuNet**, run by OpenCV from a checksum-pinned ONNX committed
+  under `src/vision/models/`. The Haar cascade and its centre-podium fallback are
+  both gone (ADR 010, then V1). Active-speaker *selection* is still a geometric
+  heuristic in `src/vision/track.py` — largest, most-covered, most-centred face —
+  and that is now the pipeline's leading framing defect, because it cannot tell
+  which of two tracked faces is the one speaking. Identity verification (SFace)
+  is the planned fix; TalkNet/real ASD remains further out. See
+  `docs/CLIPPING_V2_DESIGN.md`.
 - The Vite frontend intentionally uses only the Supabase publishable key. If a feature needs writes, worker orchestration or server-side API endpoints must own those writes.
 - `work/`, `test_outputs/`, `web/dist/`, `web/node_modules/`, env files and generated media are ignored and should stay uncommitted.
 

@@ -21,8 +21,8 @@ def test_static_speaker_produces_single_clamped_keyframe() -> None:
     plan = plan_camera_for_clip(
         _clip(),
         _track(
-            FaceSample(t=1.0, x=590.0, y=80.0, w=100.0, h=100.0, is_speaking=True),
-            FaceSample(t=2.0, x=594.0, y=80.0, w=100.0, h=100.0, is_speaking=True),
+            FaceSample(t=1.0, x=590.0, y=80.0, w=100.0, h=100.0),
+            FaceSample(t=2.0, x=594.0, y=80.0, w=100.0, h=100.0),
         ),
         (Scene(index=0, start_s=0.0, end_s=20.0),),
         _media(),
@@ -39,8 +39,8 @@ def test_scene_cut_produces_discontinuous_jump_between_shots() -> None:
     plan = plan_camera_for_clip(
         _clip(),
         _track(
-            FaceSample(t=1.0, x=180.0, y=80.0, w=100.0, h=100.0, is_speaking=True),
-            FaceSample(t=11.0, x=900.0, y=80.0, w=100.0, h=100.0, is_speaking=True),
+            FaceSample(t=1.0, x=180.0, y=80.0, w=100.0, h=100.0),
+            FaceSample(t=11.0, x=900.0, y=80.0, w=100.0, h=100.0),
         ),
         (
             Scene(index=0, start_s=0.0, end_s=10.0),
@@ -59,9 +59,9 @@ def test_crossing_dead_zone_uses_bounded_velocity_pan() -> None:
     plan = plan_camera_for_clip(
         _clip(end_s=5.0),
         _track(
-            FaceSample(t=0.0, x=100.0, y=80.0, w=100.0, h=100.0, is_speaking=True),
-            FaceSample(t=1.0, x=700.0, y=80.0, w=100.0, h=100.0, is_speaking=True),
-            FaceSample(t=2.0, x=900.0, y=80.0, w=100.0, h=100.0, is_speaking=True),
+            FaceSample(t=0.0, x=100.0, y=80.0, w=100.0, h=100.0),
+            FaceSample(t=1.0, x=700.0, y=80.0, w=100.0, h=100.0),
+            FaceSample(t=2.0, x=900.0, y=80.0, w=100.0, h=100.0),
         ),
         (Scene(index=0, start_s=0.0, end_s=5.0),),
         _media(),

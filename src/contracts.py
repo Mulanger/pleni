@@ -225,6 +225,18 @@ class SelectedClip(ContractModel):
         return self
 
 
+class ObservationSource(str, Enum):
+    """Where a face sample came from.
+
+    Interpolation is camera support, never evidence: an interpolated sample may
+    steer the crop between two real observations, but it must not count toward
+    coverage, identity or any acceptance threshold. See ADR 012.
+    """
+
+    DETECTED = "detected"
+    INTERPOLATED = "interpolated"
+
+
 class FaceSample(ContractModel):
     """Face box sample at a master-relative timestamp."""
 
@@ -233,7 +245,43 @@ class FaceSample(ContractModel):
     y: NonNegativeFloat
     w: PositiveFloat
     h: PositiveFloat
-    is_speaking: bool
+    score: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Detector confidence, the model's own. Never derived from geometry.",
+    )
+    source: ObservationSource = ObservationSource.DETECTED
+
+
+class IdentityEvidence(ContractModel):
+    """Why C8 believes a track is the politician the byline names.
+
+    Aggregate by construction. A single portrait-to-frame match is not enough to
+    accept: the portrait is lit and frontal, the frame is compressed, angled and
+    small. See ADR 012.
+    """
+
+    intressent_id: str | None = None
+    portrait_sha256: str | None = None
+    embedding_count: int = Field(default=0, ge=0)
+    median_similarity: float = 0.0
+    p20_similarity: float = 0.0
+    competitor_margin: float = Field(
+        default=0.0,
+        description="Median similarity minus the best competing face's. Separates "
+        "better than absolute similarity on this footage.",
+    )
+
+
+class VerificationDecision(str, Enum):
+    """Whether a clip's framing may be published. Only `ACCEPTED` may."""
+
+    ACCEPTED = "accepted"
+    REJECTED_NO_EVIDENCE = "rejected_no_evidence"
+    REJECTED_NO_PORTRAIT = "rejected_no_portrait"
+    REJECTED_IDENTITY_MISMATCH = "rejected_identity_mismatch"
+    REJECTED_AMBIGUOUS = "rejected_ambiguous"
 
 
 class FaceTrack(ContractModel):
@@ -242,6 +290,14 @@ class FaceTrack(ContractModel):
     clip_id: str = Field(min_length=1)
     track_id: str = Field(min_length=1)
     samples: tuple[FaceSample, ...]
+    decision: VerificationDecision = VerificationDecision.ACCEPTED
+    identity: IdentityEvidence | None = None
+    unsupported_spans: tuple[TimeSpan, ...] = Field(
+        default=(),
+        description="Master-relative spans inside the clip with no verified target. "
+        "C9 must not hold a crop across these.",
+    )
+    reasons: tuple[str, ...] = ()
 
 
 class CameraMode(str, Enum):
