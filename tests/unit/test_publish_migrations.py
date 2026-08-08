@@ -91,3 +91,16 @@ def test_no_migration_grants_publish_rpc_to_public_roles() -> None:
         for role in ("anon", "authenticated"):
             grant = f"grant execute on function public.publish_clip_batch(jsonb) to {role}"
             assert grant not in sql
+
+
+def test_politician_profile_migration_retains_raw_data_and_defaults_portraits() -> None:
+    path = MIGRATIONS_DIR / "009_politician_profiles.up.sql"
+    sql = path.read_text(encoding="utf-8").lower()
+
+    assert "riksdagen_data jsonb" in sql
+    assert "profile_synced_at timestamptz" in sql
+    assert "before insert or update of intressent_id, avatar_url" in sql
+    assert "data.riksdagen.se/filarkiv/bilder/ledamot/%s_192.jpg" in sql
+    assert (
+        "revoke all on function public.set_politician_avatar_url() from public, anon, authenticated"
+    ) in sql

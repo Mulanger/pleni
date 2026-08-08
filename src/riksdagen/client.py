@@ -189,15 +189,29 @@ class RiksdagenClient:
 
         query = urlencode({"fnamn": first_name, "rdlstatus": "samtliga", "utformat": "json"})
         payload = self.get_json(f"{self._base_url}/personlista/?{query}")
-        listing = payload.get("personlista")
-        if not isinstance(listing, Mapping):
-            return []
-        people = listing.get("person")
-        if isinstance(people, Mapping):
-            return [people]
-        if isinstance(people, list):
-            return [person for person in people if isinstance(person, Mapping)]
-        return []
+        return _people_from_personlista(payload)
+
+    def fetch_person_by_id(self, intressent_id: str) -> Mapping[str, object] | None:
+        """Fetch one complete open-data person record by stable Riksdagen id.
+
+        The record includes portrait URLs, current role and constituency, all
+        parliamentary assignments and the public biography fields. The API can
+        technically return a list, so the id is checked rather than trusting
+        the first row.
+        """
+
+        query = urlencode(
+            {
+                "iid": intressent_id,
+                "rdlstatus": "samtliga",
+                "utformat": "json",
+            }
+        )
+        payload = self.get_json(f"{self._base_url}/personlista/?{query}")
+        for person in _people_from_personlista(payload):
+            if str(person.get("intressent_id") or "").strip() == intressent_id:
+                return person
+        return None
 
     def fetch_anforandelista(
         self, *, rm: str, debate_date: date, page_size: int = 10_000
@@ -277,6 +291,20 @@ def _document_from_status(payload: Mapping[str, object]) -> Mapping[str, object]
     if not isinstance(document, dict):
         raise ExternalServiceError("Document status response is missing dokumentstatus.dokument")
     return document
+
+
+def _people_from_personlista(payload: Mapping[str, object]) -> list[Mapping[str, object]]:
+    """Normalise Riksdagen's one-row-object / many-row-list response shape."""
+
+    listing = payload.get("personlista")
+    if not isinstance(listing, Mapping):
+        return []
+    people = listing.get("person")
+    if isinstance(people, Mapping):
+        return [people]
+    if isinstance(people, list):
+        return [person for person in people if isinstance(person, Mapping)]
+    return []
 
 
 def _required_document_str(document: Mapping[str, object], key: str) -> str:

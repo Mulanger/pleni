@@ -21,6 +21,8 @@ interface RawPolitician {
   name: string | null;
   party: string | null;
   role: string | null;
+  constituency: string | null;
+  avatar_url: string | null;
 }
 
 interface RawSpeech {
@@ -253,7 +255,7 @@ function clipSelect(): string {
     "thumb_url",
     "published_at",
     "speeches!inner(speaker_name,party,anforandetyp,politician_id," +
-      "politicians(id,name,party,role)," +
+      "politicians(id,name,party,role,constituency,avatar_url)," +
       "sources(title,debate_date,source_url))"
   ].join(",");
 }
@@ -317,7 +319,7 @@ export async function loadPublishedClips(limit = 60): Promise<ClipFeed> {
  * every one was verified against the live project before being used.   *
  * ------------------------------------------------------------------ */
 
-const POLITICIAN_SELECT = "id,name,party,role";
+const POLITICIAN_SELECT = "id,name,party,role,constituency,avatar_url";
 
 function mapPolitician(row: RawPolitician, clipCount: number | null = null): Politician {
   return {
@@ -325,6 +327,8 @@ function mapPolitician(row: RawPolitician, clipCount: number | null = null): Pol
     name: row.name?.trim() || "Okänd talare",
     party: normalizeParty(row.party),
     role: row.role?.trim() || "",
+    constituency: row.constituency?.trim() || "",
+    avatarUrl: row.avatar_url?.trim() || null,
     clipCount
   };
 }
@@ -507,6 +511,7 @@ function mapClip(row: RawClip, index: number): ClipItem {
     politicianId: speech?.politician_id ?? null,
     politicianName: politician?.name?.trim() || null,
     politicianRole: politician?.role?.trim() || null,
+    politicianAvatarUrl: politician?.avatar_url?.trim() || null,
     speakerName,
     party,
     anforandetyp: speech?.anforandetyp ?? "",

@@ -1094,7 +1094,12 @@ function ClipMeta({
     <div className="clip-meta" onClick={(event) => event.stopPropagation()}>
       <div className="person-row">
         <button className="person-pill" onClick={onOpenPerson} disabled={!identified}>
-          <Avatar name={displayName} party={clip.party} size="sm" />
+          <Avatar
+            name={displayName}
+            party={clip.party}
+            size="sm"
+            imageUrl={person?.avatarUrl ?? clip.politicianAvatarUrl}
+          />
           <span className="person-copy">
             <strong>{displayName}</strong>
             <span>
@@ -1268,7 +1273,14 @@ function FollowingScreen({
             {people.map((politician) => (
               <ListRow
                 key={politician.id}
-                avatar={<Avatar name={cleanName(politician.name) || politician.name} party={politician.party} size="md" />}
+                avatar={
+                  <Avatar
+                    name={cleanName(politician.name) || politician.name}
+                    party={politician.party}
+                    size="md"
+                    imageUrl={politician.avatarUrl}
+                  />
+                }
                 title={cleanName(politician.name) || politician.name}
                 subtitle={[PARTIES[politician.party].name, politician.role]
                   .filter(Boolean)
@@ -1384,7 +1396,14 @@ function SearchScreen({
               {results.map((politician) => (
                 <ListRow
                   key={politician.id}
-                  avatar={<Avatar name={cleanName(politician.name) || politician.name} party={politician.party} size="md" />}
+                  avatar={
+                    <Avatar
+                      name={cleanName(politician.name) || politician.name}
+                      party={politician.party}
+                      size="md"
+                      imageUrl={politician.avatarUrl}
+                    />
+                  }
                   title={cleanName(politician.name) || politician.name}
                   subtitle={[PARTIES[politician.party].name, politician.role]
                     .filter(Boolean)
@@ -1720,13 +1739,21 @@ function PersonScreen({
         {person && (
           <>
             <section className="person-hero">
-              <Avatar name={displayName} party={person.party} size="xl" />
+              <Avatar
+                name={displayName}
+                party={person.party}
+                size="xl"
+                imageUrl={person.avatarUrl}
+              />
+              {person.avatarUrl && <span className="portrait-credit">Foto: Sveriges riksdag</span>}
               <h1>{displayName}</h1>
               <span className="party-pill">
                 <i style={{ background: party.color }} />
                 {party.name}
               </span>
-              {person.role && <p>{person.role}</p>}
+              {(person.role || person.constituency) && (
+                <p>{[person.role, person.constituency].filter(Boolean).join(" · ")}</p>
+              )}
               <button
                 className={following ? "follow-wide following" : "follow-wide"}
                 onClick={onToggleFollow}
@@ -1913,17 +1940,49 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Avatar({ name, party, size }: { name: string; party: PartyCode; size: "sm" | "md" | "lg" | "xl" }) {
+function Avatar({
+  name,
+  party,
+  size,
+  imageUrl
+}: {
+  name: string;
+  party: PartyCode;
+  size: "sm" | "md" | "lg" | "xl";
+  imageUrl?: string | null;
+}) {
   const partyProfile = PARTIES[party] ?? PARTIES.NONE;
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageLoaded(false);
+    setImageFailed(false);
+  }, [imageUrl]);
+
   return (
     <span
       className={`avatar ${size}`}
+      aria-hidden="true"
+      title={imageUrl ? "Foto: Sveriges riksdag" : undefined}
       style={{
         background: partyTint(partyProfile.color),
         color: partyInk(partyProfile.color)
       }}
     >
-      {initials(name)}
+      <span className="avatar-fallback">{initials(name)}</span>
+      {imageUrl && !imageFailed && (
+        <img
+          className={imageLoaded ? "loaded" : ""}
+          src={imageUrl}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          onLoad={() => setImageLoaded(true)}
+          onError={() => setImageFailed(true)}
+        />
+      )}
     </span>
   );
 }
@@ -1959,6 +2018,8 @@ function personForClip(clip: ClipItem): Politician | null {
     name: cleanName(clip.politicianName ?? clip.speakerName) || clip.speakerName,
     party: clip.party,
     role: clip.politicianRole ?? clip.anforandetyp ?? "",
+    constituency: "",
+    avatarUrl: clip.politicianAvatarUrl,
     clipCount: null
   };
 }

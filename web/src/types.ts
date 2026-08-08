@@ -39,6 +39,9 @@ export interface Politician {
   name: string;
   party: PartyCode;
   role: string;
+  constituency: string;
+  /** Official Riksdagen portrait, or null when no image is published. */
+  avatarUrl: string | null;
   clipCount: number | null;
 }
 
@@ -106,6 +109,8 @@ export interface ClipItem {
   politicianName: string | null;
   /** `ledamot`, `minister`, … from the politician row. Null when unlinked. */
   politicianRole: string | null;
+  /** Official Riksdagen portrait carried with the embedded politician row. */
+  politicianAvatarUrl: string | null;
   /** The name as printed on *this* speech. Display only — never an identity. */
   speakerName: string;
   party: PartyCode;

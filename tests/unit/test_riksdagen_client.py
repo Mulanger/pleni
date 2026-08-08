@@ -187,6 +187,52 @@ def test_fetch_official_anforanden_filters_and_fetches_xml_details() -> None:
     assert calls[-1].headers["Accept"] == "text/xml"
 
 
+def test_fetch_person_by_id_keeps_the_complete_person_record() -> None:
+    calls: list[HttpRequest] = []
+
+    def transport(request: HttpRequest) -> HttpResponse:
+        calls.append(request)
+        return _json_response(
+            {
+                "personlista": {
+                    "person": {
+                        "intressent_id": "person-1",
+                        "tilltalsnamn": "Anna",
+                        "efternamn": "Test",
+                        "personuppdrag": {"uppdrag": [{"roll_kod": "Ledamot"}]},
+                    }
+                }
+            }
+        )
+
+    client = client_with(transport, [])
+
+    person = client.fetch_person_by_id("person-1")
+
+    assert person is not None
+    assert person["personuppdrag"] == {"uppdrag": [{"roll_kod": "Ledamot"}]}
+    assert "iid=person-1" in calls[0].url
+    assert "rdlstatus=samtliga" in calls[0].url
+
+
+def test_fetch_person_by_id_does_not_accept_a_different_person() -> None:
+    def transport(request: HttpRequest) -> HttpResponse:
+        return _json_response(
+            {
+                "personlista": {
+                    "person": [
+                        {"intressent_id": "other"},
+                        {"intressent_id": "also-other"},
+                    ]
+                }
+            }
+        )
+
+    client = client_with(transport, [])
+
+    assert client.fetch_person_by_id("person-1") is None
+
+
 def _json_response(payload: object) -> HttpResponse:
     return HttpResponse(
         status_code=200,

@@ -615,6 +615,54 @@ the saved archive and survives a reload; `tsc --noEmit` and `vite build` green.
 
 ---
 
+## UI3 — Riksdagen politician portraits and profile enrichment
+
+**Depends on:** UI1 and V3 (`intressent_id` recovery). **Size:** medium.
+
+**Objective.** Replace initials with Riksdagen's official portrait wherever a
+politician appears, while retaining the complete open-data person record for
+future profile features. The app must remain usable when a portrait is absent or
+fails to load.
+
+**Scope — may create or modify:**
+
+```
+migrations/009_politician_profiles.{up,down}.sql
+src/riksdagen/{client,profiles}.py
+scripts/sync_politician_profiles.py
+tests/unit/test_riksdagen_{client,profiles}.py
+web/src/types.ts
+web/src/supabase.ts
+web/src/App.tsx
+web/src/styles.css
+docs/BUILD_PLAN.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** `src/contracts.py`, video acquisition, candidate
+selection, vision, camera planning, rendering, Bunny clip storage, private user
+data, or feed ordering/media windowing.
+
+**Build.** Add the full `personlista` response to `politicians.riksdagen_data`,
+derive the current name, party, role, constituency and 192 px official portrait
+URL, and retain a sync timestamp. A database trigger supplies the deterministic
+portrait URL immediately for newly published politicians even before the richer
+profile sync runs. The sync is an explicit operator command and does not become
+another numbered video stage.
+
+Carry `avatar_url` and `constituency` through the public politician DTO and the
+embedded clip query. Render the image in the feed identity row, search/follow
+lists and politician page. Initials remain the error/absence fallback. Credit
+the portraits as `Foto: Sveriges riksdag`, as required by Riksdagen's open-data
+terms.
+
+**Acceptance:** every linked politician with a published portrait displays it
+without layout shift; a broken/missing image falls back to initials; the profile
+page shows the same portrait and source credit; the full person JSON is retained
+in Supabase; Python acceptance, TypeScript typecheck and Vite build are green.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.
@@ -627,8 +675,8 @@ personal is persisted before consent exists.
 **Scope — may create or modify:**
 
 ```
-migrations/009_private_schema.{up,down}.sql
-migrations/010_consent_ledger.{up,down}.sql
+migrations/010_private_schema.{up,down}.sql
+migrations/011_consent_ledger.{up,down}.sql
 supabase/functions/_shared/{jwt.ts,consent.ts,cors.ts,db.ts}
 supabase/functions/consent/index.ts
 supabase/functions/clerk-webhook/index.ts
@@ -647,11 +695,11 @@ tasks.py                  (Deno targets, O-4)
 `src/{asr,camera,candidates,features,media,render,scoring,segment,vision}/*`,
 `migrations/001_publish_schema.*`, `tests/fixtures/golden/*`.
 
-> **Migration numbers corrected 2026-08-04.** This entry originally scoped
-> `004_private_schema` and `005_consent_ledger`. Both numbers were already taken
-> and applied (`004_revoke_default_table_grants`, `005_fix_auth_probe_role_columns`)
-> and the tree is at `008`, so F1 starts at `009`. Reusing an applied number
-> would have failed the `schema_migrations` checksum check on the first run.
+> **Migration numbers corrected 2026-08-08.** This entry originally scoped
+> `004_private_schema` and `005_consent_ledger`, then moved to `009`/`010` after
+> migrations 004–008 landed. UI3 now owns `009_politician_profiles`, so F1 starts
+> at `010`. Reusing an applied number would fail the `schema_migrations` checksum
+> check on the first run.
 
 **Build.**
 

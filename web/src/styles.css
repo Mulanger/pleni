@@ -696,13 +696,36 @@ a {
 
 .avatar,
 .party-avatar {
+  position: relative;
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.05);
   border-radius: 999px;
   font-weight: 750;
+}
+
+.avatar-fallback {
+  position: relative;
+  z-index: 0;
+}
+
+.avatar img {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  object-fit: cover;
+  object-position: center 24%;
+  transition: opacity 180ms ease-out;
+}
+
+.avatar img.loaded {
+  opacity: 1;
 }
 
 .avatar.sm {
@@ -725,10 +748,11 @@ a {
 }
 
 .avatar.xl {
-  width: 96px;
-  height: 96px;
+  width: 112px;
+  height: 112px;
   font-size: 28px;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+  border: 2px solid #fff;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.1);
 }
 
 .search-header {
@@ -1011,6 +1035,13 @@ a {
   align-items: center;
   gap: 11px;
   margin-bottom: 18px;
+}
+
+.portrait-credit {
+  margin-top: -7px;
+  color: var(--muted);
+  font-size: 10.5px;
+  letter-spacing: 0.01em;
 }
 
 .person-hero h1 {

@@ -23,6 +23,7 @@ This file is the source of truth for chunk status and handoff notes.
 | C12 - Orchestration | TODO | Depends on C11 |
 | C13 - Observability & runbook | TODO | Depends on C12 |
 | UI2 - Feed swipe & autoplay | DONE | Completed 2026-08-06 |
+| UI3 - Riksdagen portraits & politician profiles | DONE | Completed 2026-08-08 |
 | V1 - YuNet replaces the Haar cascade | DONE | Completed 2026-08-07 |
 | V2 - Speaker identity verification | DONE | Completed 2026-08-08 |
 | V3 - Portrait recovery + framing-aware selection | DONE | Completed 2026-08-08 |
@@ -2704,3 +2705,76 @@ failures at all — the pipeline was looking for the wrong person in them.
   lists could diverge at equal length — but per-speech verified visibility near
   0% while other speeches in the same debate sit at 90% is the reliable signal,
   and it is now free to compute from `06_vision`.
+
+## UI3 — Riksdagen portraits and complete politician profiles — DONE 2026-08-08
+
+**Built:** `migrations/009_politician_profiles.{up,down}.sql`, complete-person
+fetching in `src/riksdagen/client.py`, `src/riksdagen/profiles.py`,
+`scripts/sync_politician_profiles.py`, portrait fields through
+`web/src/{types.ts,supabase.ts,App.tsx}`, portrait styling and focused tests.
+**Tests:** `python tasks.py test lint typecheck` green — **332 passed**, 68
+deselected, 1 pre-existing `audioop` warning; ruff clean; mypy strict clean on
+80 files. `tsc --noEmit` green; `vite build` green (427.34 kB, 123.36 kB
+gzipped). Live API dry run 3/3; full sync 183/183, zero missing.
+**Contracts touched:** none.
+
+### What changed
+
+- Every public politician row now carries the official 192 px Riksdagen
+  portrait URL, the complete nested `personlista` JSON and a sync timestamp.
+  The projected columns use the same record for clean name, party, current role
+  and constituency; the raw object retains assignments and biography fields for
+  later profile features.
+- Portraits replace initials in the feed identity row, search and followed lists,
+  and the politician page. Initials remain underneath as the load/error fallback,
+  image elements are lazy-loaded to protect the feed request budget, and fixed
+  dimensions prevent layout shift.
+- The politician page shows the required `Foto: Sveriges riksdag` credit and the
+  Riksdagen constituency when one is published. Smaller uses carry the same
+  credit as their image title without adding a second metadata line to the feed.
+- Migration 009 installs a trigger that fills a deterministic portrait URL for
+  every future politician insert. Full profile enrichment stays an explicit
+  operator command instead of becoming a video stage.
+
+### Live result
+
+Migration `009_politician_profiles` is applied to project
+`nlooigmwuqqhhnontlgp`. The sync fetched and updated all **183** existing
+politicians: 183 portrait URLs, 183 non-empty complete records and 183 sync
+timestamps. Public-key PostgREST reads include the fields, and three sampled
+portrait URLs returned HTTP 200 with real JPEG byte lengths.
+
+### Decisions made
+
+- Store the full source object as `jsonb` rather than anticipating which fields
+  later profile features will need. UI code still selects only the six small
+  columns it renders, so the feed payload does not inherit that JSON weight.
+- Use Riksdagen's 192 px URL for app avatars. The existing SFace identity path
+  continues to fetch `_max.jpg`; UI presentation and model enrolment have
+  different bandwidth needs.
+- Keep enrichment independent of C1–C11. This avoids coupling a Riksdagen
+  biography/API outage to video publication and avoids colliding with the
+  concurrent video-pipeline work.
+
+### Observations (not fixed, out of scope)
+
+- The frontend changes are built locally but are not deployed until committed
+  and pushed; the live site therefore continues to show initials for now.
+- Run `python scripts/sync_politician_profiles.py` after the planned full
+  backfill. The trigger supplies portraits immediately, but the complete person
+  data and constituency are refreshed by this command.
+- Browser-control tooling was unavailable in this session, so visual QA is still
+  owed on a real 375×812 viewport after deployment. Data, image responses,
+  TypeScript and the production bundle were verified.
+
+### Blocked / needs a decision
+
+- `P0-9` — five credentials in chat transcripts remain open for rotation.
+
+### Next agent should know
+
+- Riksdagen requires the credit `Foto: Sveriges riksdag` and limits press-image
+  use to contexts describing the Riksdag and its work. Pleni's debate/profile
+  use fits that context; do not reuse these portraits as advertising creative.
+- F1 migration numbers moved from `009`/`010` to `010`/`011` because UI3 now
+  owns applied migration 009.
