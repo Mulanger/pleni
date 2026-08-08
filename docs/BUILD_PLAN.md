@@ -714,6 +714,42 @@ build and the full Python acceptance command are green.
 
 ---
 
+## UI5 — Stop off-screen media
+
+**Depends on:** UI2. **Size:** small.
+
+**Objective.** A video may play only while its `FeedScreen` is mounted and the
+document is visible. Switching to Sök, Följer or Profil, leaving a scoped
+collection, or backgrounding the page must synchronously silence every media
+element. A late autoplay rejection must not launch the muted fallback after its
+video has been detached.
+
+**Scope — may create or modify:**
+
+```
+web/src/App.tsx
+AGENTS.md
+docs/BUILD_PLAN.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** feed ordering and source/poster window sizes,
+Supabase reads or writes, comments, onboarding, numbered pipeline stages,
+`src/contracts.py`, migrations and generated media.
+
+**Build.** Make programmatic playback the single owner of autoplay, invalidate
+pending playback requests on clip/screen/visibility changes, pause before React
+detaches media nodes and resume after a temporary page hide only when the same
+visible feed was actually playing.
+
+**Acceptance:** a mobile-policy simulation may reject the initial unmuted
+`play()` after navigation has already reached Sök; once it settles, every
+tracked media element is paused and disconnected. The same is true on Profil.
+TypeScript, the Vite production build and the full Python acceptance command are
+green.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.

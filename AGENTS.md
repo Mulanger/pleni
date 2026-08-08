@@ -145,6 +145,9 @@ Last updated: 2026-08-02.
     muted fallback in place that is rare, and it no longer means "audio was refused";
   - tapping the video surface otherwise toggles pause/play;
   - progress uses real `video.currentTime`/duration and supports scrubbing;
+  - playback is owned by `FeedScreen`, not the native `autoplay` attribute;
+    leaving the feed or hiding the document pauses every video before detach,
+    and stale `play()` promises cannot start a muted fallback off-screen;
   - bottom nav is flush to the mobile viewport bottom.
 - Only clips near the active one carry a `src` (±1) or a `poster` (±3); see
   `VIDEO_WINDOW` / `POSTER_WINDOW` in `web/src/App.tsx`. Mounting all 60 rows with

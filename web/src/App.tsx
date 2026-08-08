@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   ArrowUpRight,
@@ -554,8 +554,18 @@ function FeedScreen({
   const [playbackFlash, setPlaybackFlash] = useState<PlaybackFlash | null>(null);
   const [commentClip, setCommentClip] = useState<ClipItem | null>(null);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
+  const videoRefCallbacks = useRef<
+    Record<string, (node: HTMLVideoElement | null) => void>
+  >({});
   const flashTimer = useRef<number | null>(null);
   const resumeAfterComments = useRef(false);
+  const resumeAfterVisibility = useRef(false);
+  const playbackGeneration = useRef(0);
+  const playbackMounted = useRef(false);
+  const activeIdRef = useRef(activeId);
+  const commentClipRef = useRef(commentClip);
+  activeIdRef.current = activeId;
+  commentClipRef.current = commentClip;
   /**
    * FE-3. Loop boundaries per clip. A completion is the first `ended`; every
    * later one is a deliberate replay of a clip the viewer chose not to scroll
@@ -606,12 +616,56 @@ function FeedScreen({
    * starts meaning "playback itself was refused", which is rare and is the only
    * case where a centre play button is the right answer.
    */
+  const pauseAllPlayback = () => {
+    playbackGeneration.current += 1;
+    Object.values(videoRefs.current).forEach((video) => video?.pause());
+  };
+
+  const videoRefFor = (clipId: string) => {
+    videoRefCallbacks.current[clipId] ??= (node) => {
+      const previous = videoRefs.current[clipId];
+      if (previous && previous !== node) {
+        // Ref cleanup is synchronous with DOM removal. It is the last line of
+        // defence against detached media continuing to emit audio while
+        // another app screen is visible.
+        playbackGeneration.current += 1;
+        previous.pause();
+      }
+      videoRefs.current[clipId] = node;
+    };
+    return videoRefCallbacks.current[clipId];
+  };
+
   const playWithMutedFallback = (clipId: string, video: HTMLVideoElement) => {
+    if (
+      !playbackMounted.current ||
+      document.visibilityState !== "visible" ||
+      videoRefs.current[clipId] !== video ||
+      !video.isConnected ||
+      activeIdRef.current !== clipId
+    ) {
+      return;
+    }
+
+    const generation = ++playbackGeneration.current;
+    const isCurrentRequest = () =>
+      playbackMounted.current &&
+      playbackGeneration.current === generation &&
+      document.visibilityState === "visible" &&
+      videoRefs.current[clipId] === video &&
+      video.isConnected &&
+      activeIdRef.current === clipId;
     const succeeded = () => {
+      if (!isCurrentRequest()) {
+        return;
+      }
       setPaused((state) => ({ ...state, [clipId]: false }));
       setBlocked((state) => ({ ...state, [clipId]: false }));
     };
     const refused = () => {
+      if (!isCurrentRequest()) {
+        return;
+      }
       setPaused((state) => ({ ...state, [clipId]: true }));
       setBlocked((state) => ({ ...state, [clipId]: true }));
     };
@@ -620,6 +674,13 @@ function FeedScreen({
       .play()
       .then(succeeded)
       .catch(() => {
+        // `play()` settles asynchronously. The viewer may have switched to
+        // Search/Profile, hidden the page or moved to another clip while the
+        // browser was deciding whether unmuted autoplay is allowed. A stale
+        // rejection must never start its muted fallback on a detached video.
+        if (!isCurrentRequest()) {
+          return;
+        }
         if (video.muted) {
           // Already muted and still refused. That is a real block.
           refused();
@@ -631,6 +692,44 @@ function FeedScreen({
         void video.play().then(succeeded).catch(refused);
       });
   };
+
+  /**
+   * Media elements can keep playing after they have left the DOM, and a pending
+   * `play()` promise can settle after React has already changed screens. Stop
+   * them during layout cleanup (before detachment), invalidate every pending
+   * fallback and do the same whenever the document becomes hidden.
+   */
+  useLayoutEffect(() => {
+    playbackMounted.current = true;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") {
+        const activeVideo = videoRefs.current[activeIdRef.current];
+        resumeAfterVisibility.current =
+          commentClipRef.current === null && activeVideo != null && !activeVideo.paused;
+        pauseAllPlayback();
+        return;
+      }
+
+      if (!resumeAfterVisibility.current || commentClipRef.current !== null) {
+        return;
+      }
+      resumeAfterVisibility.current = false;
+      const clipId = activeIdRef.current;
+      const activeVideo = videoRefs.current[clipId];
+      if (activeVideo) {
+        playWithMutedFallback(clipId, activeVideo);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      playbackMounted.current = false;
+      resumeAfterVisibility.current = false;
+      pauseAllPlayback();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
 
   /**
    * FE-3. Explicit loop rather than the `loop` attribute. The clip restarts
@@ -649,7 +748,7 @@ function FeedScreen({
   const openComments = (clip: ClipItem) => {
     const video = videoRefs.current[clip.id];
     resumeAfterComments.current = clip.id === activeId && video != null && !video.paused;
-    video?.pause();
+    pauseAllPlayback();
     setCommentClip(clip);
   };
 
@@ -762,6 +861,10 @@ function FeedScreen({
   }, [clips]);
 
   useEffect(() => {
+    pauseAllPlayback();
+    if (document.visibilityState !== "visible" || commentClipRef.current !== null) {
+      return;
+    }
     Object.entries(videoRefs.current).forEach(([clipId, video]) => {
       if (!video) {
         return;
@@ -773,6 +876,7 @@ function FeedScreen({
         video.pause();
       }
     });
+    return pauseAllPlayback;
   }, [activeId, clips]);
 
   useEffect(() => {
@@ -894,9 +998,7 @@ function FeedScreen({
               onClick={() => toggleClipPlayback(clip.id)}
             >
               <video
-                ref={(node) => {
-                  videoRefs.current[clip.id] = node;
-                }}
+                ref={videoRefFor(clip.id)}
                 /* Only clips near the active one carry a source — see
                    VIDEO_WINDOW. The rest render their poster and cost nothing.
                    A clip that has left the window keeps whatever it already
@@ -904,7 +1006,6 @@ function FeedScreen({
                    so it is not competing for bandwidth. */
                 src={withinWindow ? clip.videoUrl : undefined}
                 poster={withinPosterWindow ? clip.thumbUrl : undefined}
-                autoPlay={clip.id === activeId}
                 playsInline
                 muted={muted}
                 /* FE-3 (GATE): no `loop` attribute. Native looping made

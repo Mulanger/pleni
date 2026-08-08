@@ -24,6 +24,7 @@ This file is the source of truth for chunk status and handoff notes.
 | C13 - Observability & runbook | TODO | Depends on C12 |
 | UI2 - Feed swipe & autoplay | DONE | Completed 2026-08-06 |
 | UI3 - Riksdagen portraits & politician profiles | DONE | Completed 2026-08-08 |
+| UI5 - Stop off-screen media | DONE | Completed 2026-08-08 |
 | V1 - YuNet replaces the Haar cascade | DONE | Completed 2026-08-07 |
 | V2 - Speaker identity verification | DONE | Completed 2026-08-08 |
 | V3 - Portrait recovery + framing-aware selection | DONE | Completed 2026-08-08 |
@@ -2855,3 +2856,51 @@ comments or reports remain in the database.
 - Comments cascade with `clips` and comment profiles. A later account-deletion
   workflow can delete one `comment_profiles` row and remove that account's
   comments without searching public text.
+
+## UI5 — Stop off-screen media — DONE 2026-08-08
+
+**Built:** lifecycle-owned playback in `web/src/App.tsx`, plus the UI5 scope in
+`docs/BUILD_PLAN.md` and the player invariant in `AGENTS.md`.
+**Tests:** `python tasks.py test lint typecheck` green — **346 passed**, 68
+deselected, one pre-existing `audioop` warning; ruff and mypy clean. Frontend
+`tsc --noEmit` and Vite production build green (438.26 kB JS, 126.89 kB gzip).
+A focused 393×852 headless-Chrome run forced the first unmuted `play()` to
+reject 600 ms late, navigated to Sök before it settled, and found 0 mounted
+videos plus 0 playing detached media; the same check passed on Profil.
+**Contracts touched:** none.
+
+### What was wrong
+
+- Native `autoPlay` and `playWithMutedFallback()` could both own startup.
+  React removed the feed on navigation, but a browser-policy rejection can
+  settle later; its catch handler could then call `video.play()` again on the
+  detached element. Detached media may continue producing audio.
+- Unmounting relied on DOM removal to stop playback. There was no explicit
+  pre-detach pause or invalidation token for an already pending `play()`.
+
+### What changed
+
+- Programmatic playback is now the only autoplay owner. Each request carries a
+  generation and may update state or attempt the muted fallback only while the
+  same clip, media node, mounted feed and visible document are still current.
+- Layout cleanup and stable ref cleanup pause every media element before it is
+  detached. Navigation, clip changes, comment opening and document hiding also
+  invalidate pending requests. Returning from a temporary page hide resumes
+  only if that same visible feed was playing beforehand.
+
+### Observations (not fixed, out of scope)
+
+- The concurrent C6 edits in `src/candidates/windows.py`, `src/config.py`,
+  `src/stages/candidates.py` and `tests/unit/test_candidates_windows.py` belong
+  to the other agent. They were not edited or staged by UI5; full acceptance
+  happened to include their current working-tree state and remained green.
+
+### Blocked / needs a decision
+
+- `P0-9` — five credentials in chat transcripts remain open for rotation.
+
+### Next agent should know
+
+- Do not restore the JSX `autoPlay` attribute. `FeedScreen` must remain the
+  single playback owner so screen and visibility cleanup can cancel every
+  pending fallback deterministically.
