@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from src.config import get_settings
@@ -13,11 +14,14 @@ from src.logging import configure_logging, stage_logger
 from src.paths import work_paths
 from src.riksdagen.client import RiksdagenClient
 from src.riksdagen.parser import (
+    AnforandeEntry,
     RiksdagenParseError,
+    VideoMetadata,
     metadata_with_official_anforanden,
     parse_video_response,
     source_artifact,
 )
+from src.riksdagen.persons import PersonDirectory
 
 
 def discover_dokid(dokid: str, *, work_dir: Path | str) -> Path:
@@ -44,6 +48,7 @@ def discover_dokid(dokid: str, *, work_dir: Path | str) -> Path:
             official_anforanden,
             source="open_data_anforandelista+xml",
         )
+    metadata = _with_recovered_intressent_ids(metadata, PersonDirectory(client))
 
     paths = work_paths(metadata.source.dokid, root=Path(work_dir))
     paths.ensure_directories()
@@ -53,6 +58,30 @@ def discover_dokid(dokid: str, *, work_dir: Path | str) -> Path:
         encoding="utf-8",
     )
     return artifact_path
+
+
+def _with_recovered_intressent_ids(
+    metadata: VideoMetadata, directory: PersonDirectory
+) -> VideoMetadata:
+    """Fill in ids `anforandelista` omits for non-sitting ministers.
+
+    Only unambiguous matches are taken; anything else keeps `None`, which leaves
+    the speech unlinked and its clips unverifiable rather than risking the wrong
+    politician's face against a statement. See `src.riksdagen.persons`.
+    """
+
+    if all(entry.intressent_id for entry in metadata.anforanden):
+        return metadata
+    recovered: list[AnforandeEntry] = []
+    for entry in metadata.anforanden:
+        if entry.intressent_id:
+            recovered.append(entry)
+            continue
+        match = directory.resolve(entry.speaker_name, entry.party)
+        recovered.append(
+            replace(entry, intressent_id=match.intressent_id) if match else entry
+        )
+    return replace(metadata, anforanden=tuple(recovered))
 
 
 def main() -> None:

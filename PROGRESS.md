@@ -25,6 +25,7 @@ This file is the source of truth for chunk status and handoff notes.
 | UI2 - Feed swipe & autoplay | DONE | Completed 2026-08-06 |
 | V1 - YuNet replaces the Haar cascade | DONE | Completed 2026-08-07 |
 | V2 - Speaker identity verification | DONE | Completed 2026-08-08 |
+| V3 - Portrait recovery + framing-aware selection | DONE | Completed 2026-08-08 |
 
 ## C0 - Foundations - DONE 2026-08-01
 
@@ -2512,3 +2513,112 @@ debate.
 - Tests must not hit the network: `track_dokid(..., portraits=...)` is the
   injection seam, and the e2e and C8 integration tests enrol from a crop of the
   committed fixture footage rather than an official portrait.
+
+## V3 — Both yield levers — DONE 2026-08-08
+
+**Built:** `src/riksdagen/persons.py` and `fetch_personlista` in
+`src/riksdagen/client.py`, id recovery in `src/stages/discover.py`;
+`src/vision/timeline.py`, `src/stages/vision.py` (C6v), `06_vision` paths,
+framing features in `src/scoring/archetypes.py`, live framing gates in
+`src/scoring/gate.py`, `vision` stage in `src/orchestrator/jobs.py`, C6v in
+`src/stages/run_fixture.py`, `docs/adr/013-framing-informs-selection.md`,
+`tests/unit/test_riksdagen_persons.py`, `tests/unit/test_vision_timeline.py`.
+**Tests:** `python tasks.py test lint typecheck` green — **319 passed** (was
+298), 68 deselected; ruff clean; mypy strict clean on 78 files. Slow e2e green
+after a reviewed golden regeneration.
+**Contracts touched:** none — framing values ride in the open
+`Candidate.features` map; the timeline is a new plain-JSON artifact. See ADR 013.
+
+### Lever 1 — portrait gap, 8.5% of clips
+
+`anforandelista` omits `intressent_id` for speakers who are not sitting members,
+so ministers drawn from outside the chamber could not be identity-verified at
+all. `personlista?...&rdlstatus=samtliga` has the ids; the default query does not.
+
+**Verified on the real failing case.** `HDC120260326fs` had 6 anföranden with no
+id, all Jessica Rosencrantz. After the fix: **0 missing**, all resolved to
+`0992420223820` — the id the March backfill recorded by hand.
+
+The matching rule is deliberately strict, because attaching a politician's face
+and byline to a statement is a misattribution risk rather than a data-cleaning
+task. The two sources do not even agree on names: `anforandelista` says *Daniel
+Vencu **Velasquez** Castro* where the register says *Daniel Vencu **Öhrlund**
+Castro*, so full-surname matching fails outright. A match needs first name,
+party and the **last** surname token to agree, and to be unique; anything else
+keeps `None` and loses the clip. Validated by having it independently re-derive
+ids the official API already supplies (Ola Möller, Anna Tenje).
+
+### Lever 2 — framing informs selection (ADR 013)
+
+C7 chose windows blind and C8 found out afterwards whether the picture held. A
+new per-speech pass (C6v) writes `06_vision/<speech_id>.json`, and C7 admits a
+candidate only when the speaker is verified for nearly all of it with no single
+long absence.
+
+Measured on `HD10342`, the hardest format available:
+
+| | before | after |
+|---|---:|---:|
+| windows C7 proposed | 22 | 15 |
+| clips C8 accepted | 8 | **14** |
+| survival rate of C7's picks | 36.4% | **93.3%** |
+
+**Usable clips up 75% with the identity gate untouched.** The fixture shows it in
+miniature: `c02` moved from `rejected_no_evidence` to `accepted` with 189
+detected samples because C7 shifted the window past an 8 s region where nobody
+was detectable.
+
+`face_height_frac` now carries a measured value. It had been hardcoded to `1.0`
+against a gate constant of `0.0` since C7 shipped — the framing half of the
+publish gate had never been able to fire.
+
+**Decisions made:**
+- C6v and C8 share one per-shot verification rule, so selection is judged by the
+  rule it will later be judged by and the two cannot drift.
+- C8 still re-verifies independently and remains the only authority on what may
+  be published. C6v does not weaken the gate; it stops C7 proposing doomed
+  windows.
+- The pass is additive: a work dir without `06_vision` selects exactly as before,
+  which keeps older work dirs and any non-C6v caller working.
+- The gate checks the **longest** unverified gap, not just the total, because
+  that is what C8 rejects on.
+
+### Found while validating: C3 misattributes speakers when the lists diverge
+
+`src/stages/segment.py:74-78` pairs `speaker_entries` (timing) to `anforanden`
+(identity) **positionally**, and the official name *overrides* the correct one
+from the video metadata. `HD10342` has 8 speaker entries and 9 anföranden — the
+extra one is a `TREDJE VICE TALMANNEN` announcement with no video segment — so
+from 1236 s onward **every speech carries the wrong speaker, party and official
+text**, and the last anförande is dropped entirely.
+
+Identity verification is what exposed it: a speaker who verifies at 86–96%
+elsewhere in the same debate scored a median similarity of **0.000** across a
+whole speech, which is SFace correctly reporting that the person in frame is not
+the person named.
+
+Blast radius across the live catalogue: **1 of 87 debates, 22 clips (1%)** — and
+it is `HD10342`, the debate the owner independently reported as problematic.
+
+**Not fixed: C3 is outside this chunk's file scope (rule 2).** It needs a real
+pairing key rather than an index — `anforandetyp` plus speaker name against the
+speaker entries, or dropping official entries with no matching video segment
+before zipping.
+
+**Blocked / needs a decision:**
+- **The C3 misattribution above.** Wrong politician on 22 published clips.
+  Severity argues for fixing it next regardless of chunk boundaries.
+- **The 1,762 live clips are all old-detector output.** Nothing re-processed or
+  re-published.
+- `P0-9` — five credentials in chat transcripts. Still open.
+
+**Next agent should know:**
+- Corpus yield of 40.8% was measured **before** lever 2 and is now stale as a
+  measure of the shipped pipeline; it was the number for blind window selection.
+  Re-measuring it across the 14-debate sample is the obvious next task, and needs
+  a C6v pass per debate (~120 s for 28 minutes of debate at three threads).
+- C6v costs real time and sits in the `gpu` pool. C8 still re-detects the chosen
+  window rather than slicing C6v's output — the obvious next optimisation, which
+  also happens to preserve an independent second check.
+- `python -m src.stages.vision --dokid <id> --work-dir <root>` runs it alone.
+  `vision_dokid(..., portraits=...)` is the offline injection seam.

@@ -178,6 +178,27 @@ class RiksdagenClient:
         query = urlencode(params)
         return self.get_json(f"{self._base_url}/dokumentlista/?{query}")
 
+    def fetch_personlista(self, first_name: str) -> list[Mapping[str, object]]:
+        """Fetch register entries sharing a given name.
+
+        `rdlstatus=samtliga` is load-bearing: the default query returns sitting
+        members only, which is precisely the set that already has an
+        `intressent_id` in `anforandelista`. Without it a minister drawn from
+        outside the chamber is invisible here too.
+        """
+
+        query = urlencode({"fnamn": first_name, "rdlstatus": "samtliga", "utformat": "json"})
+        payload = self.get_json(f"{self._base_url}/personlista/?{query}")
+        listing = payload.get("personlista")
+        if not isinstance(listing, Mapping):
+            return []
+        people = listing.get("person")
+        if isinstance(people, Mapping):
+            return [people]
+        if isinstance(people, list):
+            return [person for person in people if isinstance(person, Mapping)]
+        return []
+
     def fetch_anforandelista(
         self, *, rm: str, debate_date: date, page_size: int = 10_000
     ) -> Mapping[str, object]:

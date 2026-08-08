@@ -71,6 +71,20 @@ class WorkPaths:
         return self.candidates_dir / f"{speech_id}.json"
 
     @property
+    def vision_dir(self) -> Path:
+        """Per-speech speaker-visibility timelines, consumed by C7.
+
+        Numbered alongside `06_candidates` because both are inputs to selection:
+        the whole point is that framing quality reaches C7 rather than being
+        discovered afterwards by C8. See ADR 013.
+        """
+
+        return self.debate_dir / "06_vision"
+
+    def vision_json(self, speech_id: str) -> Path:
+        return self.vision_dir / f"{speech_id}.json"
+
+    @property
     def selected_dir(self) -> Path:
         return self.debate_dir / "07_selected"
 
@@ -126,6 +140,7 @@ class WorkPaths:
             self.transcript_dir,
             self.audio_features_dir,
             self.candidates_dir,
+            self.vision_dir,
             self.selected_dir,
             self.track_dir,
             self.camera_dir,

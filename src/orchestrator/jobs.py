@@ -155,6 +155,14 @@ STAGE_GRAPH: tuple[StageJob, ...] = (
         description="C6 — candidate windows and hard filters",
     ),
     StageJob(
+        kind="vision",
+        module="src.stages.vision",
+        function="vision_dokid",
+        pool="gpu",
+        lease_s=5400,
+        description="C6v — speaker visibility timeline per speech",
+    ),
+    StageJob(
         kind="select",
         module="src.stages.select",
         function="select_dokid",

@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from importlib import import_module
 from itertools import pairwise
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from src.config import Settings, get_settings
 from src.contracts import FaceTrack, MediaInfo, Scene, SelectedClip, Speech
@@ -181,8 +181,29 @@ def _portrait_source(settings: Settings, work_dir: Path) -> PortraitSource:
     return RiksdagenPortraitSource(client, work_dir / settings.portrait_cache_dirname)
 
 
+class ClipWindow(Protocol):
+    """The minimum a frame reader needs: a named master-relative interval.
+
+    C6v hands whole speeches to the same reader C8 hands clips to, so that both
+    stages see identical frames through an identical detector rather than two
+    copies of the loop drifting apart.
+    """
+
+    @property
+    def clip_id(self) -> str:
+        """Name used in error messages and artifact paths."""
+
+    @property
+    def start_s(self) -> float:
+        """Master-relative start."""
+
+    @property
+    def end_s(self) -> float:
+        """Master-relative end."""
+
+
 def _frame_detections_for_clip(
-    clip: SelectedClip,
+    clip: ClipWindow,
     *,
     frames_dir: Path,
     media_info: MediaInfo,
@@ -305,7 +326,7 @@ def _shot_frame_counts(frames: Sequence[FrameDetections], cuts: Sequence[float])
     return counts
 
 
-def _frame_paths_for_clip(clip: SelectedClip, frames_dir: Path) -> tuple[Path, ...]:
+def _frame_paths_for_clip(clip: ClipWindow, frames_dir: Path) -> tuple[Path, ...]:
     if not frames_dir.exists():
         raise ArtifactError(f"C2 analysis frames directory is missing: {frames_dir}")
     frame_paths = tuple(

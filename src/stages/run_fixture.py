@@ -30,6 +30,7 @@ from src.stages.segment import segment_dokid
 from src.stages.select import select_dokid
 from src.stages.track import track_dokid
 from src.stages.transcribe import transcribe_dokid
+from src.stages.vision import vision_dokid
 
 FIXTURE_DOKID = "HD01SfU35"
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -81,6 +82,7 @@ def run_fixture(
     transcribe_dokid(FIXTURE_DOKID, work_dir=root)
     extract_audio_features_dokid(FIXTURE_DOKID, work_dir=root)
     generate_candidates_dokid(FIXTURE_DOKID, work_dir=root)
+    vision_dokid(FIXTURE_DOKID, work_dir=root, portraits=portraits)  # type: ignore[arg-type]
     select_dokid(FIXTURE_DOKID, work_dir=root)
     track_dokid(FIXTURE_DOKID, work_dir=root, portraits=portraits)  # type: ignore[arg-type]
     plan_camera_dokid(FIXTURE_DOKID, work_dir=root)

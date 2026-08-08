@@ -23,12 +23,26 @@
     "unsupported_spans": 0
   },
   "HD01SfU35_90051909-8a5f-f111-8b6f-6805cafea079_c02.json": {
-    "decision": "rejected_no_evidence",
-    "detected_count": 0,
-    "first": null,
-    "last": null,
-    "sample_count": 0,
-    "track_id": "unverified",
-    "unsupported_spans": 1
+    "decision": "accepted",
+    "detected_count": 189,
+    "first": {
+      "h": 102.848,
+      "source": "detected",
+      "t": 48.0,
+      "w": 78.038,
+      "x": 371.078,
+      "y": 87.406
+    },
+    "last": {
+      "h": 105.326,
+      "source": "detected",
+      "t": 85.6,
+      "w": 76.283,
+      "x": 391.123,
+      "y": 76.565
+    },
+    "sample_count": 189,
+    "track_id": "shot-001-track-001",
+    "unsupported_spans": 0
   }
 }

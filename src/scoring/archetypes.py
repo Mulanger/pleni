@@ -8,6 +8,7 @@ from collections.abc import Mapping, Sequence
 from src.contracts import AudioFeatures, Candidate, Speech, TimeSpan, Transcript
 from src.scoring.gate import apply_publish_gate
 from src.scoring.text_features import compute_text_features
+from src.vision.timeline import SpeechVisibility
 
 ARCHETYPES = ("CONFRONT", "EXPLAIN", "QUOTABLE")
 
@@ -22,11 +23,14 @@ def score_candidates_for_speech(
     confront_weights: Mapping[str, float],
     explain_weights: Mapping[str, float],
     quotable_weights: Mapping[str, float],
+    visibility: SpeechVisibility | None = None,
 ) -> list[Candidate]:
     """Return candidates with full C7 features, sub-scores, gates, and archetype scores."""
 
     raw_feature_maps = [
-        _merged_features(candidate, speech, transcript, audio_features, all_speeches)
+        _merged_features(
+            candidate, speech, transcript, audio_features, all_speeches, visibility
+        )
         for candidate in candidates
     ]
     z_feature_maps = zscore_feature_maps(raw_feature_maps)
@@ -117,11 +121,36 @@ def _merged_features(
     transcript: Transcript,
     audio_features: AudioFeatures,
     all_speeches: Sequence[Speech],
+    visibility: SpeechVisibility | None = None,
 ) -> dict[str, float]:
     features = dict(candidate.features)
     features.update(_delivery_features(candidate, speech, audio_features))
     features.update(compute_text_features(candidate, speech, transcript, all_speeches))
+    features.update(_framing_features(candidate, visibility))
     return {key: _finite(value) for key, value in features.items()}
+
+
+def _framing_features(
+    candidate: Candidate, visibility: SpeechVisibility | None
+) -> dict[str, float]:
+    """Real framing quality for a candidate window, when C6v has measured it.
+
+    `face_height_frac` has been a hardcoded `1.0` in `compute_text_features`
+    since C7 shipped, against a gate constant of `0.0` -- a check that could
+    never fire. These are the measured values it was always meant to carry, and
+    they are what lets selection prefer a window the speaker is visible in
+    instead of discovering afterwards that they were not.
+    """
+
+    if visibility is None:
+        return {}
+    start_s = float(candidate.start_s)
+    end_s = float(candidate.end_s)
+    return {
+        "target_visible_frac": visibility.verified_fraction(start_s, end_s),
+        "longest_unverified_gap_s": visibility.longest_unverified_gap_s(start_s, end_s),
+        "face_height_frac": visibility.median_face_width_frac(start_s, end_s),
+    }
 
 
 def _delivery_features(

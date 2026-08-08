@@ -24,6 +24,21 @@ from src.scoring.titles import (
     speaker_surname,
 )
 from src.stages._io import read_json_object, read_model, read_model_list, write_json
+from src.vision.timeline import SpeechVisibility, visibility_from_payload
+
+
+def _read_visibility(path: Path) -> SpeechVisibility | None:
+    """C6v timeline for a speech, or None when the stage has not been run.
+
+    Absent is not "everything is visible": without a timeline the framing
+    features stay at their neutral placeholders and selection behaves exactly as
+    it did before, which keeps the fixture runner and older work dirs working.
+    """
+
+    if not path.exists():
+        return None
+    payload = read_json_object(path, "C6v vision artifact")
+    return visibility_from_payload(dict(payload))
 
 
 def select_dokid(
@@ -81,6 +96,7 @@ def select_dokid(
             transcript=transcript,
             audio_features=audio_features,
             all_speeches=speeches,
+            visibility=_read_visibility(paths.vision_json(speech.speech_id)),
             confront_weights=settings.confront_weights,
             explain_weights=settings.explain_weights,
             quotable_weights=settings.quotable_weights,
