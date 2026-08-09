@@ -758,17 +758,47 @@ function FeedScreen({
   };
 
   const videoRefFor = (clipId: string) => {
-    videoRefCallbacks.current[clipId] ??= (node) => {
-      const previous = videoRefs.current[clipId];
-      if (previous && previous !== node) {
-        // Ref cleanup is synchronous with DOM removal. It is the last line of
-        // defence against detached media continuing to emit audio while
-        // another app screen is visible.
-        playbackGeneration.current += 1;
-        previous.pause();
-      }
-      videoRefs.current[clipId] = node;
-    };
+    if (!videoRefCallbacks.current[clipId]) {
+      const keepPlaybackInline = (event: Event) => {
+        // Older WebKit-based browsers can still promote a video despite the
+        // standard `playsinline` attribute. This event is not universal, but
+        // where it exists, immediately hand playback back to Pleni's feed.
+        event.preventDefault();
+        const video = event.currentTarget as HTMLVideoElement & {
+          webkitDisplayingFullscreen?: boolean;
+          webkitExitFullscreen?: () => void;
+        };
+        if (video.webkitDisplayingFullscreen) {
+          video.webkitExitFullscreen?.();
+        }
+      };
+
+      videoRefCallbacks.current[clipId] = (node) => {
+        const previous = videoRefs.current[clipId];
+        if (previous && previous !== node) {
+          // Ref cleanup is synchronous with DOM removal. It is the last line of
+          // defence against detached media continuing to emit audio while
+          // another app screen is visible.
+          playbackGeneration.current += 1;
+          previous.pause();
+          previous.removeEventListener("webkitbeginfullscreen", keepPlaybackInline);
+        }
+        if (node) {
+          // `playsInline` covers modern Chrome/Safari. Samsung Internet and some
+          // Android WebViews still inspect one of these vendor attributes before
+          // deciding whether to hand the MP4 to their native video assistant.
+          node.controls = false;
+          node.disablePictureInPicture = true;
+          node.setAttribute("playsinline", "");
+          node.setAttribute("webkit-playsinline", "");
+          node.setAttribute("x5-playsinline", "");
+          node.setAttribute("x5-video-player-type", "h5-page");
+          node.setAttribute("x-webkit-airplay", "deny");
+          node.addEventListener("webkitbeginfullscreen", keepPlaybackInline);
+        }
+        videoRefs.current[clipId] = node;
+      };
+    }
     return videoRefCallbacks.current[clipId];
   };
 
@@ -1153,6 +1183,10 @@ function FeedScreen({
                 src={withinWindow ? clip.videoUrl : undefined}
                 poster={withinPosterWindow ? clip.thumbUrl : undefined}
                 playsInline
+                controls={false}
+                controlsList="nodownload nofullscreen noremoteplayback"
+                disablePictureInPicture
+                disableRemotePlayback
                 muted={muted}
                 /* FE-3 (GATE): no `loop` attribute. Native looping made
                    completion and deliberate replay indistinguishable, which
@@ -1177,6 +1211,14 @@ function FeedScreen({
                   setBlocked((state) => ({ ...state, [clip.id]: false }));
                 }}
                 onPause={() => setPaused((state) => ({ ...state, [clip.id]: true }))}
+                onClick={(event) => {
+                  // Consume the media element's own click before an Android
+                  // browser can interpret it as a request for its native UI.
+                  event.preventDefault();
+                  event.stopPropagation();
+                  toggleClipPlayback(clip.id);
+                }}
+                onContextMenu={(event) => event.preventDefault()}
               />
               {flashIcon && flashNonce !== null && <PlaybackFlashIcon key={flashNonce} icon={flashIcon} />}
               {/* FE-5: only shown when browser policy refused autoplay, never

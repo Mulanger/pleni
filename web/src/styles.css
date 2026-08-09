@@ -146,6 +146,21 @@ a {
   height: 100%;
   object-fit: cover;
   background: #dcdcd7;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+}
+
+/* Pleni owns playback controls. Keep WebKit/Samsung media chrome from being
+   painted over the in-feed player if a browser momentarily exposes it. */
+.feed-item video::-webkit-media-controls,
+.feed-item video::-webkit-media-controls-enclosure,
+.feed-item video::-webkit-media-controls-panel,
+.feed-item video::-webkit-media-controls-fullscreen-button,
+.feed-item video::-webkit-media-controls-play-button {
+  display: none !important;
+  -webkit-appearance: none;
 }
 
 .feed-item::before,

@@ -26,6 +26,7 @@ This file is the source of truth for chunk status and handoff notes.
 | UI3 - Riksdagen portraits & politician profiles | DONE | Completed 2026-08-08 |
 | UI5 - Stop off-screen media | DONE | Completed 2026-08-08 |
 | UI8 - Political party profiles | DONE | Completed 2026-08-09 |
+| UI9 - Inline mobile video playback | DONE | Completed 2026-08-09 |
 | V1 - YuNet replaces the Haar cascade | DONE | Completed 2026-08-07 |
 | V2 - Speaker identity verification | DONE | Completed 2026-08-08 |
 | V3 - Portrait recovery + framing-aware selection | DONE | Completed 2026-08-08 |
@@ -3283,6 +3284,7 @@ existing `audioop` warning; lint and strict typing clean).
 
 **Next agent should know:**
 - The compact identity layout is intentionally CSS-only. Do not add duplicate
+  profile DTO fields or a second portrait component to adjust its spacing.
 
 ## UI8 — political party profiles — DONE 2026-08-09
 
@@ -3338,4 +3340,42 @@ search results and browser Back to the filtered search screen.
   clip totals into the party table.
 - Keep party clip ordering on `published_at desc` unless product explicitly
   changes what “recent” means.
-  profile DTO fields or a second portrait component to adjust its spacing.
+
+## UI9 — inline mobile video playback — DONE 2026-08-09
+
+**Built:** inline media hardening in `web/src/App.tsx`, native-control
+suppression in `web/src/styles.css`, and the UI9 scope in
+`docs/BUILD_PLAN.md`.
+**Tests:** Direct TypeScript check and Vite production build green; rendered
+mobile DOM verified at 390×844 with 60 clips and the standard plus legacy inline
+attributes; a video tap stayed outside fullscreen and picture-in-picture;
+`python tasks.py test lint typecheck` green (355 passed, 68 deselected, one
+existing `audioop` warning; lint and strict typing clean).
+**Contracts touched:** none.
+
+**Decisions made:**
+- Kept `playsInline` and explicitly disabled browser controls,
+  picture-in-picture and remote playback on every feed video.
+- Added `webkit-playsinline`, `x5-playsinline`, `x5-video-player-type=h5-page`
+  and `x-webkit-airplay=deny` for Android WebViews and older WebKit engines that
+  do not rely solely on the standard hint.
+- Video-surface taps now prevent the media element's default action and call
+  Pleni's existing play/pause path directly. The surrounding feed tap remains
+  as a fallback, and mute, seek, loop, autoplay and media windowing are unchanged.
+- Suppressed WebKit media-control chrome and retained vertical `pan-y` touch
+  behavior so the video surface remains part of the swipe feed.
+
+**Observations (not fixed, out of scope):**
+- Samsung Internet documents its floating Video Assistant as a browser feature
+  that appears when online video starts. Pleni can withhold native controls and
+  request inline playback, but a viewer's browser setting may override site
+  hints. If the blue button survives this change, confirm Samsung Internet and
+  compare Chrome on the same phone before changing the player again.
+
+**Blocked / needs a decision:**
+- none.
+
+**Next agent should know:**
+- Do not re-add the native `controls` attribute to feed videos. Pleni owns play,
+  pause, mute and seek, and Samsung's Popup Video is specifically tied to native
+  media controls.

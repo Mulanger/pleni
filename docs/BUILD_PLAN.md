@@ -863,6 +863,40 @@ acceptance command are green.
 
 ---
 
+## UI9 — Keep mobile video playback inline
+
+**Depends on:** UI2 and UI5. **Size:** small.
+
+**Objective.** Keep feed playback inside Pleni's portrait player on Android and
+iOS instead of allowing browser media assistants to promote clips into a native
+fullscreen, landscape, picture-in-picture or remote-playback surface.
+
+**Scope — may create or modify:**
+
+```
+web/src/App.tsx
+web/src/styles.css
+docs/BUILD_PLAN.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** clip ordering, media windowing, autoplay ownership,
+mute fallback, progress/seeking, comments, Supabase reads, numbered pipeline
+stages, contracts, migrations and generated media.
+
+**Build.** Retain the standard `playsInline` hint and explicitly withhold native
+controls, fullscreen, picture-in-picture and remote playback. Add the legacy
+inline attributes still inspected by some Android WebViews and WebKit engines,
+consume taps in the app-owned player, and suppress WebKit media-control chrome.
+Do not change Pleni's own play, pause, mute, seek or loop behavior.
+
+**Acceptance:** rendered feed videos carry standard and legacy inline hints,
+native controls/PiP/remote playback are disabled, taps still use Pleni's player,
+vertical swiping still scrolls the feed, TypeScript and the Vite production build
+are green, and the behavior is rechecked on the reporting Android browser.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.
