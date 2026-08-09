@@ -3379,3 +3379,38 @@ existing `audioop` warning; lint and strict typing clean).
 - Do not re-add the native `controls` attribute to feed videos. Pleni owns play,
   pause, mute and seek, and Samsung's Popup Video is specifically tied to native
   media controls.
+
+## UI10 — profile library navigation — DONE 2026-08-09
+
+**Built:** saved-library routes in `web/src/navigation.ts`, the saved clip grid,
+profile/following navigation and separated profile cards in `web/src/App.tsx`,
+supporting layout in `web/src/styles.css`, and the UI10 scope in
+`docs/BUILD_PLAN.md`.
+**Tests:** Direct TypeScript check and Vite production build green;
+`python tasks.py test lint typecheck` green (355 passed, 68 deselected, one
+existing `audioop` warning; lint and strict typing clean).
+**Contracts touched:** none.
+
+**Decisions made:**
+- The profile's Following row now opens the complete device-local following
+  list. People and parties retain profile navigation, while each row exposes an
+  explicit `Avfölj` action that updates the same library state as the feed.
+- Saved clips first render in the established three-column portrait grid. A
+  thumbnail opens the existing shared feed player at that exact clip; no second
+  playback implementation was introduced.
+- Saved grid and saved player have separate hash routes. Browser Back returns
+  from playback to the grid, and direct saved-player links fall back there via
+  the in-app back control.
+- `Personaliserat flöde` now occupies its own `Personalisering` card, visually
+  separated from download, cookie and account-deletion controls.
+
+**Observations (not fixed, out of scope):**
+- Saved clips and follows remain scoped to the signed-in account on this device.
+  Server persistence remains F1 and was not pulled into this UI chunk.
+
+**Blocked / needs a decision:**
+- none.
+
+**Next agent should know:**
+- Keep the saved grid as the archive entry point. `saved-clips` is only the
+  immersive playback route after a deliberate thumbnail selection.

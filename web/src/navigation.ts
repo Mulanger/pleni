@@ -19,7 +19,8 @@ export type AppRoute =
       partyCode: PartyCode;
       startId: string | null;
     }
-  | { view: "saved"; tab: "profil"; feedMode: FeedMode };
+  | { view: "saved"; tab: "profil"; feedMode: FeedMode }
+  | { view: "saved-clips"; tab: "profil"; feedMode: FeedMode; startId: string | null };
 
 const HISTORY_KEY = "pleniNavigation";
 const DEFAULT_ROUTE: AppRoute = { view: "tab", tab: "hem", feedMode: "fordig" };
@@ -64,6 +65,15 @@ export function routeFromHash(hash: string): AppRoute {
     return { view: "tab", tab: "hem", feedMode: mode };
   }
   if (segments[0] === "saved" || (segments[0] === "profil" && segments[1] === "saved")) {
+    const clipsSegment = segments[0] === "saved" ? segments[1] : segments[2];
+    if (clipsSegment === "clips") {
+      return {
+        view: "saved-clips",
+        tab: "profil",
+        feedMode: feedMode(params.get("feed")),
+        startId: params.get("clip")
+      };
+    }
     return { view: "saved", tab: "profil", feedMode: feedMode(params.get("feed")) };
   }
   if (isTab(segments[0])) {
@@ -119,6 +129,13 @@ export function hashForRoute(route: AppRoute): string {
   }
   if (route.view === "saved") {
     return `#/profil/saved?feed=${route.feedMode}`;
+  }
+  if (route.view === "saved-clips") {
+    const params = new URLSearchParams({ feed: route.feedMode });
+    if (route.startId) {
+      params.set("clip", route.startId);
+    }
+    return `#/profil/saved/clips?${params.toString()}`;
   }
 
   const params = new URLSearchParams({ from: route.tab, feed: route.feedMode });

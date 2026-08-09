@@ -1043,8 +1043,21 @@ a {
   text-overflow: ellipsis;
 }
 
+.person-topbar-spacer {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+}
+
 .person-scroll {
   padding-top: 14px;
+}
+
+.saved-grid-status {
+  padding: 28px 18px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
 }
 
 .party-hero {

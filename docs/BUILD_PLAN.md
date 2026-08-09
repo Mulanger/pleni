@@ -897,6 +897,44 @@ are green, and the behavior is rechecked on the reporting Android browser.
 
 ---
 
+## UI10 — Profile library navigation
+
+**Depends on:** UI1, UI3 and UI5. **Size:** small.
+
+**Objective.** Turn the profile library rows into clear entry points for
+managing follows and choosing saved videos without dropping the viewer directly
+into autoplay playback.
+
+**Scope — may create or modify:**
+
+```
+web/src/navigation.ts
+web/src/App.tsx
+web/src/styles.css
+docs/BUILD_PLAN.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** library storage keys, sign-in gating, Supabase
+reads, feed ordering, playback ownership, media windowing, numbered pipeline
+stages, contracts, migrations and generated media.
+
+**Build.** Give personalization its own card, separate from account and data
+controls. Make the profile's Following row open the existing followed-party and
+followed-politician list, with an explicit unfollow action on every row. Replace
+the saved archive's immediate autoplay feed with the same three-column clip
+chooser used on politician profiles. Selecting a thumbnail opens the shared
+immersive player at that clip, and Back returns to the saved grid.
+
+**Acceptance:** personalization is visually separated from the data card; the
+Following row opens the complete stored list and each entry can be unfollowed;
+saved clips render as a three-column thumbnail grid; selecting any thumbnail
+starts the shared player at that clip and browser Back returns to the grid;
+TypeScript, the Vite production build and the full Python acceptance command are
+green.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.

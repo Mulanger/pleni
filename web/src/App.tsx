@@ -177,6 +177,8 @@ function App() {
   const [partyClips, setPartyClips] = useState<ClipItem[]>([]);
   const [partyPoliticians, setPartyPoliticians] = useState<Politician[]>([]);
   const [partyLoading, setPartyLoading] = useState(false);
+  const [savedClips, setSavedClips] = useState<ClipItem[]>([]);
+  const [savedError, setSavedError] = useState<string | null>(null);
   const [savedLoading, setSavedLoading] = useState(false);
   // Onboarding answers and consent live together because the flow collects
   // both. Defaults are off and everything stays on the device until F1 gives it
@@ -437,6 +439,17 @@ function App() {
     navigate({ view: "saved", tab: "profil", feedMode });
   };
 
+  const openSavedClip = (startId: string) => {
+    if (savedClips.length === 0) {
+      return;
+    }
+    navigate({ view: "saved-clips", tab: "profil", feedMode, startId });
+  };
+
+  const openFollowing = () => {
+    navigate({ view: "tab", tab: "foljer", feedMode });
+  };
+
   useEffect(() => {
     if (route.view === "person-clips") {
       setCollection({
@@ -456,33 +469,53 @@ function App() {
       });
       return;
     }
-    if (route.view !== "saved") {
-      setCollection(null);
+    if (route.view === "saved-clips") {
+      setCollection({
+        title: "Sparade klipp",
+        subtitle: savedLoading
+          ? "Laddar…"
+          : savedError ?? `${savedClips.length} sparade klipp`,
+        clips: savedClips,
+        startId: route.startId
+      });
       return;
     }
+    setCollection(null);
+  }, [
+    party,
+    partyClips,
+    partyLoading,
+    person,
+    personClips,
+    personLoading,
+    route,
+    savedClips,
+    savedError,
+    savedLoading
+  ]);
 
+  useEffect(() => {
+    if (route.view !== "saved" && route.view !== "saved-clips") {
+      return;
+    }
     let active = true;
     setSavedLoading(true);
-    setCollection({ title: "Sparade klipp", subtitle: "Laddar…", clips: [], startId: null });
+    setSavedError(null);
+    if (library.savedClips.length === 0) {
+      setSavedClips([]);
+      setSavedLoading(false);
+      return;
+    }
     loadClipsByIds(library.savedClips)
-      .then((savedClips) => {
+      .then((loadedClips) => {
         if (active) {
-          setCollection({
-            title: "Sparade klipp",
-            subtitle: `${savedClips.length} klipp · sparas bara på den här enheten`,
-            clips: savedClips,
-            startId: null
-          });
+          setSavedClips(loadedClips);
         }
       })
       .catch(() => {
         if (active) {
-          setCollection({
-            title: "Sparade klipp",
-            subtitle: "Klippen kunde inte hämtas",
-            clips: [],
-            startId: null
-          });
+          setSavedClips([]);
+          setSavedError("Klippen kunde inte hämtas");
         }
       })
       .finally(() => {
@@ -493,7 +526,7 @@ function App() {
     return () => {
       active = false;
     };
-  }, [library.savedClips, party, partyClips, partyLoading, person, personClips, personLoading, route]);
+  }, [library.savedClips, route.view]);
 
   return (
     <>
@@ -513,12 +546,18 @@ function App() {
         />
       )}
       <main className="mobile-app" aria-label="Pleni">
-        {route.view === "person-clips" || route.view === "party-clips" || route.view === "saved" ? (
+        {route.view === "person-clips" || route.view === "party-clips" || route.view === "saved-clips" ? (
           <CollectionScreen
             collection={
               collection ?? { title: "Klipp", subtitle: "Laddar…", clips: [], startId: null }
             }
-            onBack={() => backTo({ view: "tab", tab, feedMode })}
+            onBack={() =>
+              backTo(
+                route.view === "saved-clips"
+                  ? { view: "saved", tab: "profil", feedMode }
+                  : { view: "tab", tab, feedMode }
+              )
+            }
             muted={muted}
             setMuted={setMuted}
             liked={liked}
@@ -528,6 +567,14 @@ function App() {
             onSave={toggleSaveClip}
             onToggleFollow={toggleFollowPolitician}
             onOpenPerson={openPerson}
+          />
+        ) : route.view === "saved" ? (
+          <SavedScreen
+            clips={savedClips}
+            loading={savedLoading}
+            error={savedError}
+            onBack={() => backTo({ view: "tab", tab: "profil", feedMode })}
+            onPlayClip={openSavedClip}
           />
         ) : route.view === "person" && selectedPersonId !== null ? (
           <PersonScreen
@@ -601,8 +648,10 @@ function App() {
                 selectedParties={onboarding.parties.length}
                 savedCount={library.savedClips.length}
                 followedCount={library.followedPoliticians.length}
+                followedPartyCount={library.followedParties.length}
                 savedLoading={savedLoading}
                 onOpenSaved={openSavedArchive}
+                onOpenFollowing={openFollowing}
                 onEditInterests={() => setShowOnboarding(true)}
                 onToggleConsent={(key) => setConsent((state) => ({ ...state, [key]: !state[key] }))}
               />
@@ -1962,12 +2011,13 @@ function FollowingScreen({
                   action={
                     <button
                       className="mini-button"
+                      aria-label={`Avfölj ${party.name}`}
                       onClick={(event) => {
                         event.stopPropagation();
                         onToggleParty(partyCode);
                       }}
                     >
-                      Följer
+                      Avfölj
                     </button>
                   }
                 />
@@ -1997,12 +2047,13 @@ function FollowingScreen({
                 action={
                   <button
                     className="mini-button"
+                    aria-label={`Avfölj ${cleanName(politician.name) || politician.name}`}
                     onClick={(event) => {
                       event.stopPropagation();
                       onTogglePerson(politician.id);
                     }}
                   >
-                    Följer
+                    Avfölj
                   </button>
                 }
               />
@@ -2199,8 +2250,10 @@ function ProfileScreen({
   selectedParties,
   savedCount,
   followedCount,
+  followedPartyCount,
   savedLoading,
   onOpenSaved,
+  onOpenFollowing,
   onEditInterests,
   onToggleConsent
 }: {
@@ -2208,11 +2261,24 @@ function ProfileScreen({
   selectedParties: number;
   savedCount: number;
   followedCount: number;
+  followedPartyCount: number;
   savedLoading: boolean;
   onOpenSaved: () => void;
+  onOpenFollowing: () => void;
   onEditInterests: () => void;
   onToggleConsent: (key: keyof typeof consent) => void;
 }) {
+  const totalFollowed = followedCount + followedPartyCount;
+  const followedSummary = [
+    followedCount > 0
+      ? `${followedCount} ${followedCount === 1 ? "person" : "personer"}`
+      : null,
+    followedPartyCount > 0
+      ? `${followedPartyCount} ${followedPartyCount === 1 ? "parti" : "partier"}`
+      : null
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const consentRows = [
     {
       key: "personal" as const,
@@ -2244,11 +2310,13 @@ function ProfileScreen({
           <ListRow
             title="Följer"
             subtitle={
-              followedCount === 0
+              totalFollowed === 0
                 ? "Du följer ingen ännu"
-                : `${followedCount} personer · sparas bara på den här enheten`
+                : `${followedSummary} · sparas bara på den här enheten`
             }
             icon={<UserPlus size={18} />}
+            onClick={onOpenFollowing}
+            chevron
           />
         </Group>
         <Group title="Mina intressen">
@@ -2264,7 +2332,7 @@ function ProfileScreen({
             chevron
           />
         </Group>
-        <Group title="Integritet & data">
+        <Group title="Personalisering">
           {consentRows.map((row) => (
             <ListRow
               key={row.key}
@@ -2273,6 +2341,8 @@ function ProfileScreen({
               action={<Switch checked={consent[row.key]} onChange={() => onToggleConsent(row.key)} />}
             />
           ))}
+        </Group>
+        <Group title="Integritet & data">
           <ListRow title="Ladda ner mina data" icon={<Download size={18} />} chevron />
           <ListRow title="Samtycken & cookies" icon={<ShieldCheck size={18} />} chevron />
           <ListRow title="Radera konto" icon={<Trash2 size={18} />} tone="danger" chevron />
@@ -2436,6 +2506,77 @@ function describeLinkStatus(status: ClerkSupabaseLinkStatus | null, running: boo
     case "rejected":
       return `Avvisad med HTTP ${status.status}.`;
   }
+}
+
+/**
+ * The saved archive is a chooser, not another autoplaying feed. It uses the
+ * same thumbnail grid as politician and party pages; only after a viewer picks
+ * a clip do we hand the list to the shared immersive player.
+ */
+function SavedScreen({
+  clips,
+  loading,
+  error,
+  onBack,
+  onPlayClip
+}: {
+  clips: ClipItem[];
+  loading: boolean;
+  error: string | null;
+  onBack: () => void;
+  onPlayClip: (clipId: string) => void;
+}) {
+  return (
+    <section className="person-screen saved-screen">
+      <div className="person-topbar">
+        <button onClick={onBack} aria-label="Tillbaka">
+          <ChevronLeft size={24} />
+        </button>
+        <strong>Sparade klipp</strong>
+        <span className="person-topbar-spacer" aria-hidden="true" />
+      </div>
+      <div className="panel-scroll person-scroll">
+        <section className="clip-grid-block">
+          <div className="section-label">
+            {clips.length} {clips.length === 1 ? "sparat klipp" : "sparade klipp"}
+          </div>
+          {loading && clips.length === 0 && <div className="saved-grid-status">Hämtar klipp…</div>}
+          {!loading && error && (
+            <div className="panel-empty" role="status">
+              <strong>{error}</strong>
+              <span>Försök igen om en stund.</span>
+            </div>
+          )}
+          {!loading && !error && clips.length === 0 && (
+            <div className="panel-empty" role="status">
+              <strong>Inga sparade klipp ännu</strong>
+              <span>Spara ett klipp i flödet så hittar du det här.</span>
+            </div>
+          )}
+          {clips.length > 0 && (
+            <div className="clip-grid">
+              {clips.map((clip) => (
+                <button
+                  className="mini-clip"
+                  key={clip.id}
+                  onClick={() => onPlayClip(clip.id)}
+                  aria-label={`Spela: ${clip.title}`}
+                >
+                  <img src={clip.thumbUrl} alt="" loading="lazy" />
+                  <span className="mini-clip-copy">
+                    <b>{clip.title}</b>
+                    <small>
+                      {formatDate(clip.debateDate)} · {formatDuration(clip.durationS)}
+                    </small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </section>
+  );
 }
 
 function PartyScreen({
