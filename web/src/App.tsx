@@ -1614,6 +1614,8 @@ function ClipMeta({
   const party = PARTIES[clip.party];
   const displayName = cleanName(clip.speakerName) || person?.name || clip.speakerName;
   const speechType = clip.anforandetyp || person?.role || "";
+  const sourcePreview = previewSourceTitle(clip.sourceTitle);
+  const [sourceExpanded, setSourceExpanded] = useState(false);
   // Q-2: without a stable id there is nothing durable to hang a follow or a
   // profile on, so both controls are inert rather than keyed on a name.
   const identified = person !== null;
@@ -1651,7 +1653,22 @@ function ClipMeta({
       </div>
       <div className="clip-title">{clip.title}</div>
       <div className="clip-subtitle">
-        {clip.sourceTitle} · {formatDate(clip.debateDate)}
+        {sourcePreview.truncated ? (
+          <button
+            className={sourceExpanded ? "clip-source-title expanded" : "clip-source-title"}
+            aria-expanded={sourceExpanded}
+            aria-label={sourceExpanded ? "Visa kort debatttitel" : "Visa hela debatttiteln"}
+            title={sourceExpanded ? "Visa mindre" : clip.sourceTitle}
+            onClick={() => setSourceExpanded((current) => !current)}
+          >
+            {sourceExpanded ? clip.sourceTitle : sourcePreview.text}
+          </button>
+        ) : (
+          <span className="clip-source-title">{clip.sourceTitle}</span>
+        )}
+        <time className="clip-source-date" dateTime={clip.debateDate}>
+          · {formatDate(clip.debateDate)}
+        </time>
       </div>
       <a className="source-link" href={clip.sourceUrl} target="_blank" rel="noreferrer">
         Hela debatten
@@ -1659,6 +1676,19 @@ function ClipMeta({
       </a>
     </div>
   );
+}
+
+const SOURCE_TITLE_PREVIEW_WORDS = 4;
+
+function previewSourceTitle(value: string): { text: string; truncated: boolean } {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= SOURCE_TITLE_PREVIEW_WORDS) {
+    return { text: value.trim(), truncated: false };
+  }
+  return {
+    text: `${words.slice(0, SOURCE_TITLE_PREVIEW_WORDS).join(" ")}…`,
+    truncated: true
+  };
 }
 
 function ProgressRow({

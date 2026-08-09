@@ -432,11 +432,57 @@ a {
 }
 
 .clip-subtitle {
-  overflow: hidden;
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 4px;
   color: #6e6e68;
   font-size: 12.5px;
-  white-space: nowrap;
+  line-height: 1.35;
+}
+
+.clip-source-title {
+  min-width: 0;
+  flex: 1;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  text-align: left;
   text-overflow: ellipsis;
+  text-shadow: inherit;
+  white-space: nowrap;
+}
+
+button.clip-source-title {
+  cursor: pointer;
+}
+
+.clip-source-title.expanded {
+  overflow: visible;
+  animation: sourceTitleReveal 160ms ease-out;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.clip-source-date {
+  flex: 0 0 auto;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+@keyframes sourceTitleReveal {
+  from {
+    opacity: 0.66;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .source-link {
@@ -2122,6 +2168,7 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .clip-source-title.expanded,
   .comment-backdrop,
   .comment-sheet,
   .comment-row {
