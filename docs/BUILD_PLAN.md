@@ -786,6 +786,39 @@ build and the full Python acceptance command are green.
 
 ---
 
+## UI7 — Compact politician profiles
+
+**Depends on:** UI3. **Size:** small.
+
+**Objective.** Remove the oversized empty header and vertically stretched
+identity stack from politician profiles so the person and their published clips
+share the first mobile viewport.
+
+**Scope — may create or modify:**
+
+```
+web/src/styles.css
+docs/BUILD_PLAN.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** politician data or queries, portrait attribution,
+profile actions, clip ordering, playback, comments, onboarding, numbered
+pipeline stages, contracts, migrations and generated media.
+
+**Build.** Keep the existing profile content and semantics. Reduce the top bar
+to its safe-area plus normal control padding, arrange portrait and identity in
+a compact two-column composition, and replace the partially empty three-column
+stat cards with a two-item divided row. Preserve 44 px top-bar targets and the
+official Riksdagen portrait credit.
+
+**Acceptance:** no fixed empty band remains above the profile controls; the
+identity block remains readable at 320 px width; both real statistics use the
+full row; TypeScript, the Vite production build and the full Python acceptance
+command are green.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.
