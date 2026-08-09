@@ -3249,3 +3249,37 @@ clean).
 - `web/src/navigation.ts` is the single owner of route parsing, serialization
   and the History API marker. Add future screens there instead of calling
   `pushState` from components.
+
+## UI7 — compact politician profiles — DONE 2026-08-09
+
+**Built:** profile layout polish in `web/src/styles.css` and the UI7 scope in
+`docs/BUILD_PLAN.md`.
+**Tests:** Direct TypeScript check and Vite production build green;
+`python tasks.py test lint typecheck` green (352 passed, 68 deselected, one
+existing `audioop` warning; lint and strict typing clean).
+**Contracts touched:** none.
+
+**Decisions made:**
+- Reduced the profile top bar from 50 px of fixed empty lead-in to 8 px above
+  the existing 44 px controls, while retaining the device safe-area inset. The
+  scroll content lead-in also drops from 20 to 14 px.
+- Replaced the tall centred identity stack with a 96 px portrait beside the
+  name, party, role/constituency and follow action. Long names retain a flexible
+  text column and may wrap without squeezing the portrait.
+- Replaced the three-column card grid, which only contained two real values,
+  with a cardless divided row. `Klipp` and `Visas här` now use the whole width
+  without an empty third cell.
+- Kept portrait attribution, 44 px top-bar targets, profile data, clip order and
+  all behavior unchanged. This is a hierarchy and spacing correction only.
+
+**Observations (not fixed, out of scope):**
+- The browser-control runtime was unavailable in this session, so visual QA was
+  limited to the responsive CSS constraints, compiled bundle and production
+  build. Final feel should be checked on the live phone after deployment.
+
+**Blocked / needs a decision:**
+- none.
+
+**Next agent should know:**
+- The compact identity layout is intentionally CSS-only. Do not add duplicate
+  profile DTO fields or a second portrait component to adjust its spacing.
