@@ -345,6 +345,14 @@ a {
   gap: 10px;
 }
 
+.clip-debate-date {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: #6e6e68;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
 .person-pill {
   display: flex;
   flex: 1;
@@ -408,6 +416,7 @@ a {
 }
 
 .follow-button {
+  flex: 0 0 auto;
   height: 40px;
   padding: 0 16px;
   border-radius: 999px;
@@ -432,57 +441,11 @@ a {
 }
 
 .clip-subtitle {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  gap: 4px;
+  overflow: hidden;
   color: #6e6e68;
   font-size: 12.5px;
-  line-height: 1.35;
-}
-
-.clip-source-title {
-  min-width: 0;
-  flex: 1;
-  padding: 0;
-  overflow: hidden;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  line-height: inherit;
-  text-align: left;
+  white-space: nowrap;
   text-overflow: ellipsis;
-  text-shadow: inherit;
-  white-space: nowrap;
-}
-
-button.clip-source-title {
-  cursor: pointer;
-}
-
-.clip-source-title.expanded {
-  overflow: visible;
-  animation: sourceTitleReveal 160ms ease-out;
-  text-overflow: clip;
-  white-space: normal;
-}
-
-.clip-source-date {
-  flex: 0 0 auto;
-  margin-left: auto;
-  white-space: nowrap;
-}
-
-@keyframes sourceTitleReveal {
-  from {
-    opacity: 0.66;
-    transform: translateY(-2px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .source-link {
@@ -1534,13 +1497,15 @@ button.clip-source-title {
 }
 
 .person-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(68px, auto);
   gap: 8px;
 }
 
 .person-pill {
-  flex: 0 1 auto;
+  width: 100%;
   min-width: 0;
-  max-width: calc(100% - 82px);
+  max-width: none;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -1726,6 +1691,14 @@ button.clip-source-title {
   .feed-screen ~ .bottom-nav {
     height: calc(54px + env(safe-area-inset-bottom));
   }
+}
+
+.clip-debate-date {
+  justify-self: center;
+  margin-left: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11.25px;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.64);
 }
 
 /* --- Per-video comments ----------------------------------------------- */
@@ -2168,7 +2141,6 @@ button.clip-source-title {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .clip-source-title.expanded,
   .comment-backdrop,
   .comment-sheet,
   .comment-row {
