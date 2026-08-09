@@ -54,6 +54,7 @@ import { initials, PARTIES, partyInk, partyTint, TRENDING } from "./data";
 import { Onboarding } from "./onboarding";
 import { EMPTY_ONBOARDING, readOnboarding, writeOnboarding } from "./onboarding-store";
 import { EMPTY_LIBRARY, readLibrary, toggleInList, writeLibrary } from "./library-store";
+import { useAppNavigation } from "./navigation";
 import {
   checkClerkSupabaseLink,
   loadClipsByIds,
@@ -141,15 +142,17 @@ const VIDEO_WINDOW = 1;
 const POSTER_WINDOW = 3;
 
 function App() {
-  const [tab, setTab] = useState<Tab>("hem");
-  const [feedMode, setFeedMode] = useState<FeedMode>("fordig");
+  const { route, navigate, backTo } = useAppNavigation();
+  const tab = route.tab;
+  const feedMode = route.feedMode;
   // Starts empty, not seeded with demo clips (FE-1). A brief loading state is
   // honest; a flash of fabricated content that then becomes real is not.
   const [clips, setClips] = useState<ClipItem[]>([]);
   const [clipSource, setClipSource] = useState<ClipSource>("supabase");
   const [feedError, setFeedError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+  const selectedPersonId =
+    route.view === "person" || route.view === "person-clips" ? route.personId : null;
   const [query, setQuery] = useState("");
   const [partyFilter, setPartyFilter] = useState<PartyCode | null>(null);
   const [muted, setMuted] = useState(false);
@@ -342,11 +345,11 @@ function App() {
 
   const openPerson = (personId: string) => {
     setCollection(null);
-    setSelectedPersonId(personId);
+    navigate({ view: "person", tab, feedMode, personId });
   };
 
   const closePerson = () => {
-    setSelectedPersonId(null);
+    backTo({ view: "tab", tab, feedMode });
   };
 
   /** Play a politician's clips, optionally starting on one the viewer tapped. */
@@ -354,37 +357,61 @@ function App() {
     if (person === null || personClips.length === 0) {
       return;
     }
-    setCollection({
-      title: cleanName(person.name) || person.name,
-      subtitle: `${personClips.length} klipp`,
-      clips: personClips,
-      startId
-    });
+    navigate({ view: "person-clips", tab, feedMode, personId: person.id, startId });
   };
 
   const openSavedArchive = () => {
-    setSelectedPersonId(null);
+    navigate({ view: "saved", tab: "profil", feedMode });
+  };
+
+  useEffect(() => {
+    if (route.view === "person-clips") {
+      setCollection({
+        title: person ? cleanName(person.name) || person.name : "Klipp",
+        subtitle: personLoading ? "Laddar…" : `${personClips.length} klipp`,
+        clips: personClips,
+        startId: route.startId
+      });
+      return;
+    }
+    if (route.view !== "saved") {
+      setCollection(null);
+      return;
+    }
+
+    let active = true;
     setSavedLoading(true);
     setCollection({ title: "Sparade klipp", subtitle: "Laddar…", clips: [], startId: null });
     loadClipsByIds(library.savedClips)
       .then((savedClips) => {
-        setCollection({
-          title: "Sparade klipp",
-          subtitle: `${savedClips.length} klipp · sparas bara på den här enheten`,
-          clips: savedClips,
-          startId: null
-        });
+        if (active) {
+          setCollection({
+            title: "Sparade klipp",
+            subtitle: `${savedClips.length} klipp · sparas bara på den här enheten`,
+            clips: savedClips,
+            startId: null
+          });
+        }
       })
       .catch(() => {
-        setCollection({
-          title: "Sparade klipp",
-          subtitle: "Klippen kunde inte hämtas",
-          clips: [],
-          startId: null
-        });
+        if (active) {
+          setCollection({
+            title: "Sparade klipp",
+            subtitle: "Klippen kunde inte hämtas",
+            clips: [],
+            startId: null
+          });
+        }
       })
-      .finally(() => setSavedLoading(false));
-  };
+      .finally(() => {
+        if (active) {
+          setSavedLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [library.savedClips, person, personClips, personLoading, route]);
 
   return (
     <>
@@ -404,10 +431,12 @@ function App() {
         />
       )}
       <main className="mobile-app" aria-label="Pleni">
-        {collection ? (
+        {route.view === "person-clips" || route.view === "saved" ? (
           <CollectionScreen
-            collection={collection}
-            onBack={() => setCollection(null)}
+            collection={
+              collection ?? { title: "Klipp", subtitle: "Laddar…", clips: [], startId: null }
+            }
+            onBack={() => backTo({ view: "tab", tab, feedMode })}
             muted={muted}
             setMuted={setMuted}
             liked={liked}
@@ -418,7 +447,7 @@ function App() {
             onToggleFollow={toggleFollowPolitician}
             onOpenPerson={openPerson}
           />
-        ) : selectedPersonId !== null ? (
+        ) : route.view === "person" && selectedPersonId !== null ? (
           <PersonScreen
             person={person}
             clips={personClips}
@@ -434,7 +463,9 @@ function App() {
               <FeedScreen
                 clips={clips}
                 feedMode={feedMode}
-                setFeedMode={setFeedMode}
+                setFeedMode={(nextMode) =>
+                  navigate({ view: "tab", tab: "hem", feedMode: nextMode })
+                }
                 playbackSuspended={showOnboarding}
                 muted={muted}
                 setMuted={setMuted}
@@ -480,7 +511,10 @@ function App() {
                 onToggleConsent={(key) => setConsent((state) => ({ ...state, [key]: !state[key] }))}
               />
             )}
-            <BottomNav active={tab} onChange={setTab} />
+            <BottomNav
+              active={tab}
+              onChange={(nextTab) => navigate({ view: "tab", tab: nextTab, feedMode })}
+            />
           </>
         )}
       </main>

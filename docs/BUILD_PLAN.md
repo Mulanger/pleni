@@ -750,6 +750,42 @@ green.
 
 ---
 
+## UI6 — Browser-history navigation
+
+**Depends on:** UI1 and UI5. **Size:** small.
+
+**Objective.** Browser Back and Forward mirror Pleni's internal navigation
+instead of leaving the site immediately. Tabs, feed modes, politician pages and
+scoped clip feeds remain reloadable on the static InstaPods host.
+
+**Scope — may create or modify:**
+
+```
+web/src/navigation.ts
+web/src/App.tsx
+docs/BUILD_PLAN.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** visual layout, feed ordering, playback ownership,
+Supabase reads or writes, comments, onboarding, numbered pipeline stages,
+`src/contracts.py`, migrations and generated media.
+
+**Build.** Add a small hash router over the browser History API. Each deliberate
+screen transition pushes one same-document history entry; `popstate` restores
+the corresponding app state. Hash URLs are required because InstaPods serves a
+static root and has no path-based SPA fallback. Keep route state limited to
+public identifiers and screen choices; do not put library contents in the URL
+or history state.
+
+**Acceptance:** Hem → Sök → Profil traverses back to Sök and Hem before leaving
+Pleni; Forward restores Sök and Profil. Politician pages and saved/person clip
+feeds return to their parent screen. Reloading a supported hash restores that
+screen. Malformed hashes fail safely to Hem. TypeScript, the Vite production
+build and the full Python acceptance command are green.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.

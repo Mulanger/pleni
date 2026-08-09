@@ -3207,3 +3207,45 @@ no re-download.
   unverified. Yield is not precision. `speaker_verified_crop_design.md` §9.2
   specifies the set; the rule of three means zero failures in 100 audited clips
   bounds the true failure rate at ~3%, not 0.
+
+## UI6 — browser-history navigation — DONE 2026-08-09
+
+**Built:** `web/src/navigation.ts`, integration in `web/src/App.tsx`, and the
+UI6 scope in `docs/BUILD_PLAN.md`.
+**Tests:** Ten route parse/serialize checks green; direct TypeScript check and
+Vite production build green; `python tasks.py test lint typecheck` green (352
+passed, 68 deselected, one existing `audioop` warning; lint and strict typing
+clean).
+**Contracts touched:** none.
+
+**Decisions made:**
+- Pleni now pushes a browser-history entry for bottom tabs, `För dig`/`Senaste`,
+  politician profiles, saved clips and politician clip feeds. Browser Back and
+  Forward restore those screens in order instead of leaving Pleni on the first
+  Back press.
+- Routes use URL hashes, such as `#/sok` and `#/person/<id>`, because the
+  InstaPods deployment is a static host with no path-based SPA fallback. Hash
+  routes survive reloads without a server rewrite or a router dependency.
+- History and URLs contain only public screen choices and public politician or
+  clip identifiers. Saved/followed library contents remain outside both.
+- Unknown or malformed hashes fail safely to Hem. An in-app back button on a
+  directly loaded deep link falls back to its parent tab rather than creating a
+  navigation loop.
+
+**Observations (not fixed, out of scope):**
+- The available browser-control runtime could not attach in this session, so
+  verification used the complete route round-trip matrix, compiled bundle and
+  production build rather than automated Back/Forward clicks in a mobile pane.
+- Comment and onboarding sheets remain transient overlays rather than history
+  entries. UI6 covers navigable screens and tabs; modal dismissal semantics are
+  unchanged.
+
+**Blocked / needs a decision:**
+- none.
+
+**Next agent should know:**
+- Do not replace the hash routes with path routes unless InstaPods first gains
+  an SPA fallback; direct reloads on `/person/...` would otherwise return 404.
+- `web/src/navigation.ts` is the single owner of route parsing, serialization
+  and the History API marker. Add future screens there instead of calling
+  `pushState` from components.
