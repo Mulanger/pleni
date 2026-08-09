@@ -1648,12 +1648,11 @@ function ClipMeta({
         >
           {following ? "Följer" : "Följ"}
         </button>
-        <time className="clip-debate-date" dateTime={clip.debateDate}>
-          {formatDate(clip.debateDate)}
-        </time>
       </div>
       <div className="clip-title">{clip.title}</div>
-      <div className="clip-subtitle">{clip.sourceTitle}</div>
+      <div className="clip-subtitle">
+        {clip.sourceTitle} · {formatDate(clip.debateDate)}
+      </div>
       <a className="source-link" href={clip.sourceUrl} target="_blank" rel="noreferrer">
         Hela debatten
         <ArrowUpRight size={13} />

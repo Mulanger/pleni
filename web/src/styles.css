@@ -345,14 +345,6 @@ a {
   gap: 10px;
 }
 
-.clip-debate-date {
-  flex: 0 0 auto;
-  margin-left: auto;
-  color: #6e6e68;
-  font-size: 11.5px;
-  white-space: nowrap;
-}
-
 .person-pill {
   display: flex;
   flex: 1;
@@ -416,7 +408,6 @@ a {
 }
 
 .follow-button {
-  flex: 0 0 auto;
   height: 40px;
   padding: 0 16px;
   border-radius: 999px;
@@ -1497,15 +1488,13 @@ a {
 }
 
 .person-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(68px, auto);
   gap: 8px;
 }
 
 .person-pill {
-  width: 100%;
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: none;
+  max-width: calc(100% - 82px);
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -1691,14 +1680,6 @@ a {
   .feed-screen ~ .bottom-nav {
     height: calc(54px + env(safe-area-inset-bottom));
   }
-}
-
-.clip-debate-date {
-  justify-self: center;
-  margin-left: 0;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 11.25px;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.64);
 }
 
 /* --- Per-video comments ----------------------------------------------- */
