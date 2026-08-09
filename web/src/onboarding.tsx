@@ -5,7 +5,8 @@ import { PARTIES } from "./data";
 import type { OnboardingState, PartyCode } from "./types";
 
 /**
- * Three-step onboarding, shown once and re-openable from Profil.
+ * Three-step onboarding, shown once per signed-in account and re-openable from
+ * Profil. Anonymous visitors never see this flow.
  *
  * **Everything here stays on the device.** `C-5` allows exactly this and no
  * more: "Until the user actively grants, party choices stay local and no watch
@@ -19,8 +20,8 @@ import type { OnboardingState, PartyCode } from "./types";
  *
  * 1. **Only offered processing is shown.** This release offers personalisation
  *    only. Analytics and email are neither collected nor presented as choices.
- *    Accepting the terms remains separate from agreeing to be profiled, and
- *    personalisation defaults to off.
+ *    Terms are linked at account creation; the privacy notice is information,
+ *    not a bundled acceptance. Personalisation defaults to off.
  * 2. **Onboarding can be skipped.** The design gated the whole app behind
  *    accepting terms. `A-9` and decision 3 of the launch plan both require the
  *    non-personalised `Senaste` feed to stay fully usable without consent —
@@ -43,7 +44,6 @@ export function Onboarding({
   const [leaning, setLeaning] = useState(initial.leaning);
   const [parties, setParties] = useState<PartyCode[]>(initial.parties);
   const [consent, setConsent] = useState(initial.consent);
-  const [acceptedTerms, setAcceptedTerms] = useState(initial.acceptedTerms);
   const [done, setDone] = useState(false);
 
   const toggleParty = (party: PartyCode) =>
@@ -66,7 +66,9 @@ export function Onboarding({
       leaning,
       parties,
       consent: granted,
-      acceptedTerms,
+      // Account creation presents the current terms before Clerk opens. This
+      // local marker is UI state, not the future F1 consent ledger.
+      acceptedTerms: true,
       completedAt: new Date().toISOString()
     });
     setConsent(granted);
@@ -224,48 +226,24 @@ export function Onboarding({
               <span className="onboarding-icon">
                 <ShieldCheck size={22} />
               </span>
-              <h2>Villkor & samtycke</h2>
+              <h2>Ditt flöde, ditt val</h2>
               <p className="onboarding-lede">
-                Personaliserat flöde kräver att du slår på personalisering. Utan den ser du{" "}
+                Dina val sparas bara på den här enheten. Utan personalisering ser du{" "}
                 <strong>Senaste</strong> — alla klipp, senaste först.
               </p>
 
-              <label className="terms-row">
-                <span className="terms-copy">
-                  Jag har läst och godkänner användarvillkoren och integritetspolicyn.
+              <div className="onboarding-age-note">
+                <strong>Konto och ålder</strong>
+                <span>
+                  Om du är under 13 år behöver du din vårdnadshavares tillstånd för att
+                  använda ett konto.
                 </span>
-                <span className={acceptedTerms ? "tick tick--on" : "tick"}>
-                  {acceptedTerms && <Check size={14} />}
-                </span>
-                <input
-                  type="checkbox"
-                  checked={acceptedTerms}
-                  onChange={(event) => setAcceptedTerms(event.target.checked)}
-                />
-              </label>
-
-              <label className="consent-row consent-row--personal">
-                <span className="consent-copy">
-                  <strong>Personaliserat flöde</strong>
-                  <small>Använder dina val och ditt tittande för att välja klipp åt dig.</small>
-                </span>
-                <span className={consent.personal ? "switch switch--on" : "switch"}>
-                  <span className="switch-dot" />
-                </span>
-                <input
-                  type="checkbox"
-                  checked={consent.personal}
-                  onChange={() =>
-                    setConsent((current) => ({ ...current, personal: !current.personal }))
-                  }
-                />
-              </label>
+              </div>
 
               <div className="consent-choice">
                 <button
                   type="button"
                   className="onboarding-primary"
-                  disabled={!acceptedTerms}
                   onClick={() => finish({ personal: true, analytics: false, email: false })}
                 >
                   Slå på personalisering
@@ -273,7 +251,6 @@ export function Onboarding({
                 <button
                   type="button"
                   className="onboarding-primary onboarding-primary--ghost"
-                  disabled={!acceptedTerms}
                   onClick={() => finish({ personal: false, analytics: false, email: false })}
                 >
                   Fortsätt utan
@@ -281,7 +258,8 @@ export function Onboarding({
               </div>
 
               <p className="onboarding-fineprint">
-                Du kan stänga av personalisering när som helst under Profil.
+                Du kan stänga av personalisering när som helst under Profil. Villkor och
+                integritetsinformation finns alltid där.
               </p>
             </div>
           )}

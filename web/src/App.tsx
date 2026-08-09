@@ -6,7 +6,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
-  Download,
   Flag,
   Heart,
   Home,
@@ -18,7 +17,6 @@ import {
   Search,
   Send,
   Share2,
-  ShieldCheck,
   Sliders,
   Trash2,
   UserPlus,
@@ -34,7 +32,6 @@ import {
   SignOutButton,
   SignUpButton,
   UserButton,
-  useSession,
   useUser
 } from "@clerk/react";
 import { clerkEnabled, useViewer } from "./clerk";
@@ -54,9 +51,10 @@ import { initials, PARTIES, partyInk, partyTint, TRENDING } from "./data";
 import { Onboarding } from "./onboarding";
 import { EMPTY_ONBOARDING, readOnboarding, writeOnboarding } from "./onboarding-store";
 import { EMPTY_LIBRARY, readLibrary, toggleInList, writeLibrary } from "./library-store";
+import { LEGAL_PAGE_ORDER, LEGAL_PAGES, LEGAL_VERSION } from "./legal";
+import type { LegalPageId } from "./legal";
 import { useAppNavigation } from "./navigation";
 import {
-  checkClerkSupabaseLink,
   loadClipsByIds,
   loadClipsForParty,
   loadClipsForPolitician,
@@ -68,7 +66,6 @@ import {
   loadPublishedClips,
   searchPoliticians
 } from "./supabase";
-import type { ClerkSupabaseLinkStatus } from "./supabase";
 import type {
   ClipItem,
   ClipSource,
@@ -186,14 +183,20 @@ function App() {
   const [onboarding, setOnboarding] = useState<OnboardingState>(EMPTY_ONBOARDING);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const consent = onboarding.consent;
+  const viewer = useViewer();
 
   useEffect(() => {
-    const stored = readOnboarding();
+    if (!viewer.signedIn || !viewer.userId) {
+      setOnboarding(EMPTY_ONBOARDING);
+      setShowOnboarding(false);
+      return;
+    }
+    const stored = readOnboarding(viewer.userId);
     setOnboarding(stored);
-    // First run only. Skipping counts as answered so it does not nag; Profil
-    // has a row to reopen it.
+    // One first run per Clerk account. Anonymous visitors never enter the flow;
+    // skipping still counts as answered so it does not nag on every sign-in.
     setShowOnboarding(stored.completedAt === null);
-  }, []);
+  }, [viewer.signedIn, viewer.userId]);
 
   /**
    * The library belongs to an account, not to a device.
@@ -204,8 +207,6 @@ function App() {
    * profile — `Senaste` must keep working signed out, which is the acceptance
    * criterion F1 states.
    */
-  const viewer = useViewer();
-
   // Load on sign-in, drop on sign-out. Reading is keyed on the account, so
   // switching users on a shared device swaps the library rather than merging it.
   useEffect(() => {
@@ -280,7 +281,7 @@ function App() {
 
   const saveOnboarding = (next: OnboardingState) => {
     setOnboarding(next);
-    writeOnboarding(next);
+    writeOnboarding(viewer.userId, next);
   };
 
   const setConsent = (
@@ -450,6 +451,10 @@ function App() {
     navigate({ view: "tab", tab: "foljer", feedMode });
   };
 
+  const openLegal = (page: LegalPageId) => {
+    navigate({ view: "legal", tab: "profil", feedMode, page });
+  };
+
   useEffect(() => {
     if (route.view === "person-clips") {
       setCollection({
@@ -531,7 +536,7 @@ function App() {
   return (
     <>
       <WideScreenMessage />
-      {showOnboarding && (
+      {viewer.signedIn && showOnboarding && (
         <Onboarding
           initial={onboarding}
           onComplete={(next) => saveOnboarding(next)}
@@ -546,7 +551,13 @@ function App() {
         />
       )}
       <main className="mobile-app" aria-label="Pleni">
-        {route.view === "person-clips" || route.view === "party-clips" || route.view === "saved-clips" ? (
+        {route.view === "legal" ? (
+          <LegalScreen
+            page={route.page}
+            onBack={() => backTo({ view: "tab", tab: "profil", feedMode })}
+            onNavigate={openLegal}
+          />
+        ) : route.view === "person-clips" || route.view === "party-clips" || route.view === "saved-clips" ? (
           <CollectionScreen
             collection={
               collection ?? { title: "Klipp", subtitle: "Laddar…", clips: [], startId: null }
@@ -644,6 +655,7 @@ function App() {
             )}
             {tab === "profil" && (
               <ProfileScreen
+                signedIn={viewer.signedIn}
                 consent={consent}
                 selectedParties={onboarding.parties.length}
                 savedCount={library.savedClips.length}
@@ -654,6 +666,7 @@ function App() {
                 onOpenFollowing={openFollowing}
                 onEditInterests={() => setShowOnboarding(true)}
                 onToggleConsent={(key) => setConsent((state) => ({ ...state, [key]: !state[key] }))}
+                onOpenLegal={openLegal}
               />
             )}
             <BottomNav
@@ -2245,7 +2258,87 @@ function SearchScreen({
   );
 }
 
+function LegalScreen({
+  page,
+  onBack,
+  onNavigate
+}: {
+  page: LegalPageId;
+  onBack: () => void;
+  onNavigate: (page: LegalPageId) => void;
+}) {
+  const document = LEGAL_PAGES[page];
+  return (
+    <section className="panel-screen legal-screen">
+      <header className="legal-topbar">
+        <button type="button" aria-label="Tillbaka till Profil" onClick={onBack}>
+          <ChevronLeft size={20} />
+        </button>
+        <span>Juridisk information</span>
+      </header>
+      <div className="legal-scroll">
+        <header className="legal-intro">
+          <span className="legal-kicker">Pleni</span>
+          <h1>{document.title}</h1>
+          <p>{document.summary}</p>
+          <time dateTime={LEGAL_VERSION}>Gäller från 9 augusti 2026 · version {LEGAL_VERSION}</time>
+        </header>
+
+        <div className="legal-document">
+          {document.sections.map((section) => (
+            <section key={section.title} className="legal-section">
+              <h2>{section.title}</h2>
+              {section.paragraphs?.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+              {section.bullets && (
+                <ul>
+                  {section.bullets.map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              )}
+              {section.links && (
+                <div className="legal-source-links">
+                  {section.links.map((link) => {
+                    const external = link.href.startsWith("http");
+                    return (
+                      <a
+                        key={link.href}
+                        href={link.href}
+                        target={external ? "_blank" : undefined}
+                        rel={external ? "noreferrer" : undefined}
+                      >
+                        {link.label}
+                        {external && <ArrowUpRight size={13} />}
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          ))}
+        </div>
+
+        <nav className="legal-related" aria-label="Fler juridiska sidor">
+          <span>Mer information</span>
+          <div>
+            {LEGAL_PAGE_ORDER.map((relatedPage) => (
+              <button
+                key={relatedPage}
+                type="button"
+                className={relatedPage === page ? "is-current" : undefined}
+                aria-current={relatedPage === page ? "page" : undefined}
+                onClick={() => onNavigate(relatedPage)}
+              >
+                {LEGAL_PAGES[relatedPage].shortTitle}
+              </button>
+            ))}
+          </div>
+        </nav>
+      </div>
+    </section>
+  );
+}
+
 function ProfileScreen({
+  signedIn,
   consent,
   selectedParties,
   savedCount,
@@ -2255,8 +2348,10 @@ function ProfileScreen({
   onOpenSaved,
   onOpenFollowing,
   onEditInterests,
-  onToggleConsent
+  onToggleConsent,
+  onOpenLegal
 }: {
+  signedIn: boolean;
   consent: { personal: boolean; analytics: boolean; email: boolean };
   selectedParties: number;
   savedCount: number;
@@ -2267,6 +2362,7 @@ function ProfileScreen({
   onOpenFollowing: () => void;
   onEditInterests: () => void;
   onToggleConsent: (key: keyof typeof consent) => void;
+  onOpenLegal: (page: LegalPageId) => void;
 }) {
   const totalFollowed = followedCount + followedPartyCount;
   const followedSummary = [
@@ -2283,75 +2379,81 @@ function ProfileScreen({
     {
       key: "personal" as const,
       title: "Personaliserat flöde",
-      help: "Använder dina val och ditt tittande för att välja klipp."
+      help: "Sparar dina val på enheten. Tittarhistorik skickas inte till Pleni."
     }
   ];
   return (
     <section className="panel-screen">
       <Header title="Profil" />
       <div className="panel-scroll">
-        <AccountCard />
+        <AccountCard onOpenLegal={onOpenLegal} />
         {/* These counts used to be invented ("Sparade klipp 24"). They are now
             the real length of the device-local library — see
             `library-store.ts`. Still not server-side: that is `C-9`, gated on
             F1. */}
-        <Group title="Konto">
-          <ListRow
-            title="Sparade klipp"
-            subtitle={
-              savedCount === 0
-                ? "Inga sparade klipp ännu"
-                : `${savedCount} ${savedCount === 1 ? "klipp" : "klipp"} · sparas bara på den här enheten`
-            }
-            icon={<Bookmark size={18} />}
-            onClick={savedCount > 0 && !savedLoading ? onOpenSaved : undefined}
-            chevron={savedCount > 0}
-          />
-          <ListRow
-            title="Följer"
-            subtitle={
-              totalFollowed === 0
-                ? "Du följer ingen ännu"
-                : `${followedSummary} · sparas bara på den här enheten`
-            }
-            icon={<UserPlus size={18} />}
-            onClick={onOpenFollowing}
-            chevron
-          />
-        </Group>
-        <Group title="Mina intressen">
-          <ListRow
-            title="Redigera mina intressen"
-            subtitle={
-              selectedParties > 0
-                ? `${selectedParties} partier valda · sparas bara på den här enheten`
-                : "Inga partier valda ännu"
-            }
-            icon={<Sliders size={18} />}
-            onClick={onEditInterests}
-            chevron
-          />
-        </Group>
-        <Group title="Personalisering">
-          {consentRows.map((row) => (
-            <ListRow
-              key={row.key}
-              title={row.title}
-              subtitle={row.help}
-              action={<Switch checked={consent[row.key]} onChange={() => onToggleConsent(row.key)} />}
-            />
-          ))}
-        </Group>
-        <Group title="Integritet & data">
-          <ListRow title="Ladda ner mina data" icon={<Download size={18} />} chevron />
-          <ListRow title="Samtycken & cookies" icon={<ShieldCheck size={18} />} chevron />
-          <ListRow title="Radera konto" icon={<Trash2 size={18} />} tone="danger" chevron />
-        </Group>
-        {clerkEnabled && (
-          <Show when="signed-in">
-            <AuthDiagnostics />
-          </Show>
+        {signedIn && (
+          <>
+            <Group title="Konto">
+              <ListRow
+                title="Sparade klipp"
+                subtitle={
+                  savedCount === 0
+                    ? "Inga sparade klipp ännu"
+                    : `${savedCount} ${savedCount === 1 ? "klipp" : "klipp"} · sparas bara på den här enheten`
+                }
+                icon={<Bookmark size={18} />}
+                onClick={savedCount > 0 && !savedLoading ? onOpenSaved : undefined}
+                chevron={savedCount > 0}
+              />
+              <ListRow
+                title="Följer"
+                subtitle={
+                  totalFollowed === 0
+                    ? "Du följer ingen ännu"
+                    : `${followedSummary} · sparas bara på den här enheten`
+                }
+                icon={<UserPlus size={18} />}
+                onClick={onOpenFollowing}
+                chevron
+              />
+            </Group>
+            <Group title="Mina intressen">
+              <ListRow
+                title="Redigera mina intressen"
+                subtitle={
+                  selectedParties > 0
+                    ? `${selectedParties} partier valda · sparas bara på den här enheten`
+                    : "Inga partier valda ännu"
+                }
+                icon={<Sliders size={18} />}
+                onClick={onEditInterests}
+                chevron
+              />
+            </Group>
+            <Group title="Personalisering">
+              {consentRows.map((row) => (
+                <ListRow
+                  key={row.key}
+                  title={row.title}
+                  subtitle={row.help}
+                  action={
+                    <Switch
+                      checked={consent[row.key]}
+                      onChange={() => onToggleConsent(row.key)}
+                    />
+                  }
+                />
+              ))}
+            </Group>
+          </>
         )}
+        <nav className="profile-legal-links" aria-label="Juridisk information">
+          {LEGAL_PAGE_ORDER.map((page) => (
+            <button key={page} type="button" onClick={() => onOpenLegal(page)}>
+              {LEGAL_PAGES[page].shortTitle}
+            </button>
+          ))}
+        </nav>
         <div className="version">Pleni 1.0 · data från riksdagen.se</div>
       </div>
     </section>
@@ -2364,7 +2466,7 @@ function ProfileScreen({
  * Three states: Clerk not configured, signed out, signed in. The anonymous
  * `Senaste` feed works in all three — signing in is never required to watch.
  */
-function AccountCard() {
+function AccountCard({ onOpenLegal }: { onOpenLegal: (page: LegalPageId) => void }) {
   if (!clerkEnabled) {
     return (
       <div className="account-card account-card--muted">
@@ -2392,6 +2494,17 @@ function AccountCard() {
               <button className="account-button">Skapa konto</button>
             </SignUpButton>
           </div>
+          <p className="account-legal-copy">
+            Genom att skapa konto godkänner du{" "}
+            <button type="button" onClick={() => onOpenLegal("terms")}>
+              användarvillkoren
+            </button>
+            . Läs hur vi hanterar personuppgifter under{" "}
+            <button type="button" onClick={() => onOpenLegal("privacy")}>
+              integritet
+            </button>
+            . Om du är under 13 år behöver du din vårdnadshavares tillstånd.
+          </p>
         </div>
       </Show>
       <Show when="signed-in">
@@ -2420,92 +2533,6 @@ function SignedInAccountCard() {
       </SignOutButton>
     </div>
   );
-}
-
-/**
- * Signed-in-only check that the Clerk → Supabase link actually works.
- *
- * Prerequisite A-3 / A-4. Configuring the integration in two dashboards proves
- * nothing on its own; this calls `public.auth_probe()`, which is granted to
- * `authenticated` and revoked from `anon`, and shows what Postgres saw. A `sub`
- * that matches the Clerk user id is the end-to-end evidence.
- *
- * It reads only the signed-in caller's own claims and stays in the app on
- * purpose — a check that lives in someone's shell history is a check nobody
- * else can repeat.
- */
-function AuthDiagnostics() {
-  const { session } = useSession();
-  const [status, setStatus] = useState<ClerkSupabaseLinkStatus | null>(null);
-  const [running, setRunning] = useState(false);
-
-  const run = () => {
-    setRunning(true);
-    checkClerkSupabaseLink(async () => (await session?.getToken()) ?? null)
-      .then(setStatus)
-      .catch((error: unknown) =>
-        setStatus({
-          state: "rejected",
-          status: 0,
-          detail: error instanceof Error ? error.message : String(error),
-          token: {
-            sub: null,
-            role: null,
-            iss: null,
-            azp: null,
-            expiresInS: null,
-            claimKeys: [],
-            url: "(request never left the browser)"
-          }
-        })
-      )
-      .finally(() => setRunning(false));
-  };
-
-  return (
-    <Group title="Diagnostik">
-      <ListRow
-        title="Testa Clerk → Supabase"
-        subtitle={describeLinkStatus(status, running)}
-        action={
-          <button className="mini-button" onClick={run} disabled={running}>
-            Kör
-          </button>
-        }
-      />
-      {status?.state === "ok" && (
-        <pre className="diagnostic-output">{JSON.stringify(status.claims, null, 2)}</pre>
-      )}
-      {/* Always show the raw response and the token summary on failure. Which
-          of `iss`, `role` or the URL is wrong produces very different fixes,
-          and a one-line Swedish label cannot carry that. */}
-      {(status?.state === "rejected" || status?.state === "probe-missing") && (
-        <pre className="diagnostic-output">
-          {JSON.stringify({ token: status.token, response: status.detail }, null, 2)}
-        </pre>
-      )}
-    </Group>
-  );
-}
-
-function describeLinkStatus(status: ClerkSupabaseLinkStatus | null, running: boolean): string {
-  if (running) {
-    return "Kör…";
-  }
-  switch (status?.state) {
-    case undefined:
-      return "Kontrollerar att Supabase accepterar Clerk-token.";
-    case "ok":
-      return `OK — Postgres ser sub=${status.claims.sub ?? "?"} som roll ${status.claims.pg_role}.`;
-    case "probe-missing":
-      return "404 från Supabase — se svaret nedan.";
-    case "signed-out":
-      return "Ingen aktiv session.";
-    case "unconfigured":
-      return "Supabase är inte konfigurerat.";
-    case "rejected":
-      return `Avvisad med HTTP ${status.status}.`;
-  }
 }
 
 /**

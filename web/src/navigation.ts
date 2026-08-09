@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { LegalPageId } from "./legal";
 import type { FeedMode, PartyCode, Tab } from "./types";
 
 export type AppRoute =
@@ -20,7 +21,8 @@ export type AppRoute =
       startId: string | null;
     }
   | { view: "saved"; tab: "profil"; feedMode: FeedMode }
-  | { view: "saved-clips"; tab: "profil"; feedMode: FeedMode; startId: string | null };
+  | { view: "saved-clips"; tab: "profil"; feedMode: FeedMode; startId: string | null }
+  | { view: "legal"; tab: "profil"; feedMode: FeedMode; page: LegalPageId };
 
 const HISTORY_KEY = "pleniNavigation";
 const DEFAULT_ROUTE: AppRoute = { view: "tab", tab: "hem", feedMode: "fordig" };
@@ -31,6 +33,12 @@ function isTab(value: string | null): value is Tab {
 
 function feedMode(value: string | null): FeedMode {
   return value === "senaste" ? "senaste" : "fordig";
+}
+
+function legalPage(value: string | null): LegalPageId | null {
+  return value === "terms" || value === "privacy" || value === "storage" || value === "about"
+    ? value
+    : null;
 }
 
 function partyCode(value: string | null): PartyCode | null {
@@ -63,6 +71,12 @@ export function routeFromHash(hash: string): AppRoute {
 
   if (segments[0] === "hem") {
     return { view: "tab", tab: "hem", feedMode: mode };
+  }
+  if (segments[0] === "legal") {
+    const page = legalPage(segments[1] ?? null);
+    return page
+      ? { view: "legal", tab: "profil", feedMode: feedMode(params.get("feed")), page }
+      : { view: "tab", tab: "profil", feedMode: feedMode(params.get("feed")) };
   }
   if (segments[0] === "saved" || (segments[0] === "profil" && segments[1] === "saved")) {
     const clipsSegment = segments[0] === "saved" ? segments[1] : segments[2];
@@ -136,6 +150,9 @@ export function hashForRoute(route: AppRoute): string {
       params.set("clip", route.startId);
     }
     return `#/profil/saved/clips?${params.toString()}`;
+  }
+  if (route.view === "legal") {
+    return `#/legal/${route.page}?feed=${route.feedMode}`;
   }
 
   const params = new URLSearchParams({ from: route.tab, feed: route.feedMode });

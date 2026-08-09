@@ -3471,3 +3471,70 @@ existing `audioop` warning; lint and strict typing clean).
 - Run `python scripts/sync_politician_profiles.py` after a politician backfill or
   when official portraits may have changed. Exit status 2 means at least one
   source or mirror failed; successful rows are still updated safely.
+
+## UI12 - public legal information - SHIPPED 2026-08-09
+
+**Built:** removed the signed-in Clerk->Supabase diagnostic and raw auth-claim
+output; added static-host-safe legal routes and four public Swedish pages from
+the Profile footer; changed onboarding to run only after Clerk sign-in and once
+per account; scoped onboarding localStorage by Clerk user id; separated terms,
+privacy information and optional personalisation; removed non-functional data
+export/deletion controls; and created the F0 evidence pack in `docs/privacy/`.
+**Tests:** Direct TypeScript check and Vite production build green;
+`python tasks.py test lint typecheck` green (370 passed, 68 deselected, one
+existing `audioop` warning; lint and strict typing clean).
+**Contracts touched:** none.
+
+**Decisions made:**
+- Anonymous visitors enter the feed without onboarding, an age gate, terms
+  acceptance or a generic cookie banner. Clerk registration happens first; a
+  signed-in account without a completion marker then sees optional onboarding.
+- Under-13 account use needs guardian permission, stated without collecting a
+  birth date or adding an age checkbox. The owner rejected blanket 18+ access
+  and universal age assurance as disproportionate for parliamentary content.
+- Terms are presented with account creation. The Article 13 privacy notice is
+  accessible information, not something bundled into contractual acceptance.
+- Personalisation stays off until affirmatively selected. The public notice
+  states that the current release does not send viewing history or an inferred
+  political profile to a Pleni server.
+- Current storage is limited to necessary Clerk authentication and features the
+  signed-in viewer requests. There is no first-party analytics, advertising or
+  promoted political placement.
+- Public legal entry points are `Villkor`, `Integritet`, `Cookies` and
+  `Om & kontakt`. Comment rules, notice/action and objections live in the terms
+  and contact page instead of a separate thin page.
+- Fake `Ladda ner mina data` and `Radera konto` rows were removed. GDPR requests
+  use `kontakt@pleni.se` until real end-to-end workflows exist.
+
+**Live legal status:**
+- `kontakt@pleni.se` is the confirmed public contact.
+- `Pleni AB` is planned but not registered. Public copy explicitly does not
+  present it as an existing legal entity and records that name, organisation
+  number, registered seat and establishment address must be added after
+  incorporation.
+- F0-7 (minors), F0-8 (current ePrivacy classification), F0-10 (advertising
+  firewall) and the V1 F0-14 takedown path are recorded as decided. The DPIA,
+  inventory, processor register and operating policy are drafted but retain
+  their documented launch gates for future server-side profiling.
+
+**Observations (not fixed, out of scope):**
+- Clerk, Supabase, Bunny and InstaPods account-side DPA, region, log-retention,
+  backup and subprocessors evidence still needs an operator dashboard audit.
+- Clerk account deletion is not yet an end-to-end deletion cascade for Supabase
+  comment identities/reports. Do not claim it is until F0-12/A-14 is tested.
+- A real recommender still needs the versioned server consent ledger, fixed
+  retention jobs, party-balance policy and updated notice/DPIA before collecting
+  viewing events or inferred political interests.
+
+**Blocked / needs a decision:**
+- Complete legal operator information cannot be published until the operating
+  person/entity is identified or Pleni AB is registered with an organisation
+  number, seat and establishment address. This is disclosed rather than filled
+  with a placeholder.
+
+**Next agent should know:**
+- Do not restore `AuthDiagnostics` or the old anonymous first-run onboarding.
+  Do not read the bare legacy onboarding key into a Clerk account.
+- `web/src/legal.ts` is the canonical public copy. Any new provider, storage
+  purpose, analytics event or recommender input requires a new notice version
+  and matching updates under `docs/privacy/` before deployment.

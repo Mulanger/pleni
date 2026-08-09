@@ -979,6 +979,67 @@ Bunny URLs; the full Python acceptance command and frontend build are green.
 
 ---
 
+## UI12 — Public legal information
+
+**Depends on:** F0 and UI6 navigation. **Size:** medium.
+
+**Objective.** Replace development-only profile diagnostics and placeholder
+privacy controls with a small, durable legal-information area whose text
+matches what Pleni actually does today.
+
+**Scope — may create or modify:**
+
+```
+web/src/App.tsx
+web/src/navigation.ts
+web/src/onboarding.tsx
+web/src/onboarding-store.ts
+web/src/styles.css
+web/src/legal.ts
+web/src/types.ts
+docs/privacy/
+docs/BUILD_PLAN.md
+docs/RECOMMENDATION_PREREQUISITES.md  # F0 status only
+PROGRESS.md
+```
+
+**Scope — must not touch:** `src/contracts.py`, numbered pipeline stages,
+published clip metadata, feed ordering, recommendation algorithms, private
+database schema, generated media, or already-applied migrations. Do not claim
+that export, deletion, consent withdrawal or moderation workflows exist unless
+the corresponding behavior is implemented and verified.
+
+**Build.** Remove the signed-in Clerk/Supabase diagnostic from the production
+Profile. Add quiet footer links to versioned Swedish terms, privacy information,
+cookie/local-storage information, and operator/contact information, with hash
+routes that participate in the existing browser history. Terms acceptance may
+link to the terms, but the Article 13 privacy notice is information and must not
+be presented as a contract the viewer has to accept. Describe the current Clerk,
+Supabase, Bunny/CDN and device-local data flows, purposes, legal bases,
+recipients/transfers, retention, rights, recommendation status, children,
+comments/reporting and source attribution without placeholders or promises about
+future features. Identify every cookie/local-storage purpose, provider and
+duration; add a consent surface only for storage that is not strictly necessary
+for a service requested by the viewer. Publish the legal operator's real name,
+establishment address and email, plus organisation/VAT details when applicable.
+
+**Acceptance:** the production diagnostic and its raw claim output are gone;
+all legal pages are reachable from Profile and direct hash URLs; browser Back
+returns to Profile; content remains readable at 390×844 and includes version and
+effective date; onboarding links to the exact terms version and does not bundle
+privacy information into consent; the operator identity, age policy, retention
+decisions and actual third-party configuration are owner-confirmed; TypeScript,
+the Vite production build and the full Python acceptance command are green.
+
+**2026-08-09 launch note:** the owner confirmed `kontakt@pleni.se`, the
+low-friction minors policy and current-release storage decisions. `Pleni AB` is
+planned but is not registered and there is no establishment address yet. UI12
+therefore ships an explicit disclosure of that gap instead of a fabricated
+company identity; full operator information and provider-account DPA/log
+verification remain open legal-operational work.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.

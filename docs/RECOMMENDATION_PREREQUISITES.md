@@ -2,7 +2,7 @@
 
 **Status:** Working checklist. Not yet reviewed or signed off.
 
-**Last updated:** 2026-08-02 (second pass — P0 completed, Block O started, F1 planned)
+**Last updated:** 2026-08-09 (UI12 legal surfaces and F0 evidence pack)
 
 **Companion to:** `docs/RECOMMENDATION_LAUNCH_PLAN.md` (the architecture), `docs/BUILD_PLAN.md` (the chunks), `AGENTS.md` (the rules).
 
@@ -587,6 +587,7 @@ GDPR Article 9, which changes what is legal, not just what is polite.
       criterion 1 (evaluation/profiling of internet users) and criterion 4 (special-category
       data); two criteria trigger the requirement. Complete it *before* collection begins.
       Drafted in-repo against IMY's published criteria; approved by the project owner.
+      **Draft now exists:** `docs/privacy/DPIA.md`; owner approval and a pre-F3 re-run remain.
 - [x] **F0-2 · DECIDED 2026-08-02 — No external counsel review.** The project owner has
       decided not to engage Swedish privacy counsel, and accepts the residual risk of
       proceeding on an in-house Article 6 / Article 9(2)(a) analysis.
@@ -600,9 +601,13 @@ GDPR Article 9, which changes what is legal, not just what is polite.
 - [ ] **F0-3 · GATE — Article 13 privacy notice**, in plain Swedish, stating explicitly that
       viewing activity will be used to infer political interests. "Personalisera mitt flöde" on
       its own is not specific enough to be valid consent.
+      **Current-processing notice is live:** `web/src/legal.ts`. It states that this release does
+      not send viewing history to a Pleni server; this item remains open until the notice is
+      revised before real behavioural profiling starts.
 - [ ] **F0-4 · GATE — Data-flow inventory**, covering Clerk (identity, likely a US processor —
       transfer mechanism required), Supabase (storage and compute), Bunny (media **and access
       logs**), and any analytics. Every field gets a purpose and a retention rule.
+      **Draft:** `docs/privacy/DATA_FLOW_INVENTORY.md`; provider-account log settings remain.
 - [ ] **F0-5 — Processor agreements and subprocessor review** for Clerk, Supabase and Bunny,
       plus international-transfer assessment.
 - [ ] **F0-6 · GATE — Retention decisions.** Approve or replace the provisional periods: raw
@@ -610,16 +615,21 @@ GDPR Article 9, which changes what is legal, not just what is polite.
       evidence for as long as the account exists plus 12 months. Approved by the project
       owner, not by counsel (`F0-2`). Address deletion from backups and from learned-model
       lineage.
-- [ ] **F0-7 · GATE — Minors policy.** Recommended V1: no political profile inferred or persisted
-      under 18; non-profiled feed instead. Under 13, verified parental authorization is generally
-      required in Sweden when relying on consent. Decide the age-assurance mechanism and collect
-      no more age data than it needs.
-- [ ] **F0-8 — ePrivacy / cookie assessment.** Clerk sets session cookies; local storage and any
-      device identifier is in scope. Classify each as strictly necessary or consent-requiring.
+- [x] **F0-7 · DECIDED 2026-08-09 — Minors policy.** Public video remains available to everyone.
+      Accounts state that under-13 use needs guardian permission. V1 collects no birth date,
+      identity document or age-attestation field and uses no universal age gate; the owner chose
+      this as the proportionate approach for general-audience parliamentary content. Reassess
+      before adding materially riskier interactions. See `docs/privacy/OPERATING_POLICY.md`.
+- [x] **F0-8 · CURRENT RELEASE 2026-08-09 — ePrivacy / cookie assessment.** Clerk auth storage is
+      necessary when account functionality is requested; account-scoped onboarding/library
+      storage is written for a feature the signed-in viewer requests; optional personalisation
+      defaults off. There is no analytics or advertising storage. Reopen for every new purpose.
 - [ ] **F0-9 — DSA classification.** If Article 27 applies, the main recommender parameters and
       their relative importance must be explained and the feed choice directly accessible. Build
       the transparency controls regardless — they are good product.
-- [ ] **F0-10 — Advertising firewall.** No recommendation political-interest data reaches any ad
+      **V1 operating position:** treat stored comments conservatively as hosting for notice/action
+      even while the formal ancillary-feature/online-platform classification remains open.
+- [x] **F0-10 · DECIDED 2026-08-09 — Advertising firewall.** No recommendation political-interest data reaches any ad
       system, and no paid or promoted political placement, without a separate reviewed project.
       DSA Article 26(3) and Regulation (EU) 2024/900 Article 18 prohibit the profiling-based
       case; explicit consent is not a workaround.
@@ -630,8 +640,10 @@ GDPR Article 9, which changes what is legal, not just what is polite.
 - [ ] **F0-13 — Party-balance policy decision.** Equal exposure, proportional exposure,
       user-controlled, or measurement only? Until it is decided, use transparent soft repetition
       caps at the serving layer and do not claim political neutrality.
-- [ ] **F0-14 — Human review and takedown path** for misleading or materially stale clips,
-      decided before broad launch.
+- [x] **F0-14 · V1 DECIDED 2026-08-09 — Human review and takedown path.** In-context comment
+      reports plus `kontakt@pleni.se` cover comments, clips, rights, corrections and objections;
+      the operator can hide/restore/delete through the existing moderation RPC. Response SLO and
+      notification automation remain operational hardening. See `docs/privacy/OPERATING_POLICY.md`.
 
 ---
 
