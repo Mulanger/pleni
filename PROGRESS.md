@@ -3510,6 +3510,11 @@ existing `audioop` warning; lint and strict typing clean).
 - The `Konto`, `Mina intressen` and `Personalisering` groups remain visible to
   signed-out visitors. Account-required taps open Clerk; legal pages stay public.
 
+**Follow-up - onboarding trigger corrected 2026-08-09:**
+- A missing device-local completion marker is no longer treated as proof of a
+  new account. Onboarding requires Clerk's completed-sign-up redirect plus a
+  first-session timestamp match. Restored sessions and normal sign-ins skip it.
+
 **Live legal status:**
 - `kontakt@pleni.se` is the confirmed public contact.
 - `Pleni AB` is planned but not registered. Public copy explicitly does not

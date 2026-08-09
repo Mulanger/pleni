@@ -78,6 +78,25 @@ import type {
   Tab
 } from "./types";
 
+const NEW_ACCOUNT_QUERY = "pleni_new_account";
+
+function hasNewAccountRedirect(): boolean {
+  return new URLSearchParams(window.location.search).get(NEW_ACCOUNT_QUERY) === "1";
+}
+
+function clearNewAccountRedirect(): void {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has(NEW_ACCOUNT_QUERY)) {
+    return;
+  }
+  url.searchParams.delete(NEW_ACCOUNT_QUERY);
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${url.pathname}${url.search}${url.hash}`
+  );
+}
+
 type BooleanMap = Record<string, boolean>;
 type NumberMap = Record<string, number>;
 type PlaybackFlash = { clipId: string; icon: "play" | "pause"; nonce: number };
@@ -182,6 +201,7 @@ function App() {
   // somewhere lawful to go (C-1, C-2, C-5).
   const [onboarding, setOnboarding] = useState<OnboardingState>(EMPTY_ONBOARDING);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [newAccountRedirect, setNewAccountRedirect] = useState(hasNewAccountRedirect);
   const consent = onboarding.consent;
   const viewer = useViewer();
 
@@ -193,10 +213,18 @@ function App() {
     }
     const stored = readOnboarding(viewer.userId);
     setOnboarding(stored);
-    // One first run per Clerk account. Anonymous visitors never enter the flow;
-    // skipping still counts as answered so it does not nag on every sign-in.
-    setShowOnboarding(stored.completedAt === null);
-  }, [viewer.signedIn, viewer.userId]);
+    // Missing local state alone does not mean the account is new. Clerk can
+    // restore an existing session on app launch, including on another device.
+    // The flow opens only after Clerk's completed-sign-up redirect and only
+    // when this is genuinely the account's first sign-in session.
+    const shouldShow =
+      newAccountRedirect && viewer.newAccountSession && stored.completedAt === null;
+    setShowOnboarding(shouldShow);
+    if (newAccountRedirect && !shouldShow) {
+      clearNewAccountRedirect();
+      setNewAccountRedirect(false);
+    }
+  }, [newAccountRedirect, viewer.newAccountSession, viewer.signedIn, viewer.userId]);
 
   /**
    * The library belongs to an account, not to a device.
@@ -539,9 +567,14 @@ function App() {
       {viewer.signedIn && showOnboarding && (
         <Onboarding
           initial={onboarding}
-          onComplete={(next) => saveOnboarding(next)}
+          onComplete={(next) => {
+            saveOnboarding(next);
+            clearNewAccountRedirect();
+          }}
           onSkip={() => {
             setShowOnboarding(false);
+            clearNewAccountRedirect();
+            setNewAccountRedirect(false);
             // A skip is an answer. Stamping it stops the flow reappearing on
             // every load; Profil has a row to reopen it deliberately.
             if (onboarding.completedAt === null) {

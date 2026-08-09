@@ -46,6 +46,7 @@ const appearance = {
 export function useViewer(): {
   signedIn: boolean;
   userId: string | null;
+  newAccountSession: boolean;
   suggestedUsername: string | null;
   getAccessToken: () => Promise<string | null>;
   requireSignIn: () => void;
@@ -54,6 +55,7 @@ export function useViewer(): {
     return {
       signedIn: false,
       userId: null,
+      newAccountSession: false,
       suggestedUsername: null,
       getAccessToken: async () => null,
       requireSignIn: () => {}
@@ -66,10 +68,17 @@ export function useViewer(): {
   const clerk = useClerk();
   // eslint-disable-next-line react-hooks/rules-of-hooks -- build-time constant, see above.
   const { session } = useSession();
+  const createdAt = user?.createdAt?.getTime() ?? null;
+  const lastSignInAt = user?.lastSignInAt?.getTime() ?? null;
 
   return {
     signedIn: !!isSignedIn,
     userId: user?.id ?? null,
+    // A successful sign-up starts the first session at essentially the same
+    // time the user row is created. A normal sign-in has a newer
+    // `lastSignInAt`, so it must never be mistaken for account creation.
+    newAccountSession:
+      createdAt !== null && lastSignInAt !== null && Math.abs(lastSignInAt - createdAt) <= 60_000,
     // Only Clerk's explicit username is suggested. A full name or email local
     // part must never be turned into a public comment identity implicitly.
     suggestedUsername: user?.username ?? null,
@@ -94,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localization={svSE}
       appearance={appearance}
       afterSignOutUrl="/"
+      signUpForceRedirectUrl="/?pleni_new_account=1"
     >
       {children}
     </ClerkProvider>

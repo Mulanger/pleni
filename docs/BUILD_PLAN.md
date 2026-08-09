@@ -991,6 +991,7 @@ matches what Pleni actually does today.
 
 ```
 web/src/App.tsx
+web/src/clerk.tsx
 web/src/navigation.ts
 web/src/onboarding.tsx
 web/src/onboarding-store.ts
@@ -1037,6 +1038,10 @@ planned but is not registered and there is no establishment address yet. UI12
 therefore ships an explicit disclosure of that gap instead of a fabricated
 company identity; full operator information and provider-account DPA/log
 verification remain open legal-operational work.
+
+**Post-launch correction 2026-08-09:** onboarding is keyed to Clerk's
+successful sign-up redirect and a first-session timestamp check. Restoring an
+existing Clerk session or signing into an older account must never open it.
 
 ---
 
