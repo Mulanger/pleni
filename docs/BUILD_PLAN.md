@@ -1045,6 +1045,44 @@ existing Clerk session or signing into an older account must never open it.
 
 ---
 
+## UI13 — Resilient self-hosted portraits
+
+**Depends on:** UI11. **Size:** small.
+
+**Objective.** Make a politician identity visually stable even when a mobile
+request briefly fails, and never give the browser an unverified Riksdagen URL
+under the assumption that it is a Pleni-hosted portrait.
+
+**Scope — may create or modify:**
+
+```
+migrations/016_verified_portrait_urls.{up,down}.sql
+scripts/sync_politician_profiles.py
+tests/unit/test_{profile_sync,publish_migrations}.py
+web/src/App.tsx                  # Avatar delivery only
+docs/{BUILD_PLAN,RUNBOOK}.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** `src/contracts.py`, video/thumbnail delivery,
+profile layout, feed ordering, camera or render code, private user data, the
+official image bytes, or already-applied migration files.
+
+**Build.** Treat `avatar_source_url` as provenance only. A public `avatar_url`
+is either a content-addressed Bunny object accompanied by its verified SHA-256,
+or null. Preserve the last verified mirror on refresh failure and clear legacy
+Riksdagen URLs that return no image. Retry a failed browser image request with
+a distinct query before leaving the deterministic initials fallback visible;
+load the large profile portrait eagerly.
+
+**Acceptance:** every non-null production avatar is on Pleni's Bunny host and
+returns an image; missing official portraits make no broken external request;
+a transient image error receives bounded retries and always leaves a visible
+fallback; focused tests, TypeScript, the production bundle and the full
+acceptance command are green.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.

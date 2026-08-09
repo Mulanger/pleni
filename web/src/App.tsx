@@ -3032,11 +3032,38 @@ function Avatar({
   const partyProfile = PARTIES[party] ?? PARTIES.NONE;
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+  const [imageAttempt, setImageAttempt] = useState(0);
 
   useEffect(() => {
     setImageLoaded(false);
     setImageFailed(false);
+    setImageAttempt(0);
   }, [imageUrl]);
+
+  const resolvedImageUrl = useMemo(() => {
+    if (!imageUrl || imageAttempt === 0) {
+      return imageUrl;
+    }
+    try {
+      const retryUrl = new URL(imageUrl, window.location.href);
+      retryUrl.searchParams.set("pleni_retry", String(imageAttempt));
+      return retryUrl.toString();
+    } catch {
+      return imageUrl;
+    }
+  }, [imageAttempt, imageUrl]);
+
+  const handleImageError = () => {
+    setImageLoaded(false);
+    if (imageAttempt < 2) {
+      // Bunny paths are immutable. A distinct query retries a transient edge
+      // or mobile-network failure instead of reusing the browser's failed
+      // response, while preserving the same cached object on the CDN.
+      setImageAttempt((attempt) => attempt + 1);
+      return;
+    }
+    setImageFailed(true);
+  };
 
   return (
     <span
@@ -3049,16 +3076,24 @@ function Avatar({
       }}
     >
       <span className="avatar-fallback">{initials(name)}</span>
-      {imageUrl && !imageFailed && (
+      {resolvedImageUrl && !imageFailed && (
         <img
+          key={resolvedImageUrl}
           className={imageLoaded ? "loaded" : ""}
-          src={imageUrl}
+          src={resolvedImageUrl}
           alt=""
-          loading="lazy"
+          loading={size === "xl" ? "eager" : "lazy"}
           decoding="async"
+          fetchPriority={size === "xl" ? "high" : "auto"}
           referrerPolicy="no-referrer"
-          onLoad={() => setImageLoaded(true)}
-          onError={() => setImageFailed(true)}
+          onLoad={(event) => {
+            if (event.currentTarget.naturalWidth > 0) {
+              setImageLoaded(true);
+            } else {
+              handleImageError();
+            }
+          }}
+          onError={handleImageError}
         />
       )}
     </span>

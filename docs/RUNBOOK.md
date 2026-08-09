@@ -438,7 +438,14 @@ The command is safe to repeat. An unchanged hash reuses the existing CDN URL.
 If Riksdagen or Bunny fails, the sync updates the other public profile fields
 but retains the last verified portrait; it exits with status 2 so the failure
 is visible. A politician for whom Riksdagen publishes no JPEG correctly keeps
-the initials fallback.
+the initials fallback. `avatar_source_url` remains available for a later retry,
+but `avatar_url` must be null in that case: exposing a known-broken Riksdagen
+URL only creates a failed browser request and does not count as a mirror.
+
+The frontend retries a failed Bunny request twice with cache-busting query
+parameters. If the mobile connection is still unavailable, the party-coloured
+initials remain visible; the large profile portrait is requested eagerly while
+list/feed portraits retain native lazy loading.
 
 Required configuration is the normal Supabase Management API pair plus either
 the direct Bunny storage access key/CDN URL or the Bunny account API key. Never

@@ -49,7 +49,7 @@ class ProfileSyncRow:
     """Complete profile metadata plus the safe portrait URL chosen for writing."""
 
     profile: PoliticianProfile
-    avatar_url: str
+    avatar_url: str | None
     avatar_source_url: str
     avatar_sha256: str | None
     mirrored_now: bool
@@ -271,11 +271,24 @@ def retain_existing_portrait(
     profile: PoliticianProfile,
     existing: ExistingPolitician,
 ) -> ProfileSyncRow:
-    """Keep the last working public URL when a source refresh cannot be mirrored."""
+    """Keep only a last verified mirror when a source refresh fails.
+
+    A Riksdagen source URL is provenance, not a safe public fallback: the
+    failure may be a permanent 404. Returning ``None`` lets the frontend show
+    its initials fallback without first making a guaranteed-broken request.
+    """
+
+    verified_avatar = (
+        existing.avatar_url
+        if existing.avatar_sha256 is not None
+        and existing.avatar_url is not None
+        and not existing.avatar_url.startswith("https://data.riksdagen.se/")
+        else None
+    )
 
     return ProfileSyncRow(
         profile=profile,
-        avatar_url=existing.avatar_url or profile.avatar_url,
+        avatar_url=verified_avatar,
         avatar_source_url=profile.avatar_url,
         avatar_sha256=existing.avatar_sha256,
         mirrored_now=False,

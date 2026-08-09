@@ -3547,3 +3547,41 @@ existing `audioop` warning; lint and strict typing clean).
 - `web/src/legal.ts` is the canonical public copy. Any new provider, storage
   purpose, analytics event or recommender input requires a new notice version
   and matching updates under `docs/privacy/` before deployment.
+
+## UI13 - resilient self-hosted portraits - DONE 2026-08-09
+
+**Built:** `migrations/016_verified_portrait_urls.{up,down}.sql`, safe failed-
+refresh handling in `scripts/sync_politician_profiles.py`, bounded browser image
+retries and eager profile-hero loading in `web/src/App.tsx`, focused tests and
+the UI13 runbook/build-plan handoff.
+**Tests:** 15 focused profile/migration tests green; direct TypeScript check and
+Vite production build green; `python tasks.py test lint typecheck` green (372
+passed, 68 deselected, one existing `audioop` warning; lint and strict typing
+clean).
+**Contracts touched:** none.
+
+**Decisions made:**
+- `avatar_source_url` is provenance only. Public `avatar_url` is now either a
+  SHA-verified content-addressed Pleni Bunny URL or null.
+- A failed mirror refresh preserves a prior verified CDN portrait. With no prior
+  mirror it stores null, so the initials fallback appears without a broken
+  Riksdagen request.
+- The browser retries an image error twice with distinct query parameters.
+  Large profile portraits load eagerly; list/feed portraits stay lazy.
+
+**Live result:**
+- Migration 016 is applied to production project `nlooigmwuqqhhnontlgp`.
+- Anonymous production reads return 210 politicians: 208 Bunny portrait URLs,
+  zero external avatar URLs and two null fallbacks.
+- All 208 Bunny objects returned HTTP 200 with an image content type. Riksdagen
+  returns 404 for every checked portrait size for Benjamin Dousa and Johan
+  Britz, so their honest fallback remains initials until an official image is
+  published and mirrored.
+
+**Blocked / needs a decision:**
+- none.
+
+**Next agent should know:**
+- Do not put `avatar_source_url` back into the public image path. Re-run
+  `python scripts/sync_politician_profiles.py` when Riksdagen publishes either
+  missing portrait; the content-addressed mirror will replace the fallback.

@@ -35,6 +35,32 @@ def test_failed_refresh_retains_last_working_cdn_portrait() -> None:
     assert retained.mirrored_now is False
 
 
+def test_failed_refresh_does_not_publish_an_unverified_source_url() -> None:
+    politician_profile = profile_from_person(
+        {
+            "intressent_id": "person-2",
+            "tilltalsnamn": "Bo",
+            "efternamn": "Bildlös",
+            "bild_url_192": (
+                "https://data.riksdagen.se/filarkiv/bilder/ledamot/person-2_192.jpg"
+            ),
+        }
+    )
+    existing = ExistingPolitician(
+        intressent_id="person-2",
+        avatar_url=politician_profile.avatar_url,
+        avatar_source_url=politician_profile.avatar_url,
+        avatar_sha256=None,
+    )
+
+    retained = retain_existing_portrait(politician_profile, existing)
+
+    assert retained.avatar_url is None
+    assert retained.avatar_source_url == politician_profile.avatar_url
+    assert retained.avatar_sha256 is None
+    assert retained.mirrored_now is False
+
+
 def test_profile_update_sql_writes_source_hash_and_verified_timestamp_gate() -> None:
     politician_profile = profile_from_person(
         {
