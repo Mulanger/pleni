@@ -3506,6 +3506,10 @@ existing `audioop` warning; lint and strict typing clean).
 - Fake `Ladda ner mina data` and `Radera konto` rows were removed. GDPR requests
   use `kontakt@pleni.se` until real end-to-end workflows exist.
 
+**Follow-up - profile layout restored 2026-08-09:**
+- The `Konto`, `Mina intressen` and `Personalisering` groups remain visible to
+  signed-out visitors. Account-required taps open Clerk; legal pages stay public.
+
 **Live legal status:**
 - `kontakt@pleni.se` is the confirmed public contact.
 - `Pleni AB` is planned but not registered. Public copy explicitly does not

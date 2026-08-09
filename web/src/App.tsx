@@ -655,7 +655,6 @@ function App() {
             )}
             {tab === "profil" && (
               <ProfileScreen
-                signedIn={viewer.signedIn}
                 consent={consent}
                 selectedParties={onboarding.parties.length}
                 savedCount={library.savedClips.length}
@@ -663,9 +662,19 @@ function App() {
                 followedPartyCount={library.followedParties.length}
                 savedLoading={savedLoading}
                 onOpenSaved={openSavedArchive}
-                onOpenFollowing={openFollowing}
-                onEditInterests={() => setShowOnboarding(true)}
-                onToggleConsent={(key) => setConsent((state) => ({ ...state, [key]: !state[key] }))}
+                onOpenFollowing={() =>
+                  viewer.signedIn ? openFollowing() : viewer.requireSignIn()
+                }
+                onEditInterests={() =>
+                  viewer.signedIn ? setShowOnboarding(true) : viewer.requireSignIn()
+                }
+                onToggleConsent={(key) => {
+                  if (!viewer.signedIn) {
+                    viewer.requireSignIn();
+                    return;
+                  }
+                  setConsent((state) => ({ ...state, [key]: !state[key] }));
+                }}
                 onOpenLegal={openLegal}
               />
             )}
@@ -2338,7 +2347,6 @@ function LegalScreen({
 }
 
 function ProfileScreen({
-  signedIn,
   consent,
   selectedParties,
   savedCount,
@@ -2351,7 +2359,6 @@ function ProfileScreen({
   onToggleConsent,
   onOpenLegal
 }: {
-  signedIn: boolean;
   consent: { personal: boolean; analytics: boolean; email: boolean };
   selectedParties: number;
   savedCount: number;
@@ -2391,62 +2398,58 @@ function ProfileScreen({
             the real length of the device-local library — see
             `library-store.ts`. Still not server-side: that is `C-9`, gated on
             F1. */}
-        {signedIn && (
-          <>
-            <Group title="Konto">
-              <ListRow
-                title="Sparade klipp"
-                subtitle={
-                  savedCount === 0
-                    ? "Inga sparade klipp ännu"
-                    : `${savedCount} ${savedCount === 1 ? "klipp" : "klipp"} · sparas bara på den här enheten`
-                }
-                icon={<Bookmark size={18} />}
-                onClick={savedCount > 0 && !savedLoading ? onOpenSaved : undefined}
-                chevron={savedCount > 0}
-              />
-              <ListRow
-                title="Följer"
-                subtitle={
-                  totalFollowed === 0
-                    ? "Du följer ingen ännu"
-                    : `${followedSummary} · sparas bara på den här enheten`
-                }
-                icon={<UserPlus size={18} />}
-                onClick={onOpenFollowing}
-                chevron
-              />
-            </Group>
-            <Group title="Mina intressen">
-              <ListRow
-                title="Redigera mina intressen"
-                subtitle={
-                  selectedParties > 0
-                    ? `${selectedParties} partier valda · sparas bara på den här enheten`
-                    : "Inga partier valda ännu"
-                }
-                icon={<Sliders size={18} />}
-                onClick={onEditInterests}
-                chevron
-              />
-            </Group>
-            <Group title="Personalisering">
-              {consentRows.map((row) => (
-                <ListRow
-                  key={row.key}
-                  title={row.title}
-                  subtitle={row.help}
-                  action={
-                    <Switch
-                      checked={consent[row.key]}
-                      onChange={() => onToggleConsent(row.key)}
-                    />
-                  }
+        <Group title="Konto">
+          <ListRow
+            title="Sparade klipp"
+            subtitle={
+              savedCount === 0
+                ? "Inga sparade klipp ännu"
+                : `${savedCount} ${savedCount === 1 ? "klipp" : "klipp"} · sparas bara på den här enheten`
+            }
+            icon={<Bookmark size={18} />}
+            onClick={savedCount > 0 && !savedLoading ? onOpenSaved : undefined}
+            chevron={savedCount > 0}
+          />
+          <ListRow
+            title="Följer"
+            subtitle={
+              totalFollowed === 0
+                ? "Du följer ingen ännu"
+                : `${followedSummary} · sparas bara på den här enheten`
+            }
+            icon={<UserPlus size={18} />}
+            onClick={onOpenFollowing}
+            chevron
+          />
+        </Group>
+        <Group title="Mina intressen">
+          <ListRow
+            title="Redigera mina intressen"
+            subtitle={
+              selectedParties > 0
+                ? `${selectedParties} partier valda · sparas bara på den här enheten`
+                : "Inga partier valda ännu"
+            }
+            icon={<Sliders size={18} />}
+            onClick={onEditInterests}
+            chevron
+          />
+        </Group>
+        <Group title="Personalisering">
+          {consentRows.map((row) => (
+            <ListRow
+              key={row.key}
+              title={row.title}
+              subtitle={row.help}
+              action={
+                <Switch
+                  checked={consent[row.key]}
+                  onChange={() => onToggleConsent(row.key)}
                 />
-              ))}
-            </Group>
-          </>
-        )}
+              }
+            />
+          ))}
+        </Group>
         <nav className="profile-legal-links" aria-label="Juridisk information">
           {LEGAL_PAGE_ORDER.map((page) => (
             <button key={page} type="button" onClick={() => onOpenLegal(page)}>
