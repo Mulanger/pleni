@@ -2088,7 +2088,6 @@ function SearchScreen({
                 <ListRow
                   key={`party-${profile.abbr}`}
                   avatar={<PartyAvatar party={profile.abbr} color={profile.color} />}
-                  eyebrow="Parti"
                   title={profile.name}
                   subtitle="Öppna partisidan"
                   onClick={() => onOpenParty(profile.abbr)}

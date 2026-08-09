@@ -3312,6 +3312,8 @@ search results and browser Back to the filtered search screen.
   `politicians → speeches → clips` and sort by `clips.published_at desc`.
 - Selecting a party chip always renders its party page before the politician
   results. Text search matches the canonical code, full name and short name.
+- Party search rows use the party avatar, name and action text without a separate
+  eyebrow label; the extra label collided with the name at mobile widths.
 - Added `#/party/<code>` and `#/party/<code>/clips` routes. Opening a party,
   politician or clip pushes same-document history so Back returns to the parent
   search or party screen.
