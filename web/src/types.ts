@@ -65,12 +65,21 @@ export interface LibraryState {
   likedClips: string[];
 }
 
-export interface PartyProfile {
+/** Small local presentation fallback used before a backend party row is loaded. */
+export interface PartySummary {
   abbr: PartyCode;
   name: string;
   short: string;
   color: string;
-  clips: number;
+}
+
+/** A canonical row from `public.party_profiles`, enriched with live catalogue totals. */
+export interface PartyProfile extends PartySummary {
+  displayOrder: number;
+  /** Exact published total, or null when the count request failed. */
+  clipCount: number | null;
+  /** Exact number of current politician records, or null when counting failed. */
+  politicianCount: number | null;
 }
 
 export interface PersonProfile {

@@ -58,9 +58,13 @@ import { useAppNavigation } from "./navigation";
 import {
   checkClerkSupabaseLink,
   loadClipsByIds,
+  loadClipsForParty,
   loadClipsForPolitician,
+  loadPartyProfile,
+  loadPartyProfiles,
   loadPolitician,
   loadPoliticiansByIds,
+  loadPoliticiansForParty,
   loadPublishedClips,
   searchPoliticians
 } from "./supabase";
@@ -72,6 +76,7 @@ import type {
   LibraryState,
   OnboardingState,
   PartyCode,
+  PartyProfile,
   Politician,
   Tab
 } from "./types";
@@ -153,6 +158,8 @@ function App() {
   const [loading, setLoading] = useState(true);
   const selectedPersonId =
     route.view === "person" || route.view === "person-clips" ? route.personId : null;
+  const selectedPartyCode =
+    route.view === "party" || route.view === "party-clips" ? route.partyCode : null;
   const [query, setQuery] = useState("");
   const [partyFilter, setPartyFilter] = useState<PartyCode | null>(null);
   const [muted, setMuted] = useState(false);
@@ -166,6 +173,10 @@ function App() {
   const [person, setPerson] = useState<Politician | null>(null);
   const [personClips, setPersonClips] = useState<ClipItem[]>([]);
   const [personLoading, setPersonLoading] = useState(false);
+  const [party, setParty] = useState<PartyProfile | null>(null);
+  const [partyClips, setPartyClips] = useState<ClipItem[]>([]);
+  const [partyPoliticians, setPartyPoliticians] = useState<Politician[]>([]);
+  const [partyLoading, setPartyLoading] = useState(false);
   const [savedLoading, setSavedLoading] = useState(false);
   // Onboarding answers and consent live together because the flow collects
   // both. Defaults are off and everything stays on the device until F1 gives it
@@ -343,6 +354,48 @@ function App() {
     };
   }, [selectedPersonId]);
 
+  /** Load a party's canonical metadata, current people and recent catalogue. */
+  useEffect(() => {
+    if (selectedPartyCode === null) {
+      setParty(null);
+      setPartyClips([]);
+      setPartyPoliticians([]);
+      return;
+    }
+    let active = true;
+    setPartyLoading(true);
+    setParty(null);
+    setPartyClips([]);
+    setPartyPoliticians([]);
+    Promise.all([
+      loadPartyProfile(selectedPartyCode),
+      loadClipsForParty(selectedPartyCode),
+      loadPoliticiansForParty(selectedPartyCode)
+    ])
+      .then(([profile, recentClips, politicians]) => {
+        if (active) {
+          setParty(profile);
+          setPartyClips(recentClips);
+          setPartyPoliticians(politicians);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setParty(null);
+          setPartyClips([]);
+          setPartyPoliticians([]);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setPartyLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedPartyCode]);
+
   const openPerson = (personId: string) => {
     setCollection(null);
     navigate({ view: "person", tab, feedMode, personId });
@@ -352,12 +405,32 @@ function App() {
     backTo({ view: "tab", tab, feedMode });
   };
 
+  const openParty = (partyCode: PartyCode) => {
+    if (partyCode === "NONE") {
+      return;
+    }
+    setCollection(null);
+    navigate({ view: "party", tab, feedMode, partyCode });
+  };
+
+  const closeParty = () => {
+    backTo({ view: "tab", tab, feedMode });
+  };
+
   /** Play a politician's clips, optionally starting on one the viewer tapped. */
   const openPersonClips = (startId: string | null) => {
     if (person === null || personClips.length === 0) {
       return;
     }
     navigate({ view: "person-clips", tab, feedMode, personId: person.id, startId });
+  };
+
+  /** Play the selected party's recent clips, preserving the tapped position. */
+  const openPartyClips = (startId: string | null) => {
+    if (party === null || partyClips.length === 0) {
+      return;
+    }
+    navigate({ view: "party-clips", tab, feedMode, partyCode: party.abbr, startId });
   };
 
   const openSavedArchive = () => {
@@ -370,6 +443,15 @@ function App() {
         title: person ? cleanName(person.name) || person.name : "Klipp",
         subtitle: personLoading ? "Laddar…" : `${personClips.length} klipp`,
         clips: personClips,
+        startId: route.startId
+      });
+      return;
+    }
+    if (route.view === "party-clips") {
+      setCollection({
+        title: party?.name ?? PARTIES[route.partyCode].name,
+        subtitle: partyLoading ? "Laddar…" : `${partyClips.length} senaste klipp`,
+        clips: partyClips,
         startId: route.startId
       });
       return;
@@ -411,7 +493,7 @@ function App() {
     return () => {
       active = false;
     };
-  }, [library.savedClips, person, personClips, personLoading, route]);
+  }, [library.savedClips, party, partyClips, partyLoading, person, personClips, personLoading, route]);
 
   return (
     <>
@@ -431,7 +513,7 @@ function App() {
         />
       )}
       <main className="mobile-app" aria-label="Pleni">
-        {route.view === "person-clips" || route.view === "saved" ? (
+        {route.view === "person-clips" || route.view === "party-clips" || route.view === "saved" ? (
           <CollectionScreen
             collection={
               collection ?? { title: "Klipp", subtitle: "Laddar…", clips: [], startId: null }
@@ -456,6 +538,18 @@ function App() {
             following={!!following[selectedPersonId]}
             onToggleFollow={() => toggleFollowPolitician(selectedPersonId)}
             onPlayClip={openPersonClips}
+          />
+        ) : route.view === "party" && selectedPartyCode !== null ? (
+          <PartyScreen
+            party={party}
+            clips={partyClips}
+            politicians={partyPoliticians}
+            loading={partyLoading}
+            onBack={closeParty}
+            following={!!followedParties[selectedPartyCode]}
+            onToggleFollow={() => toggleFollowParty(selectedPartyCode)}
+            onPlayClip={openPartyClips}
+            onOpenPerson={openPerson}
           />
         ) : (
           <>
@@ -486,6 +580,7 @@ function App() {
                 followedPoliticians={library.followedPoliticians}
                 followedParties={library.followedParties}
                 onOpenPerson={openPerson}
+                onOpenParty={openParty}
                 onTogglePerson={toggleFollowPolitician}
                 onToggleParty={toggleFollowParty}
               />
@@ -497,6 +592,7 @@ function App() {
                 partyFilter={partyFilter}
                 setPartyFilter={setPartyFilter}
                 onOpenPerson={openPerson}
+                onOpenParty={openParty}
               />
             )}
             {tab === "profil" && (
@@ -1762,12 +1858,14 @@ function FollowingScreen({
   followedPoliticians,
   followedParties,
   onOpenPerson,
+  onOpenParty,
   onTogglePerson,
   onToggleParty
 }: {
   followedPoliticians: string[];
   followedParties: PartyCode[];
   onOpenPerson: (personId: string) => void;
+  onOpenParty: (party: PartyCode) => void;
   onTogglePerson: (personId: string) => void;
   onToggleParty: (party: PartyCode) => void;
 }) {
@@ -1818,8 +1916,15 @@ function FollowingScreen({
                   key={partyCode}
                   avatar={<PartyAvatar party={partyCode} />}
                   title={party.name}
+                  onClick={() => onOpenParty(partyCode)}
                   action={
-                    <button className="mini-button" onClick={() => onToggleParty(partyCode)}>
+                    <button
+                      className="mini-button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onToggleParty(partyCode);
+                      }}
+                    >
                       Följer
                     </button>
                   }
@@ -1880,18 +1985,43 @@ function SearchScreen({
   setQuery,
   partyFilter,
   setPartyFilter,
-  onOpenPerson
+  onOpenPerson,
+  onOpenParty
 }: {
   query: string;
   setQuery: (query: string) => void;
   partyFilter: PartyCode | null;
   setPartyFilter: (party: PartyCode | null) => void;
   onOpenPerson: (personId: string) => void;
+  onOpenParty: (party: PartyCode) => void;
 }) {
   const [results, setResults] = useState<Politician[]>([]);
+  const [partyProfiles, setPartyProfiles] = useState<PartyProfile[]>([]);
   const [searching, setSearching] = useState(false);
   const normalizedQuery = query.trim();
   const showResults = normalizedQuery.length > 0 || partyFilter !== null;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    loadPartyProfiles(controller.signal).then(setPartyProfiles).catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+
+  const matchingParties = useMemo(() => {
+    if (partyFilter && partyFilter !== "NONE") {
+      return partyProfiles.filter((profile) => profile.abbr === partyFilter);
+    }
+    const term = normalizedQuery.toLocaleLowerCase("sv-SE");
+    if (!term) {
+      return [];
+    }
+    return partyProfiles.filter((profile) =>
+      [profile.abbr, profile.name, profile.short]
+        .some((value) => value.toLocaleLowerCase("sv-SE").includes(term))
+    );
+  }, [normalizedQuery, partyFilter, partyProfiles]);
+
+  const resultCount = matchingParties.length + results.length;
 
   useEffect(() => {
     if (!showResults) {
@@ -1943,17 +2073,28 @@ function SearchScreen({
       </div>
       <div className="panel-scroll">
         {showResults ? (
-          searching && results.length === 0 ? (
+          searching && resultCount === 0 ? (
             <Group title="Söker…">
               <ListRow title="Hämtar träffar" />
             </Group>
-          ) : results.length === 0 ? (
+          ) : resultCount === 0 ? (
             <div className="panel-empty" role="status">
               <strong>Inga träffar</strong>
               <span>Sök på en politikers namn, eller filtrera på parti.</span>
             </div>
           ) : (
-            <Group title={`${results.length} ${results.length === 1 ? "träff" : "träffar"}`}>
+            <Group title={`${resultCount} ${resultCount === 1 ? "träff" : "träffar"}`}>
+              {matchingParties.map((profile) => (
+                <ListRow
+                  key={`party-${profile.abbr}`}
+                  avatar={<PartyAvatar party={profile.abbr} color={profile.color} />}
+                  eyebrow="Parti"
+                  title={profile.name}
+                  subtitle="Öppna partisidan"
+                  onClick={() => onOpenParty(profile.abbr)}
+                  chevron
+                />
+              ))}
               {results.map((politician) => (
                 <ListRow
                   key={politician.id}
@@ -2256,6 +2397,135 @@ function describeLinkStatus(status: ClerkSupabaseLinkStatus | null, running: boo
   }
 }
 
+function PartyScreen({
+  party,
+  clips,
+  politicians,
+  loading,
+  onBack,
+  following,
+  onToggleFollow,
+  onPlayClip,
+  onOpenPerson
+}: {
+  party: PartyProfile | null;
+  clips: ClipItem[];
+  politicians: Politician[];
+  loading: boolean;
+  onBack: () => void;
+  following: boolean;
+  onToggleFollow: () => void;
+  onPlayClip: (clipId: string | null) => void;
+  onOpenPerson: (personId: string) => void;
+}) {
+  return (
+    <section className="party-screen">
+      <div className="person-topbar">
+        <button onClick={onBack} aria-label="Tillbaka">
+          <ChevronLeft size={24} />
+        </button>
+        <strong>{party?.name ?? "Parti"}</strong>
+        <button aria-label="Dela">
+          <Share2 size={19} />
+        </button>
+      </div>
+      <div className="panel-scroll person-scroll">
+        {loading && !party && <div className="loading-chip">Hämtar partisida</div>}
+        {!loading && !party && (
+          <div className="panel-empty" role="status">
+            <strong>Partisidan kunde inte hämtas</strong>
+            <span>Försök igen om en stund.</span>
+          </div>
+        )}
+        {party && (
+          <>
+            <section
+              className="party-hero"
+              style={{ "--party-color": party.color } as React.CSSProperties}
+            >
+              <PartyAvatar party={party.abbr} color={party.color} size="xl" />
+              <div className="party-identity">
+                <span>Riksdagsparti · {party.abbr}</span>
+                <h1>{party.name}</h1>
+                <p>Senaste publicerade klippen från partiets politiker.</p>
+              </div>
+              <button
+                className={following ? "follow-wide following" : "follow-wide"}
+                onClick={onToggleFollow}
+              >
+                {following ? "Följer" : "Följ"}
+              </button>
+            </section>
+
+            <div className="stats party-stats">
+              {typeof party.clipCount === "number" && (
+                <Stat label="Klipp" value={formatNumber(party.clipCount)} />
+              )}
+              {typeof party.politicianCount === "number" && (
+                <Stat label="Politiker" value={formatNumber(party.politicianCount)} />
+              )}
+              <Stat label="Visas här" value={formatNumber(clips.length)} />
+            </div>
+
+            <section className="clip-grid-block">
+              <div className="section-label">Senaste klipp</div>
+              {loading && clips.length === 0 && <div className="loading-chip">Hämtar klipp</div>}
+              {!loading && clips.length === 0 && (
+                <div className="panel-empty" role="status">
+                  <strong>Inga publicerade klipp</strong>
+                  <span>Partiets politiker har inga klipp i katalogen ännu.</span>
+                </div>
+              )}
+              {clips.length > 0 && (
+                <div className="clip-grid">
+                  {clips.map((clip) => (
+                    <button
+                      className="mini-clip"
+                      key={clip.id}
+                      onClick={() => onPlayClip(clip.id)}
+                      aria-label={`Spela: ${clip.title}`}
+                    >
+                      <img src={clip.thumbUrl} alt="" loading="lazy" />
+                      <span className="mini-clip-copy">
+                        <b>{clip.title}</b>
+                        <small>
+                          {formatDate(clip.debateDate)} · {formatDuration(clip.durationS)}
+                        </small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {politicians.length > 0 && (
+              <Group title="Politiker">
+                {politicians.map((politician) => (
+                  <ListRow
+                    key={politician.id}
+                    avatar={
+                      <Avatar
+                        name={cleanName(politician.name) || politician.name}
+                        party={politician.party}
+                        size="md"
+                        imageUrl={politician.avatarUrl}
+                      />
+                    }
+                    title={cleanName(politician.name) || politician.name}
+                    subtitle={[politician.role, politician.constituency].filter(Boolean).join(" · ")}
+                    onClick={() => onOpenPerson(politician.id)}
+                    chevron
+                  />
+                ))}
+              </Group>
+            )}
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function PersonScreen({
   person,
   clips,
@@ -2550,10 +2820,22 @@ function Avatar({
   );
 }
 
-function PartyAvatar({ party }: { party: PartyCode }) {
+function PartyAvatar({
+  party,
+  color,
+  size = "md"
+}: {
+  party: PartyCode;
+  color?: string;
+  size?: "md" | "xl";
+}) {
   const profile = PARTIES[party];
+  const partyColor = color ?? profile.color;
   return (
-    <span className="party-avatar" style={{ background: partyTint(profile.color), color: partyInk(profile.color) }}>
+    <span
+      className={`party-avatar ${size}`}
+      style={{ background: partyTint(partyColor), color: partyInk(partyColor) }}
+    >
       {profile.abbr}
     </span>
   );

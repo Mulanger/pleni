@@ -1,5 +1,5 @@
 import { normalizeParty, SAMPLE_CLIPS } from "./data";
-import type { ClipFeed, ClipItem, PartyCode, Politician } from "./types";
+import type { ClipFeed, ClipItem, PartyCode, PartyProfile, Politician } from "./types";
 
 interface RawSource {
   title: string | null;
@@ -47,6 +47,14 @@ interface RawClip {
   thumb_url: string;
   published_at: string | null;
   speeches: RawSpeech | RawSpeech[] | null;
+}
+
+interface RawPartyProfile {
+  code: string;
+  name: string | null;
+  short_name: string | null;
+  color: string | null;
+  display_order: number | null;
 }
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, "") ?? "";
@@ -260,6 +268,26 @@ function clipSelect(): string {
   ].join(",");
 }
 
+/** Clip projection whose politician join can constrain the catalogue by party. */
+function partyClipSelect(): string {
+  return [
+    "id",
+    "speech_id",
+    "rank_in_speech",
+    "duration_s",
+    "title",
+    "transcript",
+    "topic",
+    "archetype",
+    "url_540x960",
+    "thumb_url",
+    "published_at",
+    "speeches!inner(speaker_name,party,anforandetyp,politician_id," +
+      "politicians!inner(id,name,party,role,constituency,avatar_url)," +
+      "sources(title,debate_date,source_url))"
+  ].join(",");
+}
+
 /** Run a clip query and map the rows, returning `[]` on any failure. */
 async function readClips(query: URLSearchParams): Promise<ClipItem[]> {
   const response = await supabaseRest(`clips?${query.toString()}`);
@@ -320,6 +348,31 @@ export async function loadPublishedClips(limit = 60): Promise<ClipFeed> {
  * ------------------------------------------------------------------ */
 
 const POLITICIAN_SELECT = "id,name,party,role,constituency,avatar_url";
+const PARTY_PROFILE_SELECT = "code,name,short_name,color,display_order";
+
+function isPublicPartyCode(value: string): value is Exclude<PartyCode, "NONE"> {
+  return value === "S" || value === "M" || value === "SD" || value === "C" ||
+    value === "V" || value === "KD" || value === "MP" || value === "L";
+}
+
+function mapPartyProfile(
+  row: RawPartyProfile,
+  clipCount: number | null = null,
+  politicianCount: number | null = null
+): PartyProfile | null {
+  if (!isPublicPartyCode(row.code)) {
+    return null;
+  }
+  return {
+    abbr: row.code,
+    name: row.name?.trim() || row.code,
+    short: row.short_name?.trim() || row.name?.trim() || row.code,
+    color: row.color?.trim() || "#8F8F87",
+    displayOrder: row.display_order ?? 99,
+    clipCount,
+    politicianCount
+  };
+}
 
 function mapPolitician(row: RawPolitician, clipCount: number | null = null): Politician {
   return {
@@ -377,6 +430,54 @@ export async function searchPoliticians(
     return [];
   }
   return ((await response.json()) as RawPolitician[]).map((row) => mapPolitician(row));
+}
+
+/** Canonical party rows used by search and party pages. */
+export async function loadPartyProfiles(signal?: AbortSignal): Promise<PartyProfile[]> {
+  if (!supabaseConfigured) {
+    return [];
+  }
+  const params = new URLSearchParams({
+    select: PARTY_PROFILE_SELECT,
+    order: "display_order.asc"
+  });
+  const response = await supabaseRest(`party_profiles?${params.toString()}`, { signal });
+  if (!response.ok) {
+    return [];
+  }
+  return ((await response.json()) as RawPartyProfile[])
+    .map((row) => mapPartyProfile(row))
+    .filter((row): row is PartyProfile => row !== null);
+}
+
+/** One canonical party row with live politician and published-clip totals. */
+export async function loadPartyProfile(code: PartyCode): Promise<PartyProfile | null> {
+  if (!supabaseConfigured || code === "NONE") {
+    return null;
+  }
+  const params = new URLSearchParams({
+    select: PARTY_PROFILE_SELECT,
+    code: `eq.${code}`,
+    limit: "1"
+  });
+  const [response, clipCount, politicianCount] = await Promise.all([
+    supabaseRest(`party_profiles?${params.toString()}`),
+    countClipsForParty(code),
+    countPoliticiansForParty(code)
+  ]);
+  if (!response.ok) {
+    return null;
+  }
+  const row = ((await response.json()) as RawPartyProfile[])[0];
+  return row ? mapPartyProfile(row, clipCount, politicianCount) : null;
+}
+
+/** Current politician records for a party, ordered by display name. */
+export async function loadPoliticiansForParty(
+  code: PartyCode,
+  limit = 100
+): Promise<Politician[]> {
+  return searchPoliticians("", { party: code, limit });
 }
 
 /**
@@ -441,6 +542,41 @@ export async function countClipsForPolitician(politicianId: string): Promise<num
   return total && Number.isFinite(parsed) ? parsed : null;
 }
 
+async function exactCount(path: string): Promise<number | null> {
+  const response = await supabaseRest(path, {
+    headers: { Prefer: "count=exact", Range: "0-0" }
+  });
+  if (!response.ok) {
+    return null;
+  }
+  const total = response.headers.get("content-range")?.split("/")[1];
+  const parsed = Number(total);
+  return total && Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Exact number of current politician rows assigned to a party. */
+export async function countPoliticiansForParty(code: PartyCode): Promise<number | null> {
+  if (!supabaseConfigured || code === "NONE") {
+    return null;
+  }
+  const params = new URLSearchParams({ select: "id", party: `eq.${code}` });
+  return exactCount(`politicians?${params.toString()}`);
+}
+
+/** Exact number of published clips whose canonical politician belongs to a party. */
+export async function countClipsForParty(code: PartyCode): Promise<number | null> {
+  if (!supabaseConfigured || code === "NONE") {
+    return null;
+  }
+  const params = new URLSearchParams({
+    select: "id,speeches!inner(politicians!inner(party))",
+    "speeches.politicians.party": `eq.${code}`,
+    published_at: "not.is.null",
+    moderation: "neq.rejected"
+  });
+  return exactCount(`clips?${params.toString()}`);
+}
+
 /**
  * A politician's published clips, newest debate first.
  *
@@ -459,6 +595,29 @@ export async function loadClipsForPolitician(
     new URLSearchParams({
       select: clipSelect(),
       "speeches.politician_id": `eq.${politicianId}`,
+      published_at: "not.is.null",
+      moderation: "neq.rejected",
+      order: "published_at.desc",
+      limit: String(limit)
+    })
+  );
+}
+
+/**
+ * Published clips for people currently affiliated with a party, newest first.
+ *
+ * The filter deliberately follows `politicians.party`, not the copied party on
+ * an old speech. This matches the rest of the app's definition of a person's
+ * current affiliation and gives the party page one stable membership rule.
+ */
+export async function loadClipsForParty(code: PartyCode, limit = 60): Promise<ClipItem[]> {
+  if (!supabaseConfigured || code === "NONE") {
+    return [];
+  }
+  return readClips(
+    new URLSearchParams({
+      select: partyClipSelect(),
+      "speeches.politicians.party": `eq.${code}`,
       published_at: "not.is.null",
       moderation: "neq.rejected",
       order: "published_at.desc",

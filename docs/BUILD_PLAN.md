@@ -819,6 +819,50 @@ command are green.
 
 ---
 
+## UI8 — Political party profiles
+
+**Depends on:** UI1, UI3 and UI6. **Size:** medium.
+
+**Objective.** Make each parliamentary party a first-class searchable profile
+whose newest published clips and current politician roster come from Supabase.
+
+**Scope — may create or modify:**
+
+```
+migrations/014_party_profiles.{up,down}.sql
+web/src/types.ts
+web/src/data.ts
+web/src/supabase.ts
+web/src/navigation.ts
+web/src/App.tsx
+web/src/styles.css
+tests/unit/test_party_profile_migration.py
+docs/BUILD_PLAN.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** `src/contracts.py`, numbered pipeline stages,
+publishing payloads, clip ranking, playback ownership, comments, onboarding,
+generated media and existing applied migrations.
+
+**Build.** Add an RLS-protected, public-read `party_profiles` table containing
+canonical metadata for the eight Riksdag parties. Do not persist derived clip
+or politician totals: count and filter them through the existing
+`politicians → speeches → clips` relationships so pages cannot drift stale.
+Search returns matching party pages before matching people, and selecting a
+party filter always places that party page first. Party pages show clips in
+descending `published_at` order and the current politician roster. Hash routes
+must reload safely and participate in browser Back/Forward history.
+
+**Acceptance:** all eight party rows are seeded with explicit browser read-only
+privileges; a party-name search and party chip expose the party page before
+people; a party page renders exact live totals when available, recent clips and
+current politicians; clip and politician taps preserve Back navigation;
+TypeScript, Vite production build, migration guard tests and the full Python
+acceptance command are green.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.

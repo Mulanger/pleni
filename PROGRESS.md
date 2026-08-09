@@ -25,6 +25,7 @@ This file is the source of truth for chunk status and handoff notes.
 | UI2 - Feed swipe & autoplay | DONE | Completed 2026-08-06 |
 | UI3 - Riksdagen portraits & politician profiles | DONE | Completed 2026-08-08 |
 | UI5 - Stop off-screen media | DONE | Completed 2026-08-08 |
+| UI8 - Political party profiles | DONE | Completed 2026-08-09 |
 | V1 - YuNet replaces the Haar cascade | DONE | Completed 2026-08-07 |
 | V2 - Speaker identity verification | DONE | Completed 2026-08-08 |
 | V3 - Portrait recovery + framing-aware selection | DONE | Completed 2026-08-08 |
@@ -3282,4 +3283,57 @@ existing `audioop` warning; lint and strict typing clean).
 
 **Next agent should know:**
 - The compact identity layout is intentionally CSS-only. Do not add duplicate
+
+## UI8 — political party profiles — DONE 2026-08-09
+
+**Built:** `migrations/014_party_profiles.{up,down}.sql`, party DTOs and public
+reads in `web/src/{types,data,supabase}.ts`, hash routes in
+`web/src/navigation.ts`, search/following/profile UI in `web/src/App.tsx`, party
+layout in `web/src/styles.css`, migration guardrails in
+`tests/unit/test_party_profile_migration.py`, and the UI8 scope in
+`docs/BUILD_PLAN.md`.
+**Tests:** Party migration and migration-discovery guardrails green (13 tests);
+direct TypeScript check and Vite production build green;
+`python tasks.py test lint typecheck` green (355 passed, 68 deselected, one
+existing `audioop` warning; lint and strict typing clean). Live mobile QA at
+390×844 verified 35 newest Moderaterna clips, 42 politician records, party-first
+search results and browser Back to the filtered search screen.
+**Contracts touched:** none.
+
+**Decisions made:**
+- Added canonical storage for the eight Riksdag party codes, names, short names,
+  colours and display order. Migration 014 is applied to production project
+  `nlooigmwuqqhhnontlgp`; anonymous `select` returned all eight rows and an
+  anonymous write was rejected with HTTP 401.
+- Clip and politician totals are not stored on the party row. The profile counts
+  the live relationships instead, preventing totals from becoming stale.
+- Party membership follows `public.politicians.party`, the same current-
+  affiliation rule used when displaying clips. Party clips traverse
+  `politicians → speeches → clips` and sort by `clips.published_at desc`.
+- Selecting a party chip always renders its party page before the politician
+  results. Text search matches the canonical code, full name and short name.
+- Added `#/party/<code>` and `#/party/<code>/clips` routes. Opening a party,
+  politician or clip pushes same-document history so Back returns to the parent
+  search or party screen.
+- Removed fabricated party clip totals from `web/src/data.ts`; real totals now
+  come from exact Supabase counts and render only when successfully read.
+
+**Observations (not fixed, out of scope):**
+- Search remains capped at 40 politician results, while a party profile loads up
+  to 100 current politician rows. Moderaterna currently has 42 records, so its
+  party page is the complete roster and its search list is the existing bounded
+  search result window.
+- The backend migration is live, but this frontend branch has not been pushed or
+  merged. The public site will not expose party pages until the frontend commit
+  reaches `origin/main` and InstaPods rebuilds it.
+
+**Blocked / needs a decision:**
+- none.
+
+**Next agent should know:**
+- New party metadata belongs in `public.party_profiles`; changing affiliation
+  still belongs in `public.politicians.party`. Do not copy membership or derived
+  clip totals into the party table.
+- Keep party clip ordering on `published_at desc` unless product explicitly
+  changes what “recent” means.
   profile DTO fields or a second portrait component to adjust its spacing.

@@ -92,7 +92,8 @@ a {
 
 .feed-screen,
 .panel-screen,
-.person-screen {
+.person-screen,
+.party-screen {
   position: absolute;
   inset: 0;
   overflow: hidden;
@@ -538,7 +539,8 @@ a {
 }
 
 .panel-screen,
-.person-screen {
+.person-screen,
+.party-screen {
   display: flex;
   flex-direction: column;
 }
@@ -1028,6 +1030,79 @@ a {
 
 .person-scroll {
   padding-top: 14px;
+}
+
+.party-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  overflow: hidden;
+  margin: 0 -14px 16px;
+  padding: 20px 16px 18px;
+  border-top: 1px solid color-mix(in srgb, var(--party-color) 28%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--party-color) 24%, transparent);
+  background:
+    linear-gradient(105deg, color-mix(in srgb, var(--party-color) 13%, #fff), #fafaf9 72%);
+}
+
+.party-hero::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  background: var(--party-color);
+  content: "";
+}
+
+.party-avatar.xl {
+  width: 78px;
+  height: 78px;
+  border: 2px solid rgba(255, 255, 255, 0.88);
+  font-size: 23px;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--party-color) 18%, transparent);
+}
+
+.party-identity {
+  min-width: 0;
+}
+
+.party-identity > span {
+  display: block;
+  margin-bottom: 3px;
+  color: color-mix(in srgb, var(--party-color) 76%, #24241f);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.party-identity h1 {
+  margin: 0;
+  font-size: clamp(21px, 6.4vw, 27px);
+  font-weight: 850;
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+}
+
+.party-identity p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.party-hero .follow-wide {
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  height: 38px;
+  border-radius: 999px;
+}
+
+.party-stats {
+  margin-top: 0;
 }
 
 .person-hero {

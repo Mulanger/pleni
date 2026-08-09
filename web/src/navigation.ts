@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { FeedMode, Tab } from "./types";
+import type { FeedMode, PartyCode, Tab } from "./types";
 
 export type AppRoute =
   | { view: "tab"; tab: Tab; feedMode: FeedMode }
@@ -9,6 +9,14 @@ export type AppRoute =
       tab: Tab;
       feedMode: FeedMode;
       personId: string;
+      startId: string | null;
+    }
+  | { view: "party"; tab: Tab; feedMode: FeedMode; partyCode: PartyCode }
+  | {
+      view: "party-clips";
+      tab: Tab;
+      feedMode: FeedMode;
+      partyCode: PartyCode;
       startId: string | null;
     }
   | { view: "saved"; tab: "profil"; feedMode: FeedMode };
@@ -22,6 +30,15 @@ function isTab(value: string | null): value is Tab {
 
 function feedMode(value: string | null): FeedMode {
   return value === "senaste" ? "senaste" : "fordig";
+}
+
+function partyCode(value: string | null): PartyCode | null {
+  const normalized = value?.toUpperCase() ?? "";
+  return normalized === "S" || normalized === "M" || normalized === "SD" ||
+    normalized === "C" || normalized === "V" || normalized === "KD" ||
+    normalized === "MP" || normalized === "L"
+    ? normalized
+    : null;
 }
 
 function decodeSegment(value: string | undefined): string | null {
@@ -71,6 +88,25 @@ export function routeFromHash(hash: string): AppRoute {
     }
     return { view: "person", tab: from, feedMode: preservedMode, personId };
   }
+  if (segments[0] === "party") {
+    const code = partyCode(decodeSegment(segments[1]));
+    if (!code) {
+      return DEFAULT_ROUTE;
+    }
+    const fromValue = params.get("from");
+    const from: Tab = isTab(fromValue) ? fromValue : "sok";
+    const preservedMode = feedMode(params.get("feed"));
+    if (segments[2] === "clips") {
+      return {
+        view: "party-clips",
+        tab: from,
+        feedMode: preservedMode,
+        partyCode: code,
+        startId: params.get("clip")
+      };
+    }
+    return { view: "party", tab: from, feedMode: preservedMode, partyCode: code };
+  }
   return DEFAULT_ROUTE;
 }
 
@@ -86,6 +122,13 @@ export function hashForRoute(route: AppRoute): string {
   }
 
   const params = new URLSearchParams({ from: route.tab, feed: route.feedMode });
+  if (route.view === "party" || route.view === "party-clips") {
+    if (route.view === "party-clips" && route.startId) {
+      params.set("clip", route.startId);
+    }
+    const suffix = route.view === "party-clips" ? "/clips" : "";
+    return `#/party/${route.partyCode}${suffix}?${params.toString()}`;
+  }
   if (route.view === "person-clips" && route.startId) {
     params.set("clip", route.startId);
   }
