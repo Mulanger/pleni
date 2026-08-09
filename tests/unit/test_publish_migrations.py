@@ -104,3 +104,20 @@ def test_politician_profile_migration_retains_raw_data_and_defaults_portraits() 
     assert (
         "revoke all on function public.set_politician_avatar_url() from public, anon, authenticated"
     ) in sql
+
+
+def test_self_hosted_portrait_migration_preserves_source_and_verified_mirror_state() -> None:
+    path = MIGRATIONS_DIR / "015_self_hosted_portraits.up.sql"
+    sql = path.read_text(encoding="utf-8").lower()
+
+    assert "avatar_source_url text" in sql
+    assert "avatar_sha256 text" in sql
+    assert "avatar_mirrored_at timestamptz" in sql
+    assert "politicians_avatar_sha256_format" in sql
+    assert "old.avatar_sha256 is not null" in sql
+    assert "new.avatar_url like 'https://data.riksdagen.se/%'" in sql
+    assert "new.avatar_url := old.avatar_url" in sql
+    assert (
+        "revoke all on function public.set_politician_avatar_url() from public, anon, authenticated"
+        in sql
+    )

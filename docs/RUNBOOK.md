@@ -415,6 +415,37 @@ The invariant is that a `clips` row never points at a missing object.
 
 ---
 
+## Politician portrait mirror
+
+The public app should load politician portraits from Pleni's Bunny CDN, not
+from Riksdagen at request time. Profile enrichment and portrait mirroring stay
+outside C1–C11 so a biography or image outage cannot block clip publication.
+
+After applying migrations, refresh all known politician metadata and portraits:
+
+```bash
+python scripts/sync_politician_profiles.py --dry-run --limit 3
+python scripts/sync_politician_profiles.py
+```
+
+The non-dry run downloads the official 192 px JPEG, validates it, hashes the
+exact bytes, uploads it under `portraits/<intressent_id>/<sha256>.jpg`, waits for
+Bunny verification, and only then changes `public.politicians.avatar_url`.
+`avatar_source_url` remains the official Riksdagen location and the UI credit
+remains `Foto: Sveriges riksdag`.
+
+The command is safe to repeat. An unchanged hash reuses the existing CDN URL.
+If Riksdagen or Bunny fails, the sync updates the other public profile fields
+but retains the last verified portrait; it exits with status 2 so the failure
+is visible. A politician for whom Riksdagen publishes no JPEG correctly keeps
+the initials fallback.
+
+Required configuration is the normal Supabase Management API pair plus either
+the direct Bunny storage access key/CDN URL or the Bunny account API key. Never
+put either Bunny credential in a Vite environment variable.
+
+---
+
 ## Database and migrations
 
 ```bash

@@ -3414,3 +3414,60 @@ existing `audioop` warning; lint and strict typing clean).
 **Next agent should know:**
 - Keep the saved grid as the archive entry point. `saved-clips` is only the
   immersive playback route after a deliberate thumbnail selection.
+
+## UI11 — self-hosted politician portraits — DONE 2026-08-09
+
+**Built:** provenance and mirror state in
+`migrations/015_self_hosted_portraits.{up,down}.sql`, safe JPEG download and
+content-addressed upload in `src/riksdagen/portraits.py`, mirror integration in
+`scripts/sync_politician_profiles.py`, focused unit/migration tests, the UI11
+scope in `docs/BUILD_PLAN.md`, and operator instructions in `docs/RUNBOOK.md`.
+**Tests:** 25 focused portrait/profile/migration tests green; direct frontend
+TypeScript check and Vite production build green;
+`python tasks.py test lint typecheck` green (370 passed, 68 deselected, one
+existing `audioop` warning; lint and strict typing clean).
+**Contracts touched:** none.
+
+**Decisions made:**
+- Keep the official Riksdagen URL in `avatar_source_url`, but serve the frontend
+  from the verified Bunny URL in `avatar_url`. The exact JPEG bytes are retained
+  without resizing or recompression, and the existing UI credit stays
+  `Foto: Sveriges riksdag`.
+- Bunny paths are immutable and content-addressed as
+  `portraits/<intressent_id>/<sha256>.jpg`. An unchanged source hash reuses the
+  prior CDN URL; a changed portrait gets a new URL and can cache for one year.
+- Downloads are restricted to HTTPS on `data.riksdagen.se`, require
+  `image/jpeg`, a valid JPEG envelope and at most 5 MB. Politician ids and hashes
+  are validated before becoming storage paths.
+- Supabase switches to a new CDN URL only after the existing Bunny client has
+  uploaded and verified it. A failed refresh retains the last working URL and
+  hash. The politician trigger also prevents later clip publication from
+  replacing a verified CDN portrait with Riksdagen's source URL.
+- Profile and portrait sync remain an explicit operator command outside the
+  numbered video stages. A Riksdagen image outage therefore cannot block clip
+  acquisition, rendering or publication.
+
+**Live result:**
+- Migration 015 is applied to production project `nlooigmwuqqhhnontlgp`.
+- 208 of 210 known politician portraits were mirrored into Bunny zone
+  `riketnlooigm`. A complete public-CDN verification downloaded all 208 objects
+  (2,041,091 bytes): every response was JPEG, every HTTP status was 200 and
+  every SHA-256 matched Supabase.
+- Johan Britz and Benjamin Dousa remain on the initials fallback. Riksdagen's
+  returned 80 px, 192 px and max portrait URLs all return 404 for both people;
+  no third-party substitute was introduced.
+- A repeat canary reused all three unchanged CDN portraits with zero uploads,
+  confirming the periodic refresh path is idempotent.
+
+**Observations (not fixed, out of scope):**
+- The two missing portraits belong to people for whom Riksdagen currently
+  publishes metadata but no portrait bytes. If another official source is used
+  later, its separate licence and credit must be verified first.
+
+**Blocked / needs a decision:**
+- none.
+
+**Next agent should know:**
+- Run `python scripts/sync_politician_profiles.py` after a politician backfill or
+  when official portraits may have changed. Exit status 2 means at least one
+  source or mirror failed; successful rows are still updated safely.

@@ -935,6 +935,50 @@ green.
 
 ---
 
+## UI11 — Self-hosted politician portraits
+
+**Depends on:** UI3 and C11's verified Bunny upload client. **Size:** medium.
+
+**Objective.** Remove the live frontend dependency on Riksdagen's portrait
+server by mirroring official politician portraits into Pleni's existing Bunny
+Storage/CDN while preserving source attribution and a safe initials fallback.
+
+**Scope — may create or modify:**
+
+```
+migrations/015_self_hosted_portraits.{up,down}.sql
+src/riksdagen/{profiles,portraits}.py
+scripts/sync_politician_profiles.py
+tests/unit/test_{riksdagen_profiles,portrait_mirror,profile_sync,publish_migrations}.py
+docs/BUILD_PLAN.md
+docs/RUNBOOK.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** `src/contracts.py`, numbered pipeline stages, clip
+or thumbnail publishing paths, video acquisition, vision, camera planning,
+rendering, private user data, frontend playback, feed ordering, generated media
+and already-applied migrations.
+
+**Build.** Persist the official source URL separately from the public CDN URL,
+plus a SHA-256 content hash and last successful mirror timestamp. The existing
+operator profile sync downloads each JPEG through the retrying Riksdagen client,
+restricts sources to Riksdagen HTTPS, bounds byte size, validates JPEG markers,
+and uploads the exact source bytes to a content-addressed Bunny path. The public
+URL changes only after Bunny verifies the object. An unchanged hash reuses the
+existing CDN URL; a failed download or upload retains the last working portrait
+instead of replacing it with a broken source. Keep `Foto: Sveriges riksdag` as
+the UI credit and do not transform the source photograph.
+
+**Acceptance:** migrations retain source/hash/mirror state and default new rows
+safely; invalid hosts, oversized bodies and non-JPEG responses are rejected;
+content-addressed paths are deterministic; successful uploads update the public
+avatar only after verification; failed refreshes preserve the previous avatar;
+the production migration and one-time portrait backfill complete with verified
+Bunny URLs; the full Python acceptance command and frontend build are green.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.
