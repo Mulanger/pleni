@@ -31,7 +31,7 @@ class _HeadParser(HTMLParser):
 
 
 def _manifest() -> dict[str, Any]:
-    value = json.loads((PUBLIC_ROOT / "manifest.webmanifest").read_text("utf-8"))
+    value = json.loads((PUBLIC_ROOT / "manifest.json").read_text("utf-8"))
     assert isinstance(value, dict)
     return value
 
@@ -88,7 +88,7 @@ def test_html_links_manifest_and_apple_icon_without_disabling_zoom() -> None:
     apple_links = [link for link in head.links if link.get("rel") == "apple-touch-icon"]
     viewports = [meta["content"] for meta in head.metas if meta.get("name") == "viewport"]
 
-    assert manifest_links == [{"rel": "manifest", "href": "/manifest.webmanifest"}]
+    assert manifest_links == [{"rel": "manifest", "href": "/manifest.json"}]
     assert apple_links == [
         {
             "rel": "apple-touch-icon",

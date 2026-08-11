@@ -3605,7 +3605,7 @@ with UI14.2; do not repeat manifest or icon work.
 
 ## UI14.1 — manifest, install metadata and icons — DONE 2026-08-11
 
-**Built:** `web/public/manifest.webmanifest`; 192×192 and 512×512 `any` launcher
+**Built:** `web/public/manifest.json`; 192×192 and 512×512 `any` launcher
 icons; a safe-zone-aware 512×512 maskable icon; a 180×180 Apple touch icon;
 documented icon sources/colors; manifest, Apple launch and static theme metadata
 in `web/index.html`; and focused PWA asset contract tests.
@@ -3872,6 +3872,11 @@ snippet passed a standalone strict TypeScript compile. `git diff --check` passed
 - `https://pleni.se/` returned 200 before release, while the new manifest, worker
   and four launcher icon URLs all returned 404. This is expected because the UI14
   worktree has not been pushed/deployed; no production PWA claim can be made yet.
+- The first production release, `968749e`, served the app, worker and icons, but
+  exposed a host-specific installability defect: InstaPods returned
+  `manifest.webmanifest` as `application/octet-stream`. UI14.6 reproduced and fixed
+  it by linking the equivalent `/manifest.json`, which receives the standard JSON
+  MIME mapping; the corrective deployment is pending.
 - Chrome transport-offline emulation reloaded the cached shell but did not emit the
   same connectivity event as a device radio transition. The status surface passed
   with the browser `offline` event; actual lost/restored-network behavior remains

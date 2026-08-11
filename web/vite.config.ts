@@ -12,7 +12,7 @@ export default defineConfig({
       injectRegister: false,
       manifest: false,
       injectManifest: {
-        globPatterns: ["**/*.{html,js,css,png,svg,webmanifest,woff2}"],
+        globPatterns: ["**/*.{html,js,css,json,png,svg,woff2}"],
         globIgnores: ["**/*.mp4", "**/*.webm", "**/*.m3u8", "icons/*-source.svg"],
         minify: false,
         rollupFormat: "iife",

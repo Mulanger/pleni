@@ -208,7 +208,7 @@ normal shared-link startup.
 
 ```text
 web/index.html
-web/public/manifest.webmanifest
+web/public/manifest.json
 web/public/favicon.svg
 web/public/icons/*
 tests/unit/test_pwa_assets.py
@@ -229,7 +229,7 @@ video behavior, data access, pipeline files, migrations, and generated media.
 2. Produce crisp PNG assets for 192×192 and 512×512 launch icons, a genuinely
    maskable 512×512 icon whose meaningful artwork stays within the central safe
    zone, and a 180×180 Apple touch icon. Keep source and export names unambiguous.
-3. Add `manifest.webmanifest` with:
+3. Add `manifest.json` with:
    - `name`: `Pleni`
    - `short_name`: `Pleni`
    - a stable `/` app `id`, `/` `start_url`, and `/` scope
@@ -246,7 +246,7 @@ video behavior, data access, pipeline files, migrations, and generated media.
 
 ### Acceptance
 
-- `/manifest.webmanifest` and every referenced icon exist in a production build.
+- `/manifest.json` and every referenced icon exist in a production build.
 - Manifest paths resolve under the deployed root and do not depend on a hash route.
 - Chrome's Application panel parses the manifest without an icon or scope error.
 - The maskable preview does not crop the Pleni mark.
@@ -275,7 +275,7 @@ Inspect the generated manifest and icons in `web/dist/`; do not commit `web/dist
 - **Icon source:** retained the existing `favicon.svg` geometry and colors. Launcher
   PNGs use a full warm-white field; the maskable symbol is scaled to 76% around its
   centre so all meaningful artwork remains inside the maskable safe zone.
-- **Files changed:** `web/index.html`, `web/public/manifest.webmanifest`,
+- **Files changed:** `web/index.html`, `web/public/manifest.json`,
   `web/public/icons/*`, `tests/unit/test_pwa_assets.py`, `docs/BUILD_PLAN.md`, this
   plan, and `PROGRESS.md`.
 - **Validation:** 4 focused PWA asset tests passed; TypeScript and Vite production
@@ -964,9 +964,16 @@ isolated profiles, `http://127.0.0.1:5199/`.
   strict TypeScript compile.
 
 **Deployed-origin preflight:** `https://pleni.se/` returned 200, but
-`/manifest.webmanifest`, `/sw.js` and all four new PNG launcher assets returned
+`/manifest.json`, `/sw.js` and all four new PNG launcher assets returned
 404. This is the expected pre-release state: the UI14 worktree has not been pushed
 or deployed. No release date or deployed commit exists yet.
+
+**First production deployment:** commit `968749e` reached `origin/main` on
+2026-08-11. The app, worker and icons returned 200, but InstaPods served the
+`.webmanifest` file as `application/octet-stream`. UI14.6 treated this as a real
+installability defect and changed the linked file to `/manifest.json`, which the
+host serves as `application/json`; the correction is verified locally and awaiting
+the follow-up deployment.
 
 | Mode | Required platform | Result |
 |---|---|---|

@@ -1098,7 +1098,7 @@ web/index.html
 web/package.json
 web/package-lock.json
 web/vite.config.ts
-web/public/{manifest.webmanifest,icons/*,favicon.svg}
+web/public/{manifest.json,icons/*,favicon.svg}
 web/src/{App.tsx,main.tsx,styles.css,sw.ts,types.ts,vite-env.d.ts}
 web/src/{pwa,feed}/*
 web/scripts/verify-pwa-build.mjs

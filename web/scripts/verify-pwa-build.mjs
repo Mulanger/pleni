@@ -26,7 +26,7 @@ function filesBelow(directory) {
 
 const indexHtml = requireFile(join(distRoot, "index.html"), "production index");
 const manifestSource = requireFile(
-  join(distRoot, "manifest.webmanifest"),
+  join(distRoot, "manifest.json"),
   "web app manifest"
 );
 const serviceWorkerSource = requireFile(join(distRoot, "sw.js"), "service worker");
@@ -35,7 +35,7 @@ const manifest = JSON.parse(manifestSource);
 if (manifest.display !== "standalone") {
   fail("manifest display is not standalone");
 }
-if (!indexHtml.includes('rel="manifest"') || !indexHtml.includes("/manifest.webmanifest")) {
+if (!indexHtml.includes('rel="manifest"') || !indexHtml.includes("/manifest.json")) {
   fail("production index does not link the manifest");
 }
 if (serviceWorkerSource.includes("self.__WB_MANIFEST")) {

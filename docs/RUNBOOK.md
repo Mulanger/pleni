@@ -505,9 +505,9 @@ python tasks.py test lint typecheck
 git diff --check
 ```
 
-After deployment, verify `https://pleni.se/`, `/manifest.webmanifest`, `/sw.js` and
+After deployment, verify `https://pleni.se/`, `/manifest.json`, `/sw.js` and
 all four PNG launcher assets. They must return 200 over HTTPS; the manifest must be
-`application/manifest+json`, the worker JavaScript, and the icons `image/png`.
+`application/json`, the worker JavaScript, and the icons `image/png`.
 Because `/sw.js` is at the origin root, its normal `/` scope needs no broader
 `Service-Worker-Allowed` header.
 
