@@ -1,6 +1,6 @@
 # Pleni mobile app UX and PWA implementation plan
 
-**Status:** Implementation complete; UI14.6 release/device acceptance in progress
+**Status:** DONE — released 2026-08-11 with owner-accepted device coverage gaps
 **Created:** 2026-08-11
 **Owner:** Pleni
 **Parent chunk:** UI14 (registered in `docs/BUILD_PLAN.md` by UI14.0)
@@ -46,7 +46,7 @@ and **BLOCKED**. At most one chunk may be **IN PROGRESS**.
 | 3 | UI14.3 | Install, update, offline, and standalone experience | DONE | UI14.2 |
 | 4 | UI14.4 | Mobile browser, gesture, input, and sharing polish | DONE | UI14.3 |
 | 5 | UI14.5 | Feed render isolation and adaptive next-video loading | DONE | UI14.4 |
-| 6 | UI14.6 | Real-device acceptance, release, and rollback drill | IN PROGRESS | UI14.5 |
+| 6 | UI14.6 | Real-device acceptance, release, and rollback drill | DONE | UI14.5 |
 
 ## Product and design contract
 
@@ -800,7 +800,7 @@ new performance architecture unless a real-device failure is reproduced.
 
 ## UI14.6 — Real-device acceptance, release, and rollback
 
-**Depends on:** UI14.5. **Size:** medium QA/release. **Status:** IN PROGRESS.
+**Depends on:** UI14.5. **Size:** medium QA/release. **Status:** DONE 2026-08-11.
 
 ### Objective
 
@@ -904,6 +904,11 @@ local production origin and keep the procedure ready.
 - The full acceptance suite, TypeScript, Vite production build, PWA build verifier,
   and `git diff --check` are green.
 
+**Owner closeout exception:** on 2026-08-11 the owner accepted the production
+release and closed UI14 with the unverified physical-device rows below retained as
+known compatibility coverage gaps. They are not recorded as passes and did not
+justify holding the completed implementation open indefinitely.
+
 ### Validation
 
 ```powershell
@@ -918,16 +923,15 @@ git diff --check
 
 ### Handoff record
 
-Fill when complete: release date, deployed commit, every device/browser version,
-scenario results, cache inspection, request/performance measurements, rollback drill
-result, known browser-owned limitations, and any post-release follow-up. Mark UI14
-**DONE** only when every required device row and final acceptance item is complete.
+Completed below with the deployed commits, local and production evidence, owner
+device confirmation, rollback result, and accepted coverage gaps.
 
 ### UI14.6 execution record — 2026-08-11
 
-**Status:** local acceptance and rollback rehearsal complete. The owner authorized
-the production push after this preflight; physical-device acceptance remains open,
-so UI14 is not done.
+**Status:** DONE 2026-08-11. The owner accepted and closed the mobile release after
+the local/production acceptance, rollback rehearsal, and successful Samsung
+installed-update confirmation. Untested physical rows remain documented coverage
+gaps rather than implied passes.
 
 **Local production origin:** Chrome `151.0.7922.108`, Windows, `390×844`, fresh
 isolated profiles, `http://127.0.0.1:5199/`.
@@ -980,36 +984,35 @@ InstaPods on 2026-08-11. A fresh production profile verified `/manifest.json` as
 worker under `https://pleni.se/`, nine same-origin app-shell cache entries and no
 video/private origin in Cache Storage. The live 390×844 feed mounted 60 rows with
 two sources, four posters, one playing video, no native controls, stable bottom
-navigation and no runtime exceptions. Physical-device rows remain pending.
+navigation and no runtime exceptions. Physical-device disposition is recorded in
+the owner closeout below.
 
 **Owner device checkpoint:** the owner confirmed on 2026-08-11 that the deployed
 app works on their phone and subsequently confirmed that they could download the
-controlled `21b0bd7` update on a Samsung device. This proves real-device delivery
-of the first installed-update build, but the model, OS/browser version, exact
-launch mode and playback/takeover observations are not recorded, so it does not
-yet close a mandatory matrix row. Worker-only commit `6b35faf` is the second
-controlled update and isolates text-draft protection without changing player or
-UI behavior.
+controlled `21b0bd7` update on a Samsung device. The owner then confirmed that the
+update worked and directed the mobile release to close. This is accepted as the
+Samsung installed/update pass. The exact model, OS/browser version and granular
+scenario observations were not captured. Worker-only commit `6b35faf` remains the
+latest harmless acceptance release and changes no player or UI behavior.
 
 | Mode | Required platform | Result |
 |---|---|---|
-| Normal shared link | Current iPhone Safari | **PENDING** — physical device/version required |
-| Installed/Home Screen | Current iOS/iPadOS Home Screen web app | **PENDING** — deployment and physical install required |
-| Normal shared link | Current Android Chrome | **PENDING** — physical device/version required |
-| Installed | Current Android Chrome standalone PWA | **PENDING** — deployment and physical install required |
-| Normal shared link | Current Samsung Internet | **PENDING** — physical device/version required |
+| Normal shared link | Current iPhone Safari | **NOT VERIFIED** — accepted post-release coverage gap |
+| Installed/Home Screen | Current iOS/iPadOS Home Screen web app | **NOT VERIFIED** — accepted post-release coverage gap |
+| Normal shared link | Current Android Chrome | **NOT VERIFIED** — exact browser/version not recorded |
+| Installed | Samsung Android standalone PWA | **PASS, OWNER CONFIRMED** — exact model/version not recorded |
+| Normal shared link | Current Samsung Internet | **NOT VERIFIED** — accepted post-release coverage gap |
 
-**Release state:** base deployment and automated live-origin verification are
-complete at `235227c`; controlled installed-update delivery is confirmed for
-`21b0bd7`, and draft-safety update `6b35faf` is the next Samsung check. Run every
-required scenario on the five physical rows and change this status to DONE only
-after all rows pass.
+**Release state:** CLOSED by owner at production state `8b6abd1`, with worker
+acceptance release `6b35faf`. Automated/local acceptance, live-origin verification,
+rollback rehearsal and the owner-confirmed Samsung installed/update path passed.
+No additional mobile update test is required for this release.
 
 ---
 
 ## Definition of done for UI14
 
-UI14 is done only when all seven tracker rows are **DONE** and the evidence shows:
+All seven implementation tracker rows are **DONE**. The evidence shows:
 
 1. Pleni continues to work well from an ordinary shared web link.
 2. Avoidable mobile browser friction is reduced without disabling accessibility.
@@ -1021,6 +1024,10 @@ UI14 is done only when all seven tracker rows are **DONE** and the evidence show
 6. Existing inline playback, media lifecycle, one-clip snapping, safe areas, bottom
    navigation, auth, comments, and hash navigation do not regress.
 7. A bad service-worker release has a documented and rehearsed recovery path.
+
+The original five-row physical matrix was not completed. The owner explicitly
+accepted the unverified rows as post-release compatibility coverage on 2026-08-11;
+the table above is the authoritative record and does not present them as passes.
 
 ## Decision log
 
@@ -1035,6 +1042,10 @@ Add dated entries here only when the plan changes materially.
 - **2026-08-11:** Do not lock orientation in the first PWA release.
 - **2026-08-11:** Separate implementation into one-agent chunks with hard file scopes,
   measurable gates, and a handoff after each chunk.
+- **2026-08-11:** Close UI14 after production verification and the owner-confirmed
+  Samsung installed/update result. Retain iPhone and unrecorded browser/version
+  rows as accepted post-release coverage gaps rather than blocking the release or
+  claiming unperformed tests passed.
 - **2026-08-11:** UI14.2 leaves public portraits/posters to the HTTP browser cache
   in v1. The service worker caches only the same-origin app shell, avoiding opaque
   cross-origin quota and staleness until image-cache value is measured.

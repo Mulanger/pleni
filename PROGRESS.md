@@ -3823,7 +3823,7 @@ browser and installed-mode matrix, real native share/install/update behavior,
 deployment verification and the bad-service-worker rollback drill. Do not redesign
 the feed or widen media windows unless a reproduced device failure requires it.
 
-## UI14.6 — real-device acceptance, release, and rollback — BLOCKED 2026-08-11
+## UI14.6 — real-device acceptance, release, and rollback — DONE 2026-08-11
 
 **Built:** the frontend PWA release, preferred corrected-worker rollback and
 emergency unregister procedures in `docs/RUNBOOK.md`; a locally rehearsed rollback
@@ -3893,22 +3893,24 @@ TypeScript compile. `git diff --check` passed.
 - The owner confirmed that the deployed app works on their phone and that they
   could download controlled update `21b0bd7` on a Samsung device. This confirms
   real-device delivery of the first installed-update build. The exact model,
-  OS/browser, launch mode and playback/takeover observations are still required
-  before a mandatory row can be closed.
-- Controlled worker-only commit `6b35faf` is the next Samsung acceptance build.
-  Its distinct worker/cache identity tests comment-draft deferral while leaving
+  OS/browser, launch mode and playback/takeover observations were not captured and
+  remain recorded coverage gaps in the closeout below.
+- Controlled worker-only commit `6b35faf` is the latest Samsung acceptance build.
+  Its distinct worker/cache identity exercises safe update delivery while leaving
   video, feed, navigation and data behavior unchanged.
 
-**Blocked / needs a decision:**
-- All five required real-device rows remain formally pending: current iPhone
-  Safari, iOS/iPadOS Home Screen, Android Chrome browser, Android Chrome installed
-  and Samsung Internet. Actual OS/browser versions, native install/share sheets, safe areas,
-  keyboard zoom, background/lock behavior and installed update takeover cannot be
-  recorded without those devices.
+**Owner closeout decision:**
+- The owner confirmed the Samsung installed/update flow worked and directed the
+  mobile release to close. UI14.6 and UI14 are DONE at production state `8b6abd1`,
+  with worker acceptance release `6b35faf`.
+- The exact Samsung model, Android/browser versions and granular scenario results
+  were not captured. iPhone Safari, iOS Home Screen, normal Android Chrome and
+  Samsung Internet remain explicitly unverified, owner-accepted post-release
+  compatibility coverage gaps. None is represented as a pass.
 
-**Next agent should know:** the base production release is `235227c`; Samsung
-delivery of worker-only update `21b0bd7` is owner-confirmed. Update `6b35faf` is the
-next comment-draft deferral test. Record its phone result, then run all 16 scenarios
-in the detailed plan on every physical row, record actual OS/browser versions and
-mark UI14.6 and UI14 DONE only when every row passes. If a device defect is
-reproduced, change only the scoped UI14 files and rerun the full acceptance suite.
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** the mobile UX/PWA release is closed. Do not begin C12
+until the owner provides new instructions. If a device-specific defect is later
+reported, reproduce it and reopen a narrowly scoped UI follow-up rather than
+silently changing this completed acceptance record.
