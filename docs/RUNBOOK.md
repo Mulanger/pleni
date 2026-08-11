@@ -478,6 +478,150 @@ failure here means something is reachable from a browser that should not be.
 
 ---
 
+## Frontend PWA release and service-worker rollback
+
+InstaPods serves only the static frontend and deploys `origin/main`. A PWA release
+therefore needs the same review as any other frontend release, plus a worker
+recovery path. Obtain the owner's explicit approval before pushing or deploying.
+Do not change the working InstaPods commands while doing a rollback:
+
+```text
+Install: cd web && npm ci
+Build:   cd web && node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json && node ./node_modules/vite/bin/vite.js build && cd .. && rm -rf ./assets ./index.html ./dist && cp -R web/dist/. ./
+```
+
+### Release preflight
+
+Build from the exact commit intended for release and keep its SHA as the known-good
+rollback target:
+
+```powershell
+cd web
+node .\node_modules\typescript\bin\tsc --noEmit -p tsconfig.json
+node .\node_modules\vite\bin\vite.js build
+node .\scripts\verify-pwa-build.mjs
+cd ..
+python tasks.py test lint typecheck
+git diff --check
+```
+
+After deployment, verify `https://pleni.se/`, `/manifest.webmanifest`, `/sw.js` and
+all four PNG launcher assets. They must return 200 over HTTPS; the manifest must be
+`application/manifest+json`, the worker JavaScript, and the icons `image/png`.
+Because `/sw.js` is at the origin root, its normal `/` scope needs no broader
+`Service-Worker-Allowed` header.
+
+Use a fresh browser profile for first-install evidence and an already controlled
+profile for update evidence. A normal correction must change the bytes served at
+the existing `/sw.js` URL and retain scope `/`; changing the filename or merely
+removing registration code does not replace a worker already installed in a
+viewer's browser. The corrected worker should reach `installed`/waiting while the
+old controller remains active. Activate it only through Pleni's Update action at a
+point with no playing video and no non-empty comment draft, then confirm
+`controllerchange`, reload and the new activated controller.
+
+Inspect Cache Storage after first install and after update. Every `pleni-` cache
+entry must be a same-origin app-shell URL. No MP4, Range response, Bunny/Supabase/
+Clerk response, token or mutation may appear. An unrelated cache must survive
+Pleni's selective cleanup.
+
+### Preferred rollback: corrected worker under the same scope
+
+1. Restore or fix the last known-good application and `web/src/sw.ts` without
+   changing the worker URL or scope.
+2. Build and run the full release preflight locally.
+3. In a controlled local profile, confirm that the corrected worker waits rather
+   than calling `skipWaiting()` during install.
+4. Leave a video playing and a draft populated in separate checks: accepting the
+   update must defer takeover/reload. Clear the unsafe activity and confirm the
+   waiting worker activates, becomes controller, and reloads once.
+5. With owner approval, deploy the corrected commit and repeat the normal and
+   installed-mode checks on `pleni.se`.
+
+This is the first response to a bad release. Use the emergency path only when the
+active worker prevents the normal corrected worker or app UI from recovering.
+
+### Emergency unregister worker
+
+Do **not** deploy this in production as a drill. When it is genuinely required,
+temporarily replace `web/src/sw.ts` with the following worker and deploy it at the
+same `/sw.js` URL and `/` scope. The unused manifest reference is deliberate: it
+keeps the current `injectManifest` build step valid without caching those entries.
+
+```ts
+/// <reference lib="webworker" />
+
+export {};
+
+type PrecacheEntry = string | { revision?: string | null; url: string };
+
+declare global {
+  interface WorkerGlobalScope {
+    __WB_MANIFEST: PrecacheEntry[];
+  }
+}
+
+const worker = self as unknown as ServiceWorkerGlobalScope;
+const ignoredPrecacheManifest = self.__WB_MANIFEST;
+void ignoredPrecacheManifest;
+
+const CACHE_PREFIX = "pleni-";
+const RECOVERY_MESSAGE = "PLENI_EMERGENCY_WORKER_READY";
+
+worker.addEventListener("install", (event: ExtendableEvent) => {
+  event.waitUntil(worker.skipWaiting());
+});
+
+worker.addEventListener("activate", (event: ExtendableEvent) => {
+  event.waitUntil(
+    (async () => {
+      const cacheNames = await caches.keys();
+      await Promise.all(
+        cacheNames
+          .filter((name) => name.startsWith(CACHE_PREFIX))
+          .map((name) => caches.delete(name))
+      );
+      await worker.clients.claim();
+      const windowClients = await worker.clients.matchAll({
+        includeUncontrolled: true,
+        type: "window"
+      });
+      for (const client of windowClients) {
+        client.postMessage({ type: RECOVERY_MESSAGE });
+      }
+      await worker.registration.unregister();
+    })()
+  );
+});
+```
+
+Automatic activation is intentional only for this emergency worker. It has no
+`fetch` handler, deletes only cache names beginning `pleni-`, and unregisters
+itself after takeover. It must not call `client.navigate()` or otherwise reload an
+open page: a playing viewer or typed draft remains untouched. After the recovery
+message/takeover, the viewer reloads only at a safe point; for an installed app,
+close and relaunch after finishing playback or preserving the draft.
+
+Verify recovery in both an ordinary tab and installed mode:
+
+1. The current document does not reload during emergency takeover.
+2. `navigator.serviceWorker.getRegistrations()` returns no Pleni registration.
+3. `caches.keys()` contains no `pleni-` name, while a deliberately created
+   unrelated cache remains.
+4. MP4 playback still uses the network/browser HTTP cache; no media appears in
+   Cache Storage.
+5. Reload or relaunch at a viewer-safe point and confirm the network-served shell
+   opens without a worker failure.
+6. Immediately restore and deploy the recorded known-good commit. Its normal
+   `/sw.js` registers again, recreates only the bounded app-shell cache, and reaches
+   activated/controller state in normal and installed modes.
+
+The emergency build is a bridge, not the final rollback state. Record the bad,
+emergency and restored commit SHAs plus the production verification in
+`PROGRESS.md`.
+
+---
+
 ## Known sharp edges
 
 Things that are true right now and will bite someone.

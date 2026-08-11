@@ -3585,3 +3585,311 @@ clean).
 - Do not put `avatar_source_url` back into the public image path. Re-run
   `python scripts/sync_politician_profiles.py` when Riksdagen publishes either
   missing portrait; the content-addressed mirror will replace the fallback.
+
+## UI14.0 — mobile app UX and PWA scope registration — DONE 2026-08-11
+
+**Built:** registered UI14 in `docs/BUILD_PLAN.md` and linked its ordered detailed
+source of truth, `docs/MOBILE_APP_UX_PWA_IMPLEMENTATION_PLAN.md`.
+**Tests:** documentation review and scope comparison; no runtime code changed.
+**Contracts touched:** none.
+
+**Decisions made:**
+- `docs/BUILD_PLAN.md` remains the mandatory chunk registry. The dedicated UI14
+  plan owns subchunk status, narrow file scopes, caching rules, acceptance gates
+  and sequential-agent handoffs.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** UI14.1 is complete in the following handoff. Start
+with UI14.2; do not repeat manifest or icon work.
+
+## UI14.1 — manifest, install metadata and icons — DONE 2026-08-11
+
+**Built:** `web/public/manifest.webmanifest`; 192×192 and 512×512 `any` launcher
+icons; a safe-zone-aware 512×512 maskable icon; a 180×180 Apple touch icon;
+documented icon sources/colors; manifest, Apple launch and static theme metadata
+in `web/index.html`; and focused PWA asset contract tests.
+**Tests:** 4 focused PWA tests passed. TypeScript and the Vite production build
+passed. `python tasks.py test lint typecheck` is green: 379 passed, 68 deselected,
+one existing `audioop` warning; lint and strict typing clean. A production preview
+served the manifest as `application/manifest+json` and every icon as `image/png`,
+all with HTTP 200.
+**Contracts touched:** none.
+
+**Decisions made:**
+- Retained the existing favicon mark and exact warm-white, black and blue palette;
+  no new logo was invented.
+- Launcher assets use an edge-to-edge warm-white field so platform masks do not
+  reveal transparent corners. The maskable symbol is scaled to 76% around centre.
+- Manifest identity, start URL and scope are `/`; display is `standalone`; launch
+  and static theme colors are feed-dark; no orientation lock was added.
+- Pinch zoom remains enabled. iOS receives explicit app title/capability metadata
+  and a dedicated Apple touch icon.
+
+**Observations (not fixed, out of scope):**
+- Dynamic light/dark browser chrome belongs to UI14.4. UI14.1 intentionally uses
+  the dark feed color as the static startup fallback.
+- Installed-device icon rendering remains part of the mandatory UI14.6 device
+  matrix; the source PNGs and maskable safe zone were visually inspected locally.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** start UI14.2. Do not modify the feed/player or visual
+styles. Add the explicit service worker and bounded caching exactly as specified
+in `docs/MOBILE_APP_UX_PWA_IMPLEMENTATION_PLAN.md`.
+
+## UI14.2 — service worker and bounded app-shell caching — DONE 2026-08-11
+
+**Built:** exact-pinned `vite-plugin-pwa==1.3.0`; explicit post-load registration
+and waiting-update lifecycle in `web/src/pwa/register.ts`; a repo-owned TypeScript
+service worker in `web/src/sw.ts`; `injectManifest` production configuration; and
+`web/scripts/verify-pwa-build.mjs` for static and executable worker-policy checks.
+**Tests:** TypeScript and the Vite production build passed. The built worker
+precached 9 app-shell entries (513.75 KiB). The verifier passed install, activate,
+selective cleanup, offline navigation, cache-first shell delivery, media/Range/
+cross-origin/mutation bypass and message-only activation. `npm audit` reports zero
+vulnerabilities. `python tasks.py test lint typecheck` is green: 379 passed, 68
+deselected, one existing `audioop` warning; lint and strict typing clean. A local
+production preview served `/sw.js` with HTTP 200.
+**Contracts touched:** none.
+
+**Decisions made:**
+- Use `injectManifest` with an unminified classic worker so the exact cache policy
+  and injected asset list remain build-verifiable.
+- Derive each `pleni-precache-*` name from the injected manifest. A waiting worker
+  therefore cannot overwrite the active worker's shell cache; old Pleni caches are
+  deleted only when the new worker activates.
+- Cache only same-origin build assets. Navigation is network-first with the
+  precached `index.html` as offline fallback. Revisioned shell assets are cache-first.
+- Cross-origin requests, video/audio, MP4/HLS/WebM, HTTP Range, non-GET, Supabase,
+  Clerk and Bunny remain network/browser-cache owned. Public portrait/poster
+  runtime caching is deferred until value and opaque-cache quota are measured.
+- Updates never call `skipWaiting()` during install. UI14.3 can activate a waiting
+  worker only through the exported viewer-action message.
+- `vite-plugin-pwa` installation exposed Vite/PostCSS's transitive vulnerable
+  `nanoid==3.3.16`; the lock now resolves compatible patched `3.3.18`.
+
+**Observations (not fixed, out of scope):**
+- A deployment-style `npm ci` in the active Windows tree hit `EPERM` while replacing
+  Vite's loaded native Rolldown binary. `npm install` restored the dependency tree;
+  the exact lock, audit, TypeScript, production build and verifier are green. The
+  InstaPods clean Linux install is a different condition and retains its normal
+  deployment validation gate.
+- UI14.2 exposes lifecycle state/events but deliberately adds no install, offline
+  or update UI. Those surfaces belong to UI14.3.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** start UI14.3. Consume the exported PWA lifecycle helpers
+without changing cache policy. Installation and update prompts must remain quiet,
+dismissible and safe around playback/comment drafts.
+
+## UI14.3 — install, update, offline and standalone experience — DONE 2026-08-11
+
+**Built:** typed standalone/iOS compatibility helpers; tap-only Chromium install
+handling; concise iPhone/iPad Safari Home Screen guidance in Profile; dismissible
+offline and waiting-update surfaces; and safe update deferral around playing video
+and non-empty comment drafts.
+**Tests:** TypeScript, Vite production build and the PWA verifier are green. The
+verifier retains 9 app-shell entries with no video/private-data cache.
+`python tasks.py test lint typecheck` is green: 379 passed, 68 deselected, one
+existing `audioop` warning; lint and strict typing clean. Production-preview mobile
+browser exercises covered Chromium prompt dismissal, iOS manual guidance,
+standalone hiding, offline dismissal, overlay geometry and update deferral/release.
+**Contracts touched:** none.
+
+**Decisions made:**
+- Installation stays one quiet Profile group and is hidden when unsupported, not
+  eligible, dismissed for the session, newly installed or already standalone.
+- iOS manual instructions are limited to mobile Safari; no automated prompt is
+  implied where the platform does not provide one.
+- A worker can activate only after a viewer taps Update. Reload still waits for the
+  browser's controller-change event and for both playback and comment drafts to be
+  safe. Existing player/comment ownership was not changed.
+- Browser connectivity is only a hint; a rejected catalogue request also drives
+  the honest network-failure message.
+- Normal browser and standalone launches share routing and product behavior.
+
+**Observations (not fixed, out of scope):**
+- Physical iPhone/Android installation, installed safe-area rendering and an actual
+  deployed waiting-worker takeover remain in UI14.6's real-device/release matrix.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** start UI14.4. Preserve the UI14.3 lifecycle and status
+surfaces while adding only the scoped theme, input, touch and sharing polish.
+
+## UI14.4 — mobile browser and interaction polish — DONE 2026-08-11
+
+**Built:** dynamic dark/light browser theme synchronization in
+`web/src/pwa/theme.ts`; mobile-safe 16 px search and comment inputs; scoped touch,
+selection, overscroll and pressed-state rules; and a working feed Share action with
+native Web Share, canonical Pleni clip links, clipboard fallback, quiet cancellation
+and accessible success/failure feedback.
+**Tests:** TypeScript and the Vite production build passed. The PWA verifier remains
+green with 9 app-shell entries and no video/private-data caching.
+`python tasks.py test lint typecheck` is green: 379 passed, 68 deselected, one
+existing `audioop` warning; lint and strict typing clean. `git diff --check` passed.
+Production-preview checks at 390×844 covered a coarse pointer and touch input,
+keyboard-only focus, reduced motion, dark/light theme changes, 16 px inputs,
+reading/form text selection, overscroll containment, all share outcomes, and exact
+shared-link landing. The temporary share labels were visually checked in the feed.
+**Contracts touched:** none.
+
+**Decisions made:**
+- Shared URLs use the existing person-clips route when a stable politician id is
+  available and the existing party-clips route otherwise. Both carry the clip id
+  and reopen the exact clip; neither exposes a Bunny media URL or changes routing.
+- A viewer-cancelled native share remains silent and does not unexpectedly copy to
+  the clipboard. Successful native share, successful copy and total failure receive
+  distinct short labels and accessible status text.
+- `touch-action: manipulation` is limited to discrete controls. Feed/video surfaces
+  explicitly keep `pan-y pinch-zoom`; progress keeps `touch-action: none` for its
+  established scrub ownership.
+- Press feedback is a 90 ms opacity/scale response. Reduced-motion mode removes the
+  scale and transition while retaining immediate opacity feedback.
+- No keyboard/VisualViewport workaround was added because the current safe-area and
+  fixed-surface CSS produced no reproducible failure in the production preview.
+
+**Observations (not fixed, out of scope):**
+- Dynamic browser chrome, focus zoom, platform double-tap behavior, installed safe
+  areas, native share sheets and clipboard permissions still require physical iOS
+  and Android coverage in UI14.6.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** start UI14.5. Isolate feed rendering and add adaptive
+next-video loading without changing feed order, autoplay/mute ownership, seek
+semantics, media windows, or UI14.4's sharing and gesture behavior.
+
+## UI14.5 — feed render isolation and adaptive next-video loading — DONE 2026-08-11
+
+**Built:** a per-row `FeedItemRow` media clock in `web/src/App.tsx`, so active
+progress no longer rebuilds every catalogue row; last-direction prediction for one
+next neighbor; and the typed, optional Network Information helper
+`web/src/feed/network.ts`, with conservative Safari/unknown, Save-Data and 2G
+behavior.
+**Tests:** TypeScript, the Vite production build and the PWA verifier passed. The
+verifier retains 9 app-shell entries and no video/private-data cache.
+`python tasks.py test lint typecheck` is green: 379 passed, 68 deselected, one
+existing `audioop` warning; lint and strict typing clean. `git diff --check` passed.
+**Contracts touched:** none.
+
+**Measured production result (390×844 Chromium, cache disabled, reported 4G):**
+- Fresh Bunny media/image requests stayed 7 → 7: four thumbnails, one portrait,
+  the active MP4 and one neighboring MP4.
+- Source attachments stayed 2 at the top and 3 in the middle; posters stayed 4
+  and 7; exactly one video played.
+- Five baseline progress commits rebuilt the inline 60-row map. Five final commits
+  performed work in only the active `FeedItemRow`: 60 → 1 rows per tick.
+- Active-state commit to first rendered frame improved from an 81.3 ms upper
+  median to 69.9 ms over the first three consecutive downward transitions.
+  Play-to-frame improved from 27.6 ms to 20.8 ms over the same sample.
+- A strong touch fling advanced exactly one 844 px item. Visual output, safe layout
+  and the bottom navigation were unchanged.
+
+**Decisions made:**
+- High-frequency current-time and duration state belongs to the row. Media refs,
+  active ownership, autoplay/mute fallback, stale-play generation, visibility,
+  looping, seeking and comments remain in `FeedScreen`.
+- The active clip is always `preload="auto"`. Only the predicted next neighbor may
+  also be `auto`, and only when the browser explicitly reports Save-Data off plus
+  effective 3G/4G. Missing information, Save-Data, 2G and slow-2G stay metadata.
+- Direction is committed with the active-index movement. Forward motion makes the
+  next row eager; reversing makes the previous row eager and returns the abandoned
+  direction to metadata.
+- Video stays browser/HTTP-Range owned. No manual MP4 fetch, blob cache or service
+  worker media rule was introduced.
+
+**Regression matrix:** production-preview checks passed autoplay muted fallback,
+first-tap audio unlock, viewer mute persistence, surface pause/resume, 70% scrub,
+explicit end/loop restart, comments pause/resume, canonical sharing, hidden-page
+pause/resume, detached-video pause, direction reversal, request windows and the
+one-playing-video invariant. Unknown connection, Save-Data, 2G, strong 4G and a
+live strong→Save-Data change all selected the expected preload policy.
+
+**Observations (not fixed, out of scope):**
+- CDP transport throttling changes bandwidth but did not update Chromium's
+  `navigator.connection` values. The optional hint branches were therefore tested
+  by deterministic runtime substitution; physical Data Saver behavior belongs to
+  UI14.6.
+- First-frame callbacks vary by roughly one 60 Hz frame even with decoded media.
+  Repeated matched transitions were used instead of a single favorable sample.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** start UI14.6. Complete the physical iPhone/Android
+browser and installed-mode matrix, real native share/install/update behavior,
+deployment verification and the bad-service-worker rollback drill. Do not redesign
+the feed or widen media windows unless a reproduced device failure requires it.
+
+## UI14.6 — real-device acceptance, release, and rollback — BLOCKED 2026-08-11
+
+**Built:** the frontend PWA release, preferred corrected-worker rollback and
+emergency unregister procedures in `docs/RUNBOOK.md`; a locally rehearsed rollback
+path; and the detailed pre-release/device evidence ledger in
+`docs/MOBILE_APP_UX_PWA_IMPLEMENTATION_PLAN.md`. No frontend runtime code, host
+configuration or production state changed.
+**Tests:** TypeScript, the Vite production build and `verify-pwa-build.mjs` are
+green with nine app-shell entries and no video/private-data cache.
+`python tasks.py test lint typecheck` is green: 379 passed, 68 deselected, one
+existing `audioop` warning; lint and strict typing clean. The emergency worker
+snippet passed a standalone strict TypeScript compile. `git diff --check` passed.
+**Contracts touched:** none.
+
+**Local acceptance (Chrome 151.0.7922.108, Windows, 390×844 production preview):**
+- Shared-link launch, exact deep hash and browser Back passed. Search input computed
+  to 16 px. The feed and bottom navigation ended at the stable 844 px viewport.
+- The 60-row feed attached two video sources and four posters at the top; exactly
+  one video played. Custom controls, inline/vendor-inline playback, disabled PiP
+  and disabled remote playback were present on every video.
+- Ten strong touch swipes stopped at exact 844 px increments through 8440 px, one
+  clip per swipe with one playing video after every transition.
+- Manifest, worker and app shell installed locally under scope `/`. Cache Storage
+  held nine same-origin shell URLs and no MP4, Range, Bunny, Supabase or Clerk
+  response. Offline transport reloaded the controlled cached shell; the offline
+  platform event exposed the honest Pleni status.
+- A same-scope corrected worker reached waiting state while one video played. The
+  controller/document stayed unchanged until playback was paused and the explicit
+  activation message produced controller takeover.
+- The emergency worker took over without reloading the playing document, removed
+  only `pleni-` caches, retained a deliberate unrelated cache, posted its recovery
+  message and unregistered. Restoring the known-good build and reopening the same
+  profile restored an activated normal worker and bounded shell cache.
+
+**Decisions made:**
+- Keep UI14.6 regression-only. No visual/player changes were justified by the local
+  evidence; the frontend skill was used to preserve the existing full-bleed video
+  hierarchy and interaction model rather than introduce release-phase redesign.
+- The normal same-scope waiting-worker update is the preferred rollback. The
+  emergency worker is a production incident tool only: it skips waiting, has no
+  fetch handler, never reloads clients, deletes only `pleni-` caches and unregisters
+  itself. A viewer reloads/relaunches only after playback/draft activity is safe.
+- Emulation and headless Chrome results are preflight evidence, not substitutes for
+  any row in the mandatory physical-device matrix.
+
+**Observations (not fixed, out of scope):**
+- `https://pleni.se/` returned 200 before release, while the new manifest, worker
+  and four launcher icon URLs all returned 404. This is expected because the UI14
+  worktree has not been pushed/deployed; no production PWA claim can be made yet.
+- Chrome transport-offline emulation reloaded the cached shell but did not emit the
+  same connectivity event as a device radio transition. The status surface passed
+  with the browser `offline` event; actual lost/restored-network behavior remains
+  in the physical matrix.
+
+**Blocked / needs a decision:**
+- All five required real-device rows remain pending: current iPhone Safari, iOS/
+  iPadOS Home Screen, Android Chrome browser, Android Chrome installed and Samsung
+  Internet. Actual OS/browser versions, native install/share sheets, safe areas,
+  keyboard zoom, background/lock behavior and installed update takeover cannot be
+  recorded without those devices.
+- The owner authorized the production push after this preflight. Deployment and
+  live-origin verification are the next action; a deployed commit/release date do
+  not exist at the time of this handoff entry.
+
+**Next agent should know:** deploy the explicitly authorized reviewed commit, then
+run all 16 scenarios in the detailed plan on every
+physical row. Verify production files, MIME types, scope, fresh and waiting worker
+states and cache contents. Record device versions, deployed SHA and release date;
+mark UI14.6 and UI14 DONE only when every row passes. If a device defect is
+reproduced, change only the scoped UI14 files and rerun the full acceptance suite.

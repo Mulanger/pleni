@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Download,
   Flag,
   Heart,
   Home,
@@ -14,6 +15,7 @@ import {
   MoreHorizontal,
   Pause,
   Play,
+  RefreshCw,
   Search,
   Send,
   Share2,
@@ -24,6 +26,7 @@ import {
   Users,
   Volume2,
   VolumeX,
+  WifiOff,
   X
 } from "lucide-react";
 import {
@@ -48,12 +51,16 @@ import {
 } from "./comments";
 import type { CommentReportReason, CommentThread, VideoComment } from "./comments";
 import { initials, PARTIES, partyInk, partyTint, TRENDING } from "./data";
+import { useNeighborVideoPreload } from "./feed/network";
 import { Onboarding } from "./onboarding";
 import { EMPTY_ONBOARDING, readOnboarding, writeOnboarding } from "./onboarding-store";
 import { EMPTY_LIBRARY, readLibrary, toggleInList, writeLibrary } from "./library-store";
 import { LEGAL_PAGE_ORDER, LEGAL_PAGES, LEGAL_VERSION } from "./legal";
 import type { LegalPageId } from "./legal";
 import { useAppNavigation } from "./navigation";
+import { applyBrowserTheme } from "./pwa/theme";
+import { usePwaExperience } from "./pwa/usePwaExperience";
+import type { PwaExperience } from "./pwa/usePwaExperience";
 import {
   loadClipsByIds,
   loadClipsForParty,
@@ -98,8 +105,58 @@ function clearNewAccountRedirect(): void {
 }
 
 type BooleanMap = Record<string, boolean>;
-type NumberMap = Record<string, number>;
 type PlaybackFlash = { clipId: string; icon: "play" | "pause"; nonce: number };
+type ShareOutcome = "shared" | "copied" | "cancelled" | "error";
+type ShareFeedback = {
+  clipId: string;
+  kind: Exclude<ShareOutcome, "cancelled">;
+  nonce: number;
+};
+
+const CANONICAL_APP_URL = "https://pleni.se/";
+
+function canonicalClipUrl(clip: ClipItem): string {
+  const url = new URL(CANONICAL_APP_URL);
+  const params = new URLSearchParams({
+    from: "hem",
+    feed: "senaste",
+    clip: clip.id
+  });
+  url.hash = clip.politicianId
+    ? `/person/${encodeURIComponent(clip.politicianId)}/clips?${params.toString()}`
+    : `/party/${encodeURIComponent(clip.party)}/clips?${params.toString()}`;
+  return url.toString();
+}
+
+async function shareClip(clip: ClipItem): Promise<ShareOutcome> {
+  const url = canonicalClipUrl(clip);
+  const data: ShareData = {
+    title: clip.title,
+    text: `${clip.speakerName}: ${clip.title}`,
+    url
+  };
+  const canUseNativeShare =
+    typeof navigator.share === "function" &&
+    (typeof navigator.canShare !== "function" || navigator.canShare(data));
+
+  if (canUseNativeShare) {
+    try {
+      await navigator.share(data);
+      return "shared";
+    } catch (error: unknown) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return "cancelled";
+      }
+    }
+  }
+
+  try {
+    await navigator.clipboard.writeText(url);
+    return "copied";
+  } catch {
+    return "error";
+  }
+}
 
 /**
  * A feed scoped to something other than the catalogue: one politician's clips,
@@ -166,12 +223,19 @@ function App() {
   const { route, navigate, backTo } = useAppNavigation();
   const tab = route.tab;
   const feedMode = route.feedMode;
+  const darkSurface =
+    (route.view === "tab" && tab === "hem") ||
+    route.view === "person-clips" ||
+    route.view === "party-clips" ||
+    route.view === "saved-clips";
   // Starts empty, not seeded with demo clips (FE-1). A brief loading state is
   // honest; a flash of fabricated content that then becomes real is not.
   const [clips, setClips] = useState<ClipItem[]>([]);
   const [clipSource, setClipSource] = useState<ClipSource>("supabase");
   const [feedError, setFeedError] = useState<string | null>(null);
+  const [feedNetworkFailed, setFeedNetworkFailed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const pwa = usePwaExperience(feedNetworkFailed);
   const selectedPersonId =
     route.view === "person" || route.view === "person-clips" ? route.personId : null;
   const selectedPartyCode =
@@ -204,6 +268,10 @@ function App() {
   const [newAccountRedirect, setNewAccountRedirect] = useState(hasNewAccountRedirect);
   const consent = onboarding.consent;
   const viewer = useViewer();
+
+  useLayoutEffect(() => {
+    applyBrowserTheme(darkSurface ? "dark" : "light");
+  }, [darkSurface]);
 
   useEffect(() => {
     if (!viewer.signedIn || !viewer.userId) {
@@ -324,12 +392,14 @@ function App() {
           setClips(feed.clips);
           setClipSource(feed.source);
           setFeedError(feed.error ?? null);
+          setFeedNetworkFailed(false);
         }
       })
       .catch((error: unknown) => {
         if (mounted) {
           setClips([]);
           setFeedError(error instanceof Error ? error.message : "Okänt fel");
+          setFeedNetworkFailed(true);
         }
       })
       .finally(() => {
@@ -564,6 +634,7 @@ function App() {
   return (
     <>
       <WideScreenMessage />
+      <PwaStatusStack pwa={pwa} />
       {viewer.signedIn && showOnboarding && (
         <Onboarding
           initial={onboarding}
@@ -709,6 +780,7 @@ function App() {
                   setConsent((state) => ({ ...state, [key]: !state[key] }));
                 }}
                 onOpenLegal={openLegal}
+                pwa={pwa}
               />
             )}
             <BottomNav
@@ -731,6 +803,251 @@ function WideScreenMessage() {
         <p>Den första versionen är byggd för en fullskärms 9:16-feed. Surfa från mobilen för hela upplevelsen.</p>
       </div>
     </section>
+  );
+}
+
+function PwaStatusStack({ pwa }: { pwa: PwaExperience }) {
+  if (pwa.updatePhase === "hidden" && pwa.offlineMessage === null) {
+    return null;
+  }
+
+  const updateCopy =
+    pwa.updatePhase === "deferred"
+      ? {
+          title: "Uppdateringen väntar",
+          detail: "Pleni fortsätter när videon är pausad och kommentaren är klar."
+        }
+      : pwa.updatePhase === "activating"
+        ? { title: "Pleni uppdateras", detail: "Ett ögonblick…" }
+        : { title: "Ny version klar", detail: "Uppdatera när det passar." };
+
+  return (
+    <div className="pwa-status-stack">
+      {pwa.updatePhase !== "hidden" && (
+        <div className="pwa-notice">
+          <RefreshCw
+            className={
+              pwa.updatePhase === "activating"
+                ? "pwa-notice-icon pwa-spinner"
+                : "pwa-notice-icon"
+            }
+            size={18}
+            aria-hidden="true"
+          />
+          <div className="pwa-notice-copy" role="status" aria-atomic="true">
+            <strong>{updateCopy.title}</strong>
+            <span>{updateCopy.detail}</span>
+          </div>
+          {pwa.updatePhase === "available" && (
+            <>
+              <button type="button" className="pwa-notice-action" onClick={pwa.requestUpdate}>
+                Uppdatera
+              </button>
+              <button
+                type="button"
+                className="pwa-notice-close"
+                aria-label="Stäng uppdateringsmeddelandet"
+                onClick={pwa.dismissUpdate}
+              >
+                <X size={16} aria-hidden="true" />
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {pwa.offlineMessage && (
+        <div className="pwa-notice">
+          <WifiOff className="pwa-notice-icon" size={18} aria-hidden="true" />
+          <div className="pwa-notice-copy" role="status" aria-atomic="true">
+            <span>{pwa.offlineMessage}</span>
+          </div>
+          <button
+            type="button"
+            className="pwa-notice-close"
+            aria-label="Stäng nätverksmeddelandet"
+            onClick={pwa.dismissOffline}
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Own the high-frequency media clock for one row. A video emits time updates
+ * several times a second; keeping them here means the active row can refresh
+ * its progress bar without rebuilding every sibling in the catalogue.
+ */
+function FeedItemRow({
+  clip,
+  person,
+  videoRef,
+  videoSrc,
+  posterSrc,
+  preload,
+  muted,
+  active,
+  blocked,
+  liked,
+  saved,
+  following,
+  flashIcon,
+  flashNonce,
+  shareFeedback,
+  onTogglePlayback,
+  onToggleMuted,
+  onLike,
+  onComments,
+  onSave,
+  onShare,
+  onOpenPerson,
+  onToggleFollow,
+  onEnded,
+  onPlay,
+  onPause,
+  onSeek
+}: {
+  clip: ClipItem;
+  person: Politician | null;
+  videoRef: (node: HTMLVideoElement | null) => void;
+  videoSrc: string | undefined;
+  posterSrc: string | undefined;
+  preload: "auto" | "metadata";
+  muted: boolean;
+  active: boolean;
+  blocked: boolean;
+  liked: boolean;
+  saved: boolean;
+  following: boolean;
+  flashIcon: PlaybackFlash["icon"] | null;
+  flashNonce: number | null;
+  shareFeedback: ShareFeedback | null;
+  onTogglePlayback: () => void;
+  onToggleMuted: () => void;
+  onLike: () => void;
+  onComments: () => void;
+  onSave: () => void;
+  onShare: () => void;
+  onOpenPerson: () => void;
+  onToggleFollow: () => void;
+  onEnded: (video: HTMLVideoElement) => void;
+  onPlay: () => void;
+  onPause: () => void;
+  onSeek: (seconds: number) => number | null;
+}) {
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(clip.durationS);
+
+  useEffect(() => {
+    setCurrentTime(0);
+    setDuration(clip.durationS);
+  }, [clip.id, clip.durationS]);
+
+  return (
+    <article
+      className="feed-item"
+      data-clip-id={clip.id}
+      /* Q-2 QA hook, same purpose as `data-clip-id` for the FE-4
+         activation harness: the identity a follow keys on has to be
+         checkable from outside without reading React state. Empty
+         string means the speaker has no stable id. */
+      data-politician-id={clip.politicianId ?? ""}
+      onClick={onTogglePlayback}
+    >
+      <video
+        ref={videoRef}
+        /* Only clips near the active one carry a source. A clip that has
+           left the window keeps browser-buffered media, but is paused and
+           no longer competes for new bandwidth. */
+        src={videoSrc}
+        poster={posterSrc}
+        playsInline
+        controls={false}
+        controlsList="nodownload nofullscreen noremoteplayback"
+        disablePictureInPicture
+        disableRemotePlayback
+        muted={muted}
+        /* FE-3 (GATE): the explicit onEnded path keeps completion and replay
+           observable instead of hiding the boundary behind native looping. */
+        preload={preload}
+        onLoadedMetadata={(event) => {
+          const mediaDuration = event.currentTarget.duration;
+          setDuration(
+            Number.isFinite(mediaDuration) && mediaDuration > 0
+              ? mediaDuration
+              : clip.durationS
+          );
+        }}
+        onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+        onEnded={(event) => onEnded(event.currentTarget)}
+        onPlay={onPlay}
+        onPause={onPause}
+        onClick={(event) => {
+          // Consume the media element's own click before an Android browser
+          // can interpret it as a request for its native UI.
+          event.preventDefault();
+          event.stopPropagation();
+          onTogglePlayback();
+        }}
+        onContextMenu={(event) => event.preventDefault()}
+      />
+      {flashIcon && flashNonce !== null && (
+        <PlaybackFlashIcon key={flashNonce} icon={flashIcon} />
+      )}
+      {/* FE-5: only shown when browser policy refused playback itself, never
+          for a pause the viewer chose. */}
+      {blocked && active && (
+        <button
+          className="center-play"
+          aria-label="Spela upp"
+          onClick={(event) => {
+            event.stopPropagation();
+            onTogglePlayback();
+          }}
+        >
+          <Play size={30} fill="currentColor" />
+        </button>
+      )}
+      <button
+        className="mute-button"
+        aria-label={muted ? "Slå på ljud" : "Stäng av ljud"}
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleMuted();
+        }}
+      >
+        {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+      </button>
+      <ActionRail
+        clip={clip}
+        liked={liked}
+        saved={saved}
+        onLike={onLike}
+        onComments={onComments}
+        onSave={onSave}
+        onShare={onShare}
+        shareFeedback={shareFeedback}
+      />
+      <ClipMeta
+        clip={clip}
+        person={person}
+        following={following}
+        onOpenPerson={onOpenPerson}
+        onToggleFollow={onToggleFollow}
+      />
+      <ProgressRow
+        currentTime={currentTime}
+        duration={duration}
+        onSeek={(seconds) => {
+          const nextTime = onSeek(seconds);
+          if (nextTime !== null) {
+            setCurrentTime(nextTime);
+          }
+        }}
+      />
+    </article>
   );
 }
 
@@ -787,15 +1104,17 @@ function FeedScreen({
    * from `paused` so the two can never be read as the same thing.
    */
   const [blocked, setBlocked] = useState<BooleanMap>({});
-  const [currentTimes, setCurrentTimes] = useState<NumberMap>({});
-  const [durations, setDurations] = useState<NumberMap>({});
   const [playbackFlash, setPlaybackFlash] = useState<PlaybackFlash | null>(null);
+  const [shareFeedback, setShareFeedback] = useState<ShareFeedback | null>(null);
   const [commentClip, setCommentClip] = useState<ClipItem | null>(null);
+  const [predictedDirection, setPredictedDirection] = useState<1 | -1>(1);
+  const neighborVideoPreload = useNeighborVideoPreload();
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const videoRefCallbacks = useRef<
     Record<string, (node: HTMLVideoElement | null) => void>
   >({});
   const flashTimer = useRef<number | null>(null);
+  const shareFeedbackTimer = useRef<number | null>(null);
   const resumeAfterComments = useRef(false);
   const resumeAfterVisibility = useRef(false);
   const playbackGeneration = useRef(0);
@@ -829,9 +1148,9 @@ function FeedScreen({
     setActiveId(wanted);
     setPaused({});
     setBlocked({});
-    setCurrentTimes({});
-    setDurations({});
     setPlaybackFlash(null);
+    setShareFeedback(null);
+    setPredictedDirection(1);
     loopCounts.current = {};
   }, [clips, initialClipId]);
 
@@ -1060,6 +1379,9 @@ function FeedScreen({
       if (flashTimer.current !== null) {
         window.clearTimeout(flashTimer.current);
       }
+      if (shareFeedbackTimer.current !== null) {
+        window.clearTimeout(shareFeedbackTimer.current);
+      }
     };
   }, []);
 
@@ -1107,6 +1429,11 @@ function FeedScreen({
       dwellTimer = window.setTimeout(() => {
         dwellTimer = null;
         if (pendingWinner !== null) {
+          const previousIndex = clips.findIndex((clip) => clip.id === activeIdRef.current);
+          const nextIndex = clips.findIndex((clip) => clip.id === pendingWinner);
+          if (previousIndex >= 0 && nextIndex >= 0 && previousIndex !== nextIndex) {
+            setPredictedDirection(nextIndex > previousIndex ? 1 : -1);
+          }
           setActiveId(pendingWinner);
         }
       }, ACTIVATION_DWELL_MS);
@@ -1178,6 +1505,26 @@ function FeedScreen({
     }, 520);
   };
 
+  const shareFromRail = (clip: ClipItem) => {
+    void shareClip(clip).then((outcome) => {
+      if (outcome === "cancelled" || !playbackMounted.current) {
+        return;
+      }
+      if (shareFeedbackTimer.current !== null) {
+        window.clearTimeout(shareFeedbackTimer.current);
+      }
+      const feedback: ShareFeedback = {
+        clipId: clip.id,
+        kind: outcome,
+        nonce: Date.now()
+      };
+      setShareFeedback(feedback);
+      shareFeedbackTimer.current = window.setTimeout(() => {
+        setShareFeedback((current) => (current?.nonce === feedback.nonce ? null : current));
+      }, 2200);
+    });
+  };
+
   const toggleClipPlayback = (clipId: string) => {
     const video = videoRefs.current[clipId];
     if (!video || clipId !== activeId) {
@@ -1214,19 +1561,23 @@ function FeedScreen({
   const seekClip = (clipId: string, seconds: number) => {
     const video = videoRefs.current[clipId];
     if (!video) {
-      return;
+      return null;
     }
-    const fallbackDuration = durations[clipId] ?? clips.find((clip) => clip.id === clipId)?.durationS ?? 0;
-    const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : fallbackDuration;
+    const fallbackDuration = clips.find((clip) => clip.id === clipId)?.durationS ?? 0;
+    const duration =
+      Number.isFinite(video.duration) && video.duration > 0
+        ? video.duration
+        : fallbackDuration;
     const nextTime = Math.min(Math.max(seconds, 0), duration);
     video.currentTime = nextTime;
-    setCurrentTimes((state) => ({ ...state, [clipId]: nextTime }));
+    return nextTime;
   };
 
   // Centre of the `src` window. Falls back to the top of the list before the
   // first activation, so a cold load still fetches the clip about to be seen.
   const activeIndex = clips.findIndex((clip) => clip.id === activeId);
   const windowCentre = activeIndex >= 0 ? activeIndex : 0;
+  const predictedNeighborIndex = windowCentre + predictedDirection;
 
   return (
     <section className="feed-screen">
@@ -1259,6 +1610,12 @@ function FeedScreen({
           const distanceFromActive = Math.abs(index - windowCentre);
           const withinWindow = distanceFromActive <= VIDEO_WINDOW;
           const withinPosterWindow = distanceFromActive <= POSTER_WINDOW;
+          const preload =
+            clip.id === activeId
+              ? "auto"
+              : index === predictedNeighborIndex
+                ? neighborVideoPreload
+                : "metadata";
           const person = personForClip(clip);
           const isLiked = !!liked[clip.id];
           const isSaved = !!saved[clip.id];
@@ -1266,115 +1623,52 @@ function FeedScreen({
           const flashIcon = playbackFlash?.clipId === clip.id ? playbackFlash.icon : null;
           const flashNonce = playbackFlash?.clipId === clip.id ? playbackFlash.nonce : null;
           return (
-            <article
-              className="feed-item"
-              data-clip-id={clip.id}
-              /* Q-2 QA hook, same purpose as `data-clip-id` for the FE-4
-                 activation harness: the identity a follow keys on has to be
-                 checkable from outside without reading React state. Empty
-                 string means the speaker has no stable id. */
-              data-politician-id={clip.politicianId ?? ""}
+            <FeedItemRow
               key={clip.id}
-              onClick={() => toggleClipPlayback(clip.id)}
-            >
-              <video
-                ref={videoRefFor(clip.id)}
-                /* Only clips near the active one carry a source — see
-                   VIDEO_WINDOW. The rest render their poster and cost nothing.
-                   A clip that has left the window keeps whatever it already
-                   buffered, which makes scrolling back instant; it is paused,
-                   so it is not competing for bandwidth. */
-                src={withinWindow ? clip.videoUrl : undefined}
-                poster={withinPosterWindow ? clip.thumbUrl : undefined}
-                playsInline
-                controls={false}
-                controlsList="nodownload nofullscreen noremoteplayback"
-                disablePictureInPicture
-                disableRemotePlayback
-                muted={muted}
-                /* FE-3 (GATE): no `loop` attribute. Native looping made
-                   completion and deliberate replay indistinguishable, which
-                   costs two of the strongest positive signals. The clip still
-                   loops — see onEnded — but the boundary is now an event we
-                   can count. */
-                preload={clip.id === activeId ? "auto" : "metadata"}
-                onLoadedMetadata={(event) => {
-                  const duration = event.currentTarget.duration;
-                  setDurations((state) => ({
-                    ...state,
-                    [clip.id]: Number.isFinite(duration) && duration > 0 ? duration : clip.durationS
-                  }));
-                }}
-                onTimeUpdate={(event) => {
-                  const currentTime = event.currentTarget.currentTime;
-                  setCurrentTimes((state) => ({ ...state, [clip.id]: currentTime }));
-                }}
-                onEnded={(event) => handleClipEnded(clip.id, event.currentTarget)}
-                onPlay={() => {
-                  setPaused((state) => ({ ...state, [clip.id]: false }));
-                  setBlocked((state) => ({ ...state, [clip.id]: false }));
-                }}
-                onPause={() => setPaused((state) => ({ ...state, [clip.id]: true }))}
-                onClick={(event) => {
-                  // Consume the media element's own click before an Android
-                  // browser can interpret it as a request for its native UI.
-                  event.preventDefault();
-                  event.stopPropagation();
-                  toggleClipPlayback(clip.id);
-                }}
-                onContextMenu={(event) => event.preventDefault()}
-              />
-              {flashIcon && flashNonce !== null && <PlaybackFlashIcon key={flashNonce} icon={flashIcon} />}
-              {/* FE-5: only shown when browser policy refused autoplay, never
-                  for a pause the viewer chose. AGENTS.md documents this
-                  affordance; without it a blocked clip is a frozen poster with
-                  no visible way to start it. */}
-              {blocked[clip.id] && clip.id === activeId && (
-                <button
-                  className="center-play"
-                  aria-label="Spela upp"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    toggleClipPlayback(clip.id);
-                  }}
-                >
-                  <Play size={30} fill="currentColor" />
-                </button>
-              )}
-              <button
-                className="mute-button"
-                aria-label={muted ? "Slå på ljud" : "Stäng av ljud"}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  // Whatever the viewer chooses here is theirs, so the
-                  // tap-to-unmute shortcut must not second-guess it later.
-                  autoMutedRef.current = false;
-                  setMuted(!muted);
-                }}
-              >
-                {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-              </button>
-              <ActionRail
-                clip={clip}
-                liked={isLiked}
-                saved={isSaved}
-                onLike={() => onLike(clip.id)}
-                onComments={() => openComments(clip)}
-                onSave={() => onSave(clip.id)}
-              />
-              <ClipMeta
-                clip={clip}
-                person={person}
-                following={isFollowing}
-                onOpenPerson={() => person && onOpenPerson(person.id)}
-                onToggleFollow={() => person && onToggleFollow(person.id)}
-              />
-              <ProgressRow
-                currentTime={currentTimes[clip.id] ?? 0}
-                duration={durations[clip.id] ?? clip.durationS}
-                onSeek={(seconds) => seekClip(clip.id, seconds)}
-              />
-            </article>
+              clip={clip}
+              person={person}
+              videoRef={videoRefFor(clip.id)}
+              videoSrc={withinWindow ? clip.videoUrl : undefined}
+              posterSrc={withinPosterWindow ? clip.thumbUrl : undefined}
+              preload={preload}
+              muted={muted}
+              active={clip.id === activeId}
+              blocked={!!blocked[clip.id]}
+              liked={isLiked}
+              saved={isSaved}
+              following={isFollowing}
+              flashIcon={flashIcon}
+              flashNonce={flashNonce}
+              shareFeedback={shareFeedback?.clipId === clip.id ? shareFeedback : null}
+              onTogglePlayback={() => toggleClipPlayback(clip.id)}
+              onToggleMuted={() => {
+                // Whatever the viewer chooses here is theirs, so the
+                // tap-to-unmute shortcut must not second-guess it later.
+                autoMutedRef.current = false;
+                setMuted(!muted);
+              }}
+              onLike={() => onLike(clip.id)}
+              onComments={() => openComments(clip)}
+              onSave={() => onSave(clip.id)}
+              onShare={() => shareFromRail(clip)}
+              onOpenPerson={() => {
+                if (person) {
+                  onOpenPerson(person.id);
+                }
+              }}
+              onToggleFollow={() => {
+                if (person) {
+                  onToggleFollow(person.id);
+                }
+              }}
+              onEnded={(video) => handleClipEnded(clip.id, video)}
+              onPlay={() => {
+                setPaused((state) => ({ ...state, [clip.id]: false }));
+                setBlocked((state) => ({ ...state, [clip.id]: false }));
+              }}
+              onPause={() => setPaused((state) => ({ ...state, [clip.id]: true }))}
+              onSeek={(seconds) => seekClip(clip.id, seconds)}
+            />
           );
         })}
       </div>
@@ -1464,7 +1758,9 @@ function ActionRail({
   saved,
   onLike,
   onComments,
-  onSave
+  onSave,
+  onShare,
+  shareFeedback
 }: {
   clip: ClipItem;
   liked: boolean;
@@ -1472,7 +1768,26 @@ function ActionRail({
   onLike: () => void;
   onComments: () => void;
   onSave: () => void;
+  onShare: () => void;
+  shareFeedback: ShareFeedback | null;
 }) {
+  const shareLabel =
+    shareFeedback?.kind === "shared"
+      ? "Delat"
+      : shareFeedback?.kind === "copied"
+        ? "Kopierad"
+        : shareFeedback?.kind === "error"
+          ? "Försök igen"
+          : "Dela";
+  const shareAriaLabel =
+    shareFeedback?.kind === "shared"
+      ? "Klippet delades. Dela igen."
+      : shareFeedback?.kind === "copied"
+        ? "Länken kopierades. Dela igen."
+        : shareFeedback?.kind === "error"
+          ? "Kunde inte dela klippet. Försök igen."
+          : "Dela klippet";
+
   return (
     <div className="action-rail" onClick={(event) => event.stopPropagation()}>
       {/* FE-2: no counts until a real one exists. These used to render
@@ -1488,7 +1803,13 @@ function ActionRail({
       <ActionButton label="Spara" active={saved} onClick={onSave}>
         <Bookmark size={21} fill={saved ? "currentColor" : "none"} />
       </ActionButton>
-      <ActionButton label="Dela">
+      <ActionButton
+        label={shareLabel}
+        ariaLabel={shareAriaLabel}
+        announce={shareFeedback !== null}
+        announceKey={shareFeedback?.nonce}
+        onClick={onShare}
+      >
         <Share2 size={21} />
       </ActionButton>
     </div>
@@ -1498,23 +1819,37 @@ function ActionRail({
 function ActionButton({
   children,
   label,
+  ariaLabel,
   active = false,
   hideLabel = false,
+  announce = false,
+  announceKey,
   onClick
 }: {
   children: React.ReactNode;
   label: string;
+  ariaLabel?: string;
   active?: boolean;
   /** Keep the accessible name, drop the visible caption. */
   hideLabel?: boolean;
+  announce?: boolean;
+  announceKey?: number;
   onClick?: () => void;
 }) {
   return (
     <div className="action">
-      <button className={active ? "active" : ""} onClick={onClick} aria-label={label}>
+      <button
+        className={active ? "active" : ""}
+        onClick={onClick}
+        aria-label={ariaLabel ?? label}
+      >
         {children}
       </button>
-      {!hideLabel && <span>{label}</span>}
+      {!hideLabel && (
+        <span key={announceKey} role={announce ? "status" : undefined} aria-atomic={announce || undefined}>
+          {label}
+        </span>
+      )}
     </div>
   );
 }
@@ -2390,7 +2725,8 @@ function ProfileScreen({
   onOpenFollowing,
   onEditInterests,
   onToggleConsent,
-  onOpenLegal
+  onOpenLegal,
+  pwa
 }: {
   consent: { personal: boolean; analytics: boolean; email: boolean };
   selectedParties: number;
@@ -2403,6 +2739,7 @@ function ProfileScreen({
   onEditInterests: () => void;
   onToggleConsent: (key: keyof typeof consent) => void;
   onOpenLegal: (page: LegalPageId) => void;
+  pwa: PwaExperience;
 }) {
   const totalFollowed = followedCount + followedPartyCount;
   const followedSummary = [
@@ -2455,6 +2792,54 @@ function ProfileScreen({
             chevron
           />
         </Group>
+        {pwa.installKind && (
+          <Group title="App">
+            <ListRow
+              title={pwa.installBusy ? "Väntar på ditt val…" : "Installera Pleni"}
+              subtitle={
+                pwa.installKind === "ios"
+                  ? "Lägg till på hemskärmen från Dela-menyn."
+                  : "Öppna Pleni utan webbläsarens adressfält."
+              }
+              icon={
+                pwa.installBusy ? (
+                  <LoaderCircle className="pwa-spinner" size={18} aria-hidden="true" />
+                ) : (
+                  <Download size={18} aria-hidden="true" />
+                )
+              }
+              onClick={pwa.installBusy ? undefined : () => void pwa.requestInstall()}
+              chevron={!pwa.installBusy}
+            />
+            {pwa.showIosInstructions && (
+              <div className="pwa-install-guide">
+                <button
+                  type="button"
+                  className="pwa-install-guide-close"
+                  aria-label="Stäng installationsguiden"
+                  onClick={pwa.dismissIosInstructions}
+                >
+                  <X size={16} aria-hidden="true" />
+                </button>
+                <div role="status" aria-atomic="true">
+                  <div className="pwa-install-guide-heading">
+                    <Share2 size={18} aria-hidden="true" />
+                    <strong>Lägg till på hemskärmen</strong>
+                  </div>
+                  <ol>
+                    <li>Tryck på Dela-symbolen i Safari.</li>
+                    <li>
+                      Välj <b>Lägg till på hemskärmen</b>.
+                    </li>
+                    <li>
+                      Bekräfta med <b>Lägg till</b>.
+                    </li>
+                  </ol>
+                </div>
+              </div>
+            )}
+          </Group>
+        )}
         <Group title="Mina intressen">
           <ListRow
             title="Redigera mina intressen"

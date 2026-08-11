@@ -1083,6 +1083,52 @@ acceptance command are green.
 
 ---
 
+## UI14 — Mobile app UX and PWA
+
+**Depends on:** UI5, UI6, UI9 and UI10. **Size:** large, split into UI14.0–UI14.6.
+
+**Objective.** Preserve Pleni's web architecture while making normal mobile-browser
+playback more app-like and adding an installable, standalone PWA with safe,
+bandwidth-conscious caching.
+
+**Scope — may create or modify:**
+
+```
+web/index.html
+web/package.json
+web/package-lock.json
+web/vite.config.ts
+web/public/{manifest.webmanifest,icons/*,favicon.svg}
+web/src/{App.tsx,main.tsx,styles.css,sw.ts,types.ts,vite-env.d.ts}
+web/src/{pwa,feed}/*
+web/scripts/verify-pwa-build.mjs
+tests/unit/test_pwa_assets.py
+docs/{BUILD_PLAN,DEPENDENCIES,RUNBOOK,MOBILE_APP_UX_PWA_IMPLEMENTATION_PLAN}.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** `src/contracts.py`, numbered pipeline stages,
+migrations, published clip metadata, feed ranking/order, comment or sign-in rules,
+camera/framing/rendering, generated media, native wrappers, or the no-captions
+decision. Do not cache MP4 bodies, Range responses, private API responses, auth
+tokens or mutations. Do not replace native CSS scrolling, force fullscreen, or
+disable pinch zoom.
+
+**Build.** Follow `docs/MOBILE_APP_UX_PWA_IMPLEMENTATION_PLAN.md` in order. It is
+UI14's detailed source of truth for subchunk status, narrower file scopes, measured
+performance gates, caching policy, device acceptance and the required handoff after
+each agent. One agent completes one subchunk and stops.
+
+**Acceptance:** ordinary shared links remain fully usable; Android and iOS home-screen
+installs launch standalone with valid icons and safe areas; offline reload shows an
+honest app shell; updates never interrupt playback or typed text; service-worker
+caches contain no video/private data; the existing inline player, one-clip snapping,
+media windows and playback lifecycle do not regress; the real-device matrix and
+rollback drill in the detailed plan are complete; TypeScript, the Vite production
+build, the PWA build verifier and the full Python acceptance command are green.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.
