@@ -13,6 +13,7 @@ declare global {
 const worker = self as unknown as ServiceWorkerGlobalScope;
 const PRECACHE_MANIFEST = self.__WB_MANIFEST;
 const CACHE_PREFIX = "pleni-";
+const WORKER_RELEASE = "ui14-device-acceptance-1";
 const ACTIVATE_UPDATE_MESSAGE = "SKIP_WAITING";
 
 function entryUrl(entry: PrecacheEntry): string {
@@ -31,7 +32,8 @@ function manifestFingerprint(entries: PrecacheEntry[]): string {
   return (hash >>> 0).toString(36);
 }
 
-const PRECACHE_NAME = `${CACHE_PREFIX}precache-${manifestFingerprint(PRECACHE_MANIFEST)}`;
+const PRECACHE_NAME =
+  `${CACHE_PREFIX}precache-${manifestFingerprint(PRECACHE_MANIFEST)}-${WORKER_RELEASE}`;
 const PRECACHE_URLS = PRECACHE_MANIFEST.map((entry) =>
   new URL(entryUrl(entry), worker.registration.scope).href
 );
