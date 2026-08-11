@@ -3828,13 +3828,14 @@ the feed or widen media windows unless a reproduced device failure requires it.
 **Built:** the frontend PWA release, preferred corrected-worker rollback and
 emergency unregister procedures in `docs/RUNBOOK.md`; a locally rehearsed rollback
 path; and the detailed pre-release/device evidence ledger in
-`docs/MOBILE_APP_UX_PWA_IMPLEMENTATION_PLAN.md`. No frontend runtime code, host
-configuration or production state changed.
-**Tests:** TypeScript, the Vite production build and `verify-pwa-build.mjs` are
-green with nine app-shell entries and no video/private-data cache.
-`python tasks.py test lint typecheck` is green: 379 passed, 68 deselected, one
-existing `audioop` warning; lint and strict typing clean. The emergency worker
-snippet passed a standalone strict TypeScript compile. `git diff --check` passed.
+`docs/MOBILE_APP_UX_PWA_IMPLEMENTATION_PLAN.md`; production release `968749e`; and
+the host-MIME correction `235227c`. No host configuration was changed.
+**Tests:** the exact isolated release tree passed a clean `npm ci` with zero audit
+vulnerabilities, TypeScript, the Vite production build, `verify-pwa-build.mjs` and
+`python tasks.py test lint typecheck`: 372 passed, 68 deselected, one existing
+`audioop` warning; lint and strict typing clean. The complete mixed working tree is
+also green at 379 passed. The emergency worker snippet passed a standalone strict
+TypeScript compile. `git diff --check` passed.
 **Contracts touched:** none.
 
 **Local acceptance (Chrome 151.0.7922.108, Windows, 390×844 production preview):**
@@ -3868,15 +3869,20 @@ snippet passed a standalone strict TypeScript compile. `git diff --check` passed
 - Emulation and headless Chrome results are preflight evidence, not substitutes for
   any row in the mandatory physical-device matrix.
 
-**Observations (not fixed, out of scope):**
+**Release observations:**
 - `https://pleni.se/` returned 200 before release, while the new manifest, worker
-  and four launcher icon URLs all returned 404. This is expected because the UI14
-  worktree has not been pushed/deployed; no production PWA claim can be made yet.
+  and four launcher icon URLs all returned 404. That was the expected pre-release
+  state before the UI14 worktree was pushed.
 - The first production release, `968749e`, served the app, worker and icons, but
   exposed a host-specific installability defect: InstaPods returned
   `manifest.webmanifest` as `application/octet-stream`. UI14.6 reproduced and fixed
   it by linking the equivalent `/manifest.json`, which receives the standard JSON
-  MIME mapping; the corrective deployment is pending.
+  MIME mapping. Corrective commit `235227c` is live and verified.
+- A fresh live production profile loaded `/manifest.json` as `application/json`,
+  installed an activated controller at scope `/`, precached nine same-origin shell
+  URLs and cached no video/private origin. The feed retained two sources, four
+  posters, one playing video and a bottom nav flush to the 844 px viewport, with no
+  runtime exception.
 - Chrome transport-offline emulation reloaded the cached shell but did not emit the
   same connectivity event as a device radio transition. The status surface passed
   with the browser `offline` event; actual lost/restored-network behavior remains
@@ -3888,13 +3894,8 @@ snippet passed a standalone strict TypeScript compile. `git diff --check` passed
   Internet. Actual OS/browser versions, native install/share sheets, safe areas,
   keyboard zoom, background/lock behavior and installed update takeover cannot be
   recorded without those devices.
-- The owner authorized the production push after this preflight. Deployment and
-  live-origin verification are the next action; a deployed commit/release date do
-  not exist at the time of this handoff entry.
 
-**Next agent should know:** deploy the explicitly authorized reviewed commit, then
-run all 16 scenarios in the detailed plan on every
-physical row. Verify production files, MIME types, scope, fresh and waiting worker
-states and cache contents. Record device versions, deployed SHA and release date;
+**Next agent should know:** production is live at `235227c`. Run all 16 scenarios
+in the detailed plan on every physical row, record actual OS/browser versions and
 mark UI14.6 and UI14 DONE only when every row passes. If a device defect is
 reproduced, change only the scoped UI14 files and rerun the full acceptance suite.

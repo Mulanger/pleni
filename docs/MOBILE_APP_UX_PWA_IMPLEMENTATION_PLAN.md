@@ -934,7 +934,7 @@ isolated profiles, `http://127.0.0.1:5199/`.
 
 - A fresh TypeScript/Vite production build and `verify-pwa-build.mjs` passed with
   nine bounded app-shell entries.
-- The manifest returned 200 as `application/manifest+json`, declared standalone
+- The manifest returned 200 as JSON, declared standalone
   display, `/` start/scope and three manifest icons. The active worker controlled
   the page under `/`.
 - Cache Storage contained nine same-origin shell entries and no MP4, Range,
@@ -963,17 +963,24 @@ isolated profiles, `http://127.0.0.1:5199/`.
   The exact emergency TypeScript in `docs/RUNBOOK.md` also passed a standalone
   strict TypeScript compile.
 
-**Deployed-origin preflight:** `https://pleni.se/` returned 200, but
+**Pre-deployment origin check:** `https://pleni.se/` returned 200, but
 `/manifest.json`, `/sw.js` and all four new PNG launcher assets returned
-404. This is the expected pre-release state: the UI14 worktree has not been pushed
-or deployed. No release date or deployed commit exists yet.
+404. This was the expected state before the UI14 worktree was pushed.
 
 **First production deployment:** commit `968749e` reached `origin/main` on
 2026-08-11. The app, worker and icons returned 200, but InstaPods served the
 `.webmanifest` file as `application/octet-stream`. UI14.6 treated this as a real
 installability defect and changed the linked file to `/manifest.json`, which the
-host serves as `application/json`; the correction is verified locally and awaiting
-the follow-up deployment.
+host serves as `application/json`; the correction shipped in the production
+release below.
+
+**Production release:** corrective commit `235227c` reached `origin/main` and
+InstaPods on 2026-08-11. A fresh production profile verified `/manifest.json` as
+`application/json`, standalone display, `/` start/scope, an activated controlling
+worker under `https://pleni.se/`, nine same-origin app-shell cache entries and no
+video/private origin in Cache Storage. The live 390×844 feed mounted 60 rows with
+two sources, four posters, one playing video, no native controls, stable bottom
+navigation and no runtime exceptions. Physical-device rows remain pending.
 
 | Mode | Required platform | Result |
 |---|---|---|
@@ -983,10 +990,9 @@ the follow-up deployment.
 | Installed | Current Android Chrome standalone PWA | **PENDING** — deployment and physical install required |
 | Normal shared link | Current Samsung Internet | **PENDING** — physical device/version required |
 
-**Release state:** owner authorization was received after the local preflight.
-Deploy the exact reviewed commit, verify the production files/MIME/controller/cache
-state, then run every required scenario on the five physical rows. Record the
-release SHA and change this status to DONE only after all rows pass.
+**Release state:** production deployment and automated live-origin verification are
+complete at `235227c`. Run every required scenario on the five physical rows and
+change this status to DONE only after all rows pass.
 
 ---
 
