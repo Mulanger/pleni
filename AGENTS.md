@@ -48,7 +48,7 @@ speech it cannot find one for. If you see that line, you skipped C6v.
 
 ## Current state snapshot
 
-Last updated: 2026-08-08.
+Last updated: 2026-08-11.
 
 ### Repository and deployment
 
@@ -80,7 +80,10 @@ Last updated: 2026-08-08.
   `https://rikettv.nbg1-3.instapods.app/` still works and is the DNS target, but it is no
   longer the address to give anyone.
 - InstaPods pod: `rikettv`, static runtime, auto-deploys from `origin/main`.
-- Latest known deployed frontend polish commit: `0d67e66` (`frontend: polish mobile player controls`).
+- Current production/main closeout commit: `0bb6dd2` (`docs(UI14): close mobile
+  PWA release`). The latest frontend worker acceptance release is `6b35faf`.
+  UI14.0–UI14.6 are complete; detailed evidence and accepted device-coverage gaps
+  are in `docs/MOBILE_APP_UX_PWA_IMPLEMENTATION_PLAN.md`.
 - The React app lives in `web/`, but the InstaPods Git deploy currently runs from the repo root. Its working settings are:
   - Install command: `cd web && npm ci`
   - Build command: `cd web && node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json && node ./node_modules/vite/bin/vite.js build && cd .. && rm -rf ./assets ./index.html ./dist && cp -R web/dist/. ./`
@@ -109,10 +112,16 @@ Last updated: 2026-08-08.
 
 - Completed chunks: C0, C1, C1b, C2, S1, C3, R1, C4, C5, C6, C7, C8, C9, C10, C11,
   plus the framing rebuild V1-V7 (see `PROGRESS.md`, and ADRs 012 and 013).
-- Next planned chunks in `docs/BUILD_PLAN.md`: C12 orchestration, then C13 hardening/observability/runbook.
+- Frontend mobile/PWA chunks UI14.0–UI14.6 are also complete. The release keeps
+  the React/Vite web architecture; there is no native wrapper or rewrite.
+- Next planned pipeline chunks in `docs/BUILD_PLAN.md`: C12 orchestration, then
+  C13 hardening/observability/runbook. **Do not begin C12 until the owner provides
+  new instructions.**
 - Current default acceptance command: `python tasks.py test lint typecheck`.
-- Latest full local acceptance result: **348 passed**, 68 deselected, 1 `audioop`
-  deprecation warning. The slow e2e is a separate `pytest tests/e2e -m slow` run.
+- Latest exact isolated UI14 release result: **372 passed**, 68 deselected, 1
+  `audioop` deprecation warning. The latest complete mixed local working-tree run
+  is **379 passed**, 68 deselected. The slow e2e remains a separate
+  `pytest tests/e2e -m slow` run.
 - `python tasks.py run-fixture` is the local end-to-end fixture runner. Use a fresh `--work-dir` when inspecting generated artifacts to avoid stale files from old runs.
 
 ### Important architecture facts already discovered
@@ -139,6 +148,25 @@ Last updated: 2026-08-08.
 ### Frontend app state
 
 - `web/` is a mobile-only React/Vite app. Widths `>=700px` intentionally show a "view on phone" gate.
+- **UI14 mobile/PWA is released and closed.** Normal shared links retain the full
+  product. Installed mode uses `/manifest.json`, `display: standalone`, production
+  icons/theme metadata and the same routing/product logic as browser mode. Do not
+  rename the linked manifest back to `.webmanifest` unless InstaPods' MIME mapping
+  is fixed; that extension was served as `application/octet-stream` in production.
+- The service worker precaches exactly the same-origin app shell (nine entries in
+  the verified release). It deliberately bypasses MP4/video, Range, Bunny,
+  Supabase, Clerk, private responses, mutations and non-GET requests. Updates wait
+  for a viewer action and defer reload while video plays or a comment draft exists.
+  Emergency unregister/recovery is documented and locally rehearsed in
+  `docs/RUNBOOK.md`; do not use that path as a production drill.
+- Installation is optional and contextual in Profile. Chromium uses its native
+  install prompt; mobile Safari shows manual Add to Home Screen help. Offline state
+  is honest: the shell can load, but the app never presents unavailable network
+  data as current.
+- Samsung installed/update operation is owner-confirmed. Exact device/browser
+  versions, iPhone Safari/Home Screen, normal Android Chrome and Samsung Internet
+  remain explicitly unverified, owner-accepted coverage gaps. Do not treat those
+  rows as passes; see the UI14.6 closeout record in the detailed plan.
 - The feed is a TikTok-style vertical scroll over published Bunny MP4s. Snapping is
   pure CSS — there is no swipe library and no JS scroll handler. `.feed-item` carries
   `scroll-snap-stop: always`, which is what limits a fling to one clip; without it the
@@ -160,10 +188,18 @@ Last updated: 2026-08-08.
   - bottom nav is flush to the mobile viewport bottom.
 - Only clips near the active one carry a `src` (±1) or a `poster` (±3); see
   `VIDEO_WINDOW` / `POSTER_WINDOW` in `web/src/App.tsx`. Mounting all 60 rows with
-  media cost **119** CDN requests per feed load against a ~6-connection-per-host cap,
-  so the clip being watched queued behind clips nobody reached; windowing takes that
-  to 5. Do not reintroduce an unconditional `src`/`poster` when adding to the feed
-  item. Bunny sends no `Timing-Allow-Origin`, so `transferSize` is 0 for every CDN
+  media previously cost **119** CDN requests. The verified UI14.5 release makes
+  seven fresh Bunny requests at the feed top: four thumbnails, one visible
+  politician portrait, the active MP4 and one source-window neighbor MP4. Do not
+  reintroduce unconditional `src`/`poster` attributes.
+- High-frequency playback time/duration state belongs to each feed row, so a
+  progress tick updates one row instead of rebuilding all 60. The active video is
+  always `preload="auto"`; only the predicted neighbor may use `auto` when the
+  browser explicitly reports a strong non-Save-Data connection. Missing network
+  hints, Save-Data, 2G and slow-2G keep neighbors at metadata-only. Video remains
+  owned by the media element/browser HTTP cache, never the service worker or a
+  manual blob fetch.
+- Bunny sends no `Timing-Allow-Origin`, so `transferSize` is 0 for every CDN
   resource — request counts and timings are measurable from the page, byte totals
   are not.
 - The frontend data layer is `web/src/supabase.ts`; do not bypass it with hardcoded Bunny URLs except for the fallback sample data.
