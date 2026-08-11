@@ -3829,7 +3829,9 @@ the feed or widen media windows unless a reproduced device failure requires it.
 emergency unregister procedures in `docs/RUNBOOK.md`; a locally rehearsed rollback
 path; and the detailed pre-release/device evidence ledger in
 `docs/MOBILE_APP_UX_PWA_IMPLEMENTATION_PLAN.md`; production release `968749e`; and
-the host-MIME correction `235227c`. No host configuration was changed.
+the host-MIME correction `235227c`. Controlled worker-only release `21b0bd7`
+changes the worker/cache identity for physical installed-update acceptance without
+changing the player or UI. No host configuration was changed.
 **Tests:** the exact isolated release tree passed a clean `npm ci` with zero audit
 vulnerabilities, TypeScript, the Vite production build, `verify-pwa-build.mjs` and
 `python tasks.py test lint typecheck`: 372 passed, 68 deselected, one existing
@@ -3887,15 +3889,23 @@ TypeScript compile. `git diff --check` passed.
   same connectivity event as a device radio transition. The status surface passed
   with the browser `offline` event; actual lost/restored-network behavior remains
   in the physical matrix.
+- The owner confirmed that the deployed app works on their phone. The exact phone,
+  OS/browser version, launch mode and per-scenario results were not supplied, so no
+  mandatory device row is marked complete from that confirmation alone.
+- Controlled worker-only commit `21b0bd7` was prepared for production takeover
+  acceptance. Its release suffix forces a distinct waiting worker and Pleni cache
+  while leaving video, feed, navigation and data behavior unchanged.
 
 **Blocked / needs a decision:**
-- All five required real-device rows remain pending: current iPhone Safari, iOS/
-  iPadOS Home Screen, Android Chrome browser, Android Chrome installed and Samsung
-  Internet. Actual OS/browser versions, native install/share sheets, safe areas,
+- All five required real-device rows remain formally pending: current iPhone
+  Safari, iOS/iPadOS Home Screen, Android Chrome browser, Android Chrome installed
+  and Samsung Internet. Actual OS/browser versions, native install/share sheets, safe areas,
   keyboard zoom, background/lock behavior and installed update takeover cannot be
   recorded without those devices.
 
-**Next agent should know:** production is live at `235227c`. Run all 16 scenarios
-in the detailed plan on every physical row, record actual OS/browser versions and
-mark UI14.6 and UI14 DONE only when every row passes. If a device defect is
-reproduced, change only the scoped UI14 files and rerun the full acceptance suite.
+**Next agent should know:** the base production release is `235227c`; worker-only
+update `21b0bd7` is the next installed takeover test. Record its phone result,
+then run all 16 scenarios in the detailed plan on every physical row, record actual
+OS/browser versions and mark UI14.6 and UI14 DONE only when every row passes. If a
+device defect is reproduced, change only the scoped UI14 files and rerun the full
+acceptance suite.

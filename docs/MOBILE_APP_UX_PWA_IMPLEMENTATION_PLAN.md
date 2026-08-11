@@ -46,7 +46,7 @@ and **BLOCKED**. At most one chunk may be **IN PROGRESS**.
 | 3 | UI14.3 | Install, update, offline, and standalone experience | DONE | UI14.2 |
 | 4 | UI14.4 | Mobile browser, gesture, input, and sharing polish | DONE | UI14.3 |
 | 5 | UI14.5 | Feed render isolation and adaptive next-video loading | DONE | UI14.4 |
-| 6 | UI14.6 | Real-device acceptance, release, and rollback drill | NOT STARTED | UI14.5 |
+| 6 | UI14.6 | Real-device acceptance, release, and rollback drill | IN PROGRESS | UI14.5 |
 
 ## Product and design contract
 
@@ -982,6 +982,13 @@ video/private origin in Cache Storage. The live 390×844 feed mounted 60 rows wi
 two sources, four posters, one playing video, no native controls, stable bottom
 navigation and no runtime exceptions. Physical-device rows remain pending.
 
+**Owner device checkpoint:** the owner confirmed on 2026-08-11 that the deployed
+app works on their phone. The phone model, OS/browser version, launch mode and the
+per-scenario results are not recorded yet, so this confirmation does not close a
+mandatory matrix row. Worker-only commit `21b0bd7` changes the Pleni worker/cache
+release identity without changing player or UI behavior; it is the controlled
+production update used to test waiting-state and viewer-safe takeover next.
+
 | Mode | Required platform | Result |
 |---|---|---|
 | Normal shared link | Current iPhone Safari | **PENDING** — physical device/version required |
@@ -990,9 +997,10 @@ navigation and no runtime exceptions. Physical-device rows remain pending.
 | Installed | Current Android Chrome standalone PWA | **PENDING** — deployment and physical install required |
 | Normal shared link | Current Samsung Internet | **PENDING** — physical device/version required |
 
-**Release state:** production deployment and automated live-origin verification are
-complete at `235227c`. Run every required scenario on the five physical rows and
-change this status to DONE only after all rows pass.
+**Release state:** base deployment and automated live-origin verification are
+complete at `235227c`; the controlled installed-update build is `21b0bd7`. Run
+every required scenario on the five physical rows and change this status to DONE
+only after all rows pass.
 
 ---
 
