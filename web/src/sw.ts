@@ -13,7 +13,7 @@ declare global {
 const worker = self as unknown as ServiceWorkerGlobalScope;
 const PRECACHE_MANIFEST = self.__WB_MANIFEST;
 const CACHE_PREFIX = "pleni-";
-const WORKER_RELEASE = "ui14-device-acceptance-1";
+const WORKER_RELEASE = "ui14-device-acceptance-2";
 const ACTIVATE_UPDATE_MESSAGE = "SKIP_WAITING";
 
 function entryUrl(entry: PrecacheEntry): string {
