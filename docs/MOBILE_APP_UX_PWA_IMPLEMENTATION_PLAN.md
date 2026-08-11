@@ -983,11 +983,13 @@ two sources, four posters, one playing video, no native controls, stable bottom
 navigation and no runtime exceptions. Physical-device rows remain pending.
 
 **Owner device checkpoint:** the owner confirmed on 2026-08-11 that the deployed
-app works on their phone. The phone model, OS/browser version, launch mode and the
-per-scenario results are not recorded yet, so this confirmation does not close a
-mandatory matrix row. Worker-only commit `21b0bd7` changes the Pleni worker/cache
-release identity without changing player or UI behavior; it is the controlled
-production update used to test waiting-state and viewer-safe takeover next.
+app works on their phone and subsequently confirmed that they could download the
+controlled `21b0bd7` update on a Samsung device. This proves real-device delivery
+of the first installed-update build, but the model, OS/browser version, exact
+launch mode and playback/takeover observations are not recorded, so it does not
+yet close a mandatory matrix row. Worker-only commit `6b35faf` is the second
+controlled update and isolates text-draft protection without changing player or
+UI behavior.
 
 | Mode | Required platform | Result |
 |---|---|---|
@@ -998,9 +1000,10 @@ production update used to test waiting-state and viewer-safe takeover next.
 | Normal shared link | Current Samsung Internet | **PENDING** — physical device/version required |
 
 **Release state:** base deployment and automated live-origin verification are
-complete at `235227c`; the controlled installed-update build is `21b0bd7`. Run
-every required scenario on the five physical rows and change this status to DONE
-only after all rows pass.
+complete at `235227c`; controlled installed-update delivery is confirmed for
+`21b0bd7`, and draft-safety update `6b35faf` is the next Samsung check. Run every
+required scenario on the five physical rows and change this status to DONE only
+after all rows pass.
 
 ---
 
