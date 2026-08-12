@@ -1612,7 +1612,8 @@ function FeedScreen({
         </div>
       )}
 
-      {loading && <div className="loading-chip">Hämtar klipp</div>}
+      {loading && clips.length === 0 && <FeedSkeleton />}
+      {loading && clips.length > 0 && <div className="loading-chip">Hämtar klipp</div>}
 
       {clipSource === "sample" && <div className="loading-chip">Demodata</div>}
 
@@ -2500,10 +2501,13 @@ function SearchScreen({
 }) {
   const [results, setResults] = useState<Politician[]>([]);
   const [partyProfiles, setPartyProfiles] = useState<PartyProfile[]>([]);
+  const [partyProfilesLoading, setPartyProfilesLoading] = useState(true);
   const [searching, setSearching] = useState(false);
+  const [resolvedSearchKey, setResolvedSearchKey] = useState<string | null>(null);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const normalizedQuery = query.trim();
   const showResults = normalizedQuery.length > 0 || partyFilter !== null;
+  const searchKey = `${partyFilter ?? "ALL"}:${normalizedQuery.toLocaleLowerCase("sv-SE")}`;
 
   const rememberSearch = (value: string) => {
     const normalizedValue = value.trim();
@@ -2537,9 +2541,25 @@ function SearchScreen({
   };
 
   useEffect(() => {
+    let active = true;
     const controller = new AbortController();
-    loadPartyProfiles(controller.signal).then(setPartyProfiles).catch(() => undefined);
-    return () => controller.abort();
+    setPartyProfilesLoading(true);
+    loadPartyProfiles(controller.signal)
+      .then((profiles) => {
+        if (active) {
+          setPartyProfiles(profiles);
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) {
+          setPartyProfilesLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, []);
 
   const matchingParties = useMemo(() => {
@@ -2557,21 +2577,40 @@ function SearchScreen({
   }, [normalizedQuery, partyFilter, partyProfiles]);
 
   const resultCount = matchingParties.length + results.length;
+  const searchPending =
+    showResults &&
+    (partyProfilesLoading || searching || resolvedSearchKey !== searchKey);
 
   useEffect(() => {
     if (!showResults) {
       setResults([]);
+      setSearching(false);
+      setResolvedSearchKey(null);
       return;
     }
     const controller = new AbortController();
     setSearching(true);
+    setResolvedSearchKey(null);
     // Debounced: a request per keystroke would put ~8 in flight for a surname
     // and the answers can arrive out of order.
     const timer = window.setTimeout(() => {
       searchPoliticians(normalizedQuery, { party: partyFilter, signal: controller.signal })
-        .then(setResults)
-        .catch(() => undefined)
-        .finally(() => setSearching(false));
+        .then((politicians) => {
+          if (!controller.signal.aborted) {
+            setResults(politicians);
+          }
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) {
+            setResults([]);
+          }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) {
+            setResolvedSearchKey(searchKey);
+            setSearching(false);
+          }
+        });
     }, 220);
     return () => {
       window.clearTimeout(timer);
@@ -2579,7 +2618,7 @@ function SearchScreen({
       // one — the same stale-response rule FE-7 states for the feed.
       controller.abort();
     };
-  }, [normalizedQuery, partyFilter, showResults]);
+  }, [normalizedQuery, partyFilter, searchKey, showResults]);
 
   return (
     <section
@@ -2628,13 +2667,10 @@ function SearchScreen({
           ))}
         </div>
       </div>
-      <div className="panel-scroll">
+      <div className="panel-scroll" aria-busy={searchPending || undefined}>
         {showResults ? (
-          searching && resultCount === 0 ? (
-            <div className="search-loading" role="status">
-              <LoaderCircle size={18} />
-              <span>Söker i katalogen…</span>
-            </div>
+          searchPending ? (
+            <SearchResultsSkeleton />
           ) : resultCount === 0 ? (
             <div className="panel-empty" role="status">
               <strong>Inga träffar</strong>
@@ -3136,7 +3172,7 @@ function SavedScreen({
           <div className="section-label">
             {clips.length} {clips.length === 1 ? "sparat klipp" : "sparade klipp"}
           </div>
-          {loading && clips.length === 0 && <div className="saved-grid-status">Hämtar klipp…</div>}
+          {loading && clips.length === 0 && <ClipGridSkeleton />}
           {!loading && error && (
             <div className="panel-empty" role="status">
               <strong>{error}</strong>
@@ -3207,7 +3243,7 @@ function PartyScreen({
         </button>
       </div>
       <div className="panel-scroll person-scroll">
-        {loading && !party && <div className="loading-chip">Hämtar partisida</div>}
+        {loading && !party && <ProfileSkeleton variant="party" />}
         {!loading && !party && (
           <div className="panel-empty" role="status">
             <strong>Partisidan kunde inte hämtas</strong>
@@ -3246,7 +3282,7 @@ function PartyScreen({
 
             <section className="clip-grid-block">
               <div className="section-label">Senaste klipp</div>
-              {loading && clips.length === 0 && <div className="loading-chip">Hämtar klipp</div>}
+              {loading && clips.length === 0 && <ClipGridSkeleton />}
               {!loading && clips.length === 0 && (
                 <div className="panel-empty" role="status">
                   <strong>Inga publicerade klipp</strong>
@@ -3338,7 +3374,7 @@ function PersonScreen({
         </button>
       </div>
       <div className="panel-scroll person-scroll">
-        {loading && !person && <div className="loading-chip">Hämtar profil</div>}
+        {loading && !person && <ProfileSkeleton variant="person" />}
         {!loading && !person && (
           <div className="panel-empty" role="status">
             <strong>Profilen kunde inte hämtas</strong>
@@ -3382,7 +3418,7 @@ function PersonScreen({
 
             <section className="clip-grid-block">
               <div className="section-label">Klipp</div>
-              {loading && clips.length === 0 && <div className="loading-chip">Hämtar klipp</div>}
+              {loading && clips.length === 0 && <ClipGridSkeleton />}
               {!loading && clips.length === 0 && (
                 <div className="panel-empty" role="status">
                   <strong>Inga publicerade klipp</strong>
@@ -3416,6 +3452,95 @@ function PersonScreen({
         )}
       </div>
     </section>
+  );
+}
+
+function FeedSkeleton() {
+  return (
+    <div className="feed-skeleton" role="status" aria-label="Hämtar klipp">
+      <span className="sr-only">Hämtar klipp…</span>
+      <div className="feed-skeleton-focus skeleton-shape" aria-hidden="true" />
+      <div className="feed-skeleton-copy" aria-hidden="true">
+        <span className="skeleton-shape" />
+        <span className="skeleton-shape" />
+        <span className="skeleton-shape" />
+      </div>
+      <div className="feed-skeleton-actions" aria-hidden="true">
+        {Array.from({ length: 4 }, (_, index) => (
+          <span className="skeleton-shape" key={index} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SearchResultsSkeleton() {
+  return (
+    <div className="search-results-skeleton" role="status" aria-label="Söker i katalogen">
+      <span className="sr-only">Söker i katalogen…</span>
+      <span className="search-skeleton-kicker skeleton-shape" aria-hidden="true" />
+      <div className="search-skeleton-party" aria-hidden="true">
+        <span className="search-skeleton-avatar skeleton-shape" />
+        <div>
+          <span className="skeleton-shape" />
+          <span className="skeleton-shape" />
+          <span className="skeleton-shape" />
+        </div>
+      </div>
+      <div className="search-skeleton-heading" aria-hidden="true">
+        <span className="skeleton-shape" />
+        <span className="skeleton-shape" />
+      </div>
+      <div className="search-skeleton-list" aria-hidden="true">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div className="search-skeleton-row" key={index}>
+            <span className="search-skeleton-avatar skeleton-shape" />
+            <div>
+              <span className="skeleton-shape" />
+              <span className="skeleton-shape" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ClipGridSkeleton({ announce = true }: { announce?: boolean } = {}) {
+  return (
+    <div
+      className="clip-grid skeleton-grid"
+      role={announce ? "status" : undefined}
+      aria-label={announce ? "Hämtar klipp" : undefined}
+    >
+      {announce && <span className="sr-only">Hämtar klipp…</span>}
+      {Array.from({ length: 6 }, (_, index) => (
+        <span className="skeleton-mini-clip skeleton-shape" aria-hidden="true" key={index} />
+      ))}
+    </div>
+  );
+}
+
+function ProfileSkeleton({ variant }: { variant: "person" | "party" }) {
+  return (
+    <div className={`profile-skeleton ${variant}`} role="status" aria-label="Hämtar profil">
+      <span className="sr-only">Hämtar profil…</span>
+      <div className="profile-skeleton-hero" aria-hidden="true">
+        <span className="profile-skeleton-avatar skeleton-shape" />
+        <div className="profile-skeleton-copy">
+          <span className="skeleton-shape" />
+          <span className="skeleton-shape" />
+          <span className="skeleton-shape" />
+          <span className="skeleton-shape" />
+        </div>
+      </div>
+      <div className="profile-skeleton-stats" aria-hidden="true">
+        <span className="skeleton-shape" />
+        <span className="skeleton-shape" />
+      </div>
+      <span className="profile-skeleton-label skeleton-shape" aria-hidden="true" />
+      <ClipGridSkeleton announce={false} />
+    </div>
   );
 }
 

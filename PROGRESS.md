@@ -4160,3 +4160,34 @@ but cannot force an immediate launcher refresh.
 **Next agent should know:** derive future favicon and launcher exports from the
 edge-to-edge master, increment the release filename, and update HTML, manifest,
 verifier and tests together. The corner-pixel regression is load-bearing.
+
+## UI follow-up — coordinated loading skeletons — DONE 2026-08-12
+
+**Built:** adjusted the `Populära debatter` note so its text has balanced top and
+bottom breathing room; replaced transient loading labels with layout-matched feed,
+search, profile and clip-grid skeletons; coordinated party-profile and politician
+search requests behind one readiness boundary so search sections appear together.
+**Tests:** direct TypeScript check and Vite production build green;
+`verify-pwa-build.mjs` green with exactly 9 same-origin app-shell entries and no
+video/private data; `python tasks.py test lint typecheck` green: 380 passed,
+68 deselected, one existing `audioop` warning; `git diff --check` green.
+**Contracts touched:** none.
+
+**Decisions made:**
+- A query is considered ready only when both the politician search and the shared
+  party catalogue have settled for the current query/filter key. Results from a
+  previous query remain hidden while the current request is pending.
+- Skeletons mirror the surfaces they replace instead of adding a generic spinner:
+  the immersive feed remains dark, search reserves its party/list geometry, and
+  profile/archive clip grids reserve their final three-column layout.
+- The frontend skill kept motion subtle and functional. The shimmer is disabled by
+  `prefers-reduced-motion`, and all skeletons expose concise loading status to
+  assistive technology without announcing their decorative pieces.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** keep the search readiness key coupled to both data
+sources if more result sections are added; otherwise partial-result flashes can
+return even though each request is individually race-safe.
