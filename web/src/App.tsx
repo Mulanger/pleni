@@ -64,6 +64,13 @@ import { EMPTY_LIBRARY, readLibrary, toggleInList, writeLibrary } from "./librar
 import { LEGAL_PAGE_ORDER, LEGAL_PAGES, LEGAL_VERSION } from "./legal";
 import type { LegalPageId } from "./legal";
 import { useAppNavigation } from "./navigation";
+import {
+  createPortraitDelivery,
+  forgetPortraitSuccess,
+  isCompletePortraitImage,
+  rememberPortraitSuccess,
+  retryPortraitDelivery
+} from "./portrait-image";
 import { applyBrowserTheme } from "./pwa/theme";
 import { usePwaExperience } from "./pwa/usePwaExperience";
 import type { PwaExperience } from "./pwa/usePwaExperience";
@@ -3837,40 +3844,6 @@ function Avatar({
   imageUrl?: string | null;
 }) {
   const partyProfile = PARTIES[party] ?? PARTIES.NONE;
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageFailed, setImageFailed] = useState(false);
-  const [imageAttempt, setImageAttempt] = useState(0);
-
-  useEffect(() => {
-    setImageLoaded(false);
-    setImageFailed(false);
-    setImageAttempt(0);
-  }, [imageUrl]);
-
-  const resolvedImageUrl = useMemo(() => {
-    if (!imageUrl || imageAttempt === 0) {
-      return imageUrl;
-    }
-    try {
-      const retryUrl = new URL(imageUrl, window.location.href);
-      retryUrl.searchParams.set("pleni_retry", String(imageAttempt));
-      return retryUrl.toString();
-    } catch {
-      return imageUrl;
-    }
-  }, [imageAttempt, imageUrl]);
-
-  const handleImageError = () => {
-    setImageLoaded(false);
-    if (imageAttempt < 2) {
-      // Bunny paths are immutable. A distinct query retries a transient edge
-      // or mobile-network failure instead of reusing the browser's failed
-      // response, while preserving the same cached object on the CDN.
-      setImageAttempt((attempt) => attempt + 1);
-      return;
-    }
-    setImageFailed(true);
-  };
 
   return (
     <span
@@ -3883,27 +3856,80 @@ function Avatar({
       }}
     >
       <span className="avatar-fallback">{initials(name)}</span>
-      {resolvedImageUrl && !imageFailed && (
-        <img
-          key={resolvedImageUrl}
-          className={imageLoaded ? "loaded" : ""}
-          src={resolvedImageUrl}
-          alt=""
-          loading={size === "xl" ? "eager" : "lazy"}
-          decoding="async"
-          fetchPriority={size === "xl" ? "high" : "auto"}
-          referrerPolicy="no-referrer"
-          onLoad={(event) => {
-            if (event.currentTarget.naturalWidth > 0) {
-              setImageLoaded(true);
-            } else {
-              handleImageError();
-            }
-          }}
-          onError={handleImageError}
-        />
+      {imageUrl && (
+        <AvatarImage key={imageUrl} imageUrl={imageUrl} priority={size === "xl"} />
       )}
     </span>
+  );
+}
+
+function AvatarImage({ imageUrl, priority }: { imageUrl: string; priority: boolean }) {
+  const [delivery, setDelivery] = useState(() => createPortraitDelivery(imageUrl));
+  const imageRef = useRef<HTMLImageElement | null>(null);
+
+  const handleImageError = useCallback(
+    (image: HTMLImageElement) => {
+      if (image !== imageRef.current) {
+        return;
+      }
+      forgetPortraitSuccess(imageUrl, delivery.displayUrl);
+      setDelivery((current) =>
+        current.displayUrl === delivery.displayUrl
+          ? retryPortraitDelivery(imageUrl, current)
+          : current
+      );
+    },
+    [delivery.displayUrl, imageUrl]
+  );
+
+  const confirmImageLoaded = useCallback(
+    (image: HTMLImageElement) => {
+      if (image !== imageRef.current || !isCompletePortraitImage(image)) {
+        return;
+      }
+      rememberPortraitSuccess(imageUrl, delivery.displayUrl);
+      setDelivery((current) =>
+        current.displayUrl === delivery.displayUrl && (!current.loaded || current.failed)
+          ? { ...current, loaded: true, failed: false }
+          : current
+      );
+    },
+    [delivery.displayUrl, imageUrl]
+  );
+
+  // A year-cached image may already be complete by the time React commits it.
+  // Inspecting it synchronously means visibility never depends on a load event
+  // that raced with a fast Search/Following unmount and remount.
+  useLayoutEffect(() => {
+    if (imageRef.current) {
+      confirmImageLoaded(imageRef.current);
+    }
+  }, [confirmImageLoaded]);
+
+  if (delivery.failed) {
+    return null;
+  }
+
+  return (
+    <img
+      key={delivery.displayUrl}
+      ref={imageRef}
+      className={delivery.loaded ? "loaded" : ""}
+      src={delivery.displayUrl}
+      alt=""
+      loading={priority ? "eager" : "lazy"}
+      decoding="async"
+      fetchPriority={priority ? "high" : "auto"}
+      referrerPolicy="no-referrer"
+      onLoad={(event) => {
+        if (isCompletePortraitImage(event.currentTarget)) {
+          confirmImageLoaded(event.currentTarget);
+        } else {
+          handleImageError(event.currentTarget);
+        }
+      }}
+      onError={(event) => handleImageError(event.currentTarget)}
+    />
   );
 }
 
