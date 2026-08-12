@@ -200,6 +200,11 @@ export function usePwaExperience(networkRequestFailed: boolean): PwaExperience {
 
   useEffect(() => {
     const showUpdate = () => {
+      if (!standalone) {
+        activateWaitingServiceWorker();
+        setUpdatePhase("hidden");
+        return;
+      }
       if (!updateDismissed.current) {
         setUpdatePhase("available");
       }
@@ -220,7 +225,7 @@ export function usePwaExperience(networkRequestFailed: boolean): PwaExperience {
       window.removeEventListener(PWA_UPDATE_AVAILABLE_EVENT, showUpdate);
       window.removeEventListener(PWA_CONTROLLER_CHANGED_EVENT, handleControllerChange);
     };
-  }, [reloadWhenSafe]);
+  }, [reloadWhenSafe, standalone]);
 
   useEffect(() => {
     if (updatePhase !== "deferred") {

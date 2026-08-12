@@ -4045,3 +4045,36 @@ browsers, so the guide includes both common Swedish labels.
 **Next agent should know:** never gate the Profile install entry solely on
 `beforeinstallprompt`; a manual browser-menu fallback must remain available in
 all non-standalone sessions.
+
+## UI14 follow-up - mode-specific update delivery - DONE 2026-08-12
+
+**Built:** normal browser sessions now activate a waiting service worker silently
+without pausing playback, reloading the current page or rendering update UI. The
+small Update button, automatic video pause, two-second progress line, controlled
+restart and completion confirmation remain exclusive to actual standalone mode.
+`PwaStatusStack` independently gates the update surface on standalone mode while
+continuing to show honest offline/network notices in either mode.
+**Tests:** TypeScript, Vite production build and `verify-pwa-build.mjs` green. The
+worker still precaches exactly 9 same-origin shell entries with no video/private
+data. `python tasks.py test lint typecheck` green: 379 passed, 68 deselected, one
+existing `audioop` warning; lint and strict typing clean.
+**Contracts touched:** none.
+
+**Decisions made:**
+- The installed PWA owns explicit update interaction because it has no browser
+  refresh chrome and may remain open as an app.
+- The normal website accepts the waiting worker in the background but keeps the
+  current document uninterrupted; the new version appears on the next natural
+  reload/navigation.
+- Both the lifecycle hook and visible status component enforce the mode boundary
+  so a state race cannot expose the app-only updater on `pleni.se`.
+- The frontend skill removed website update chrome rather than introducing a
+  second browser-specific notice.
+
+**Observations (not fixed, out of scope):** an already-open browser document may
+continue its loaded version until its next natural reload, by design.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** keep browser updates silent and non-interrupting; only
+standalone mode may show or execute the explicit pause/progress/restart flow.

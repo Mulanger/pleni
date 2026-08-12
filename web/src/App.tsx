@@ -808,7 +808,9 @@ function WideScreenMessage() {
 }
 
 function PwaStatusStack({ pwa }: { pwa: PwaExperience }) {
-  if (pwa.updatePhase === "hidden" && pwa.offlineMessage === null) {
+  const showUpdate = pwa.standalone && pwa.updatePhase !== "hidden";
+
+  if (!showUpdate && pwa.offlineMessage === null) {
     return null;
   }
 
@@ -830,7 +832,7 @@ function PwaStatusStack({ pwa }: { pwa: PwaExperience }) {
 
   return (
     <div className="pwa-status-stack">
-      {pwa.updatePhase !== "hidden" && (
+      {showUpdate && (
         <div className="pwa-notice">
           <UpdateIcon
             className={
