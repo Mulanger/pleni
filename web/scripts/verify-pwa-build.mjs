@@ -39,9 +39,9 @@ if (!indexHtml.includes('rel="manifest"') || !indexHtml.includes("/manifest.json
   fail("production index does not link the manifest");
 }
 const expectedInstallIcons = [
-  "/icons/pleni-icon-192-20260812.png",
-  "/icons/pleni-icon-512-20260812.png",
-  "/icons/pleni-icon-maskable-512-20260812.png"
+  "/icons/pleni-icon-192-20260812b.png",
+  "/icons/pleni-icon-512-20260812b.png",
+  "/icons/pleni-icon-maskable-512-20260812b.png"
 ];
 const manifestIconUrls = manifest.icons?.map((icon) => icon.src) ?? [];
 for (const iconUrl of expectedInstallIcons) {
@@ -49,7 +49,16 @@ for (const iconUrl of expectedInstallIcons) {
     fail(`manifest is missing versioned install icon: ${iconUrl}`);
   }
 }
-if (!indexHtml.includes("/icons/pleni-apple-touch-icon-20260812.png")) {
+for (const faviconUrl of [
+  "/favicon-20260812b.ico",
+  "/favicon-32-20260812b.png",
+  "/favicon-16-20260812b.png"
+]) {
+  if (!indexHtml.includes(faviconUrl)) {
+    fail(`production index does not link the versioned favicon: ${faviconUrl}`);
+  }
+}
+if (!indexHtml.includes("/icons/pleni-apple-touch-icon-20260812b.png")) {
   fail("production index does not link the versioned Apple touch icon");
 }
 if (serviceWorkerSource.includes("self.__WB_MANIFEST")) {
@@ -103,7 +112,7 @@ const precachePaths = precacheUrls.map(
 );
 for (const iconUrl of [
   ...expectedInstallIcons,
-  "/icons/pleni-apple-touch-icon-20260812.png"
+  "/icons/pleni-apple-touch-icon-20260812b.png"
 ]) {
   if (!precachePaths.includes(iconUrl)) {
     fail(`versioned install icon is absent from precache: ${iconUrl}`);

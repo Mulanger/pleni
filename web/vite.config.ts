@@ -18,7 +18,7 @@ export default defineConfig({
           "**/*.webm",
           "**/*.m3u8",
           "brand/**",
-          "favicon-16x16.png",
+          "favicon-16-20260812b.png",
           "icons/*-source.svg"
         ],
         minify: false,
