@@ -4078,3 +4078,46 @@ continue its loaded version until its next natural reload, by design.
 
 **Next agent should know:** keep browser updates silent and non-interrupting; only
 standalone mode may show or execute the explicit pause/progress/restart flow.
+
+## UI search redesign - modern search and profile flow - DONE 2026-08-12
+
+**Built:** adapted the supplied `Swedish politician TikTok search` design into
+`web/src/App.tsx` and `web/src/styles.css`: a calmer search header, 16 px mobile-safe
+input, party filter rail, a dedicated factual party destination card above politician
+results, roomier result rows, session-only recent searches, refined party/person
+profiles, and consistent clip duration badges. No new dependency, font or image asset.
+**Tests:** direct TypeScript check and Vite production build green;
+`verify-pwa-build.mjs` green with exactly 9 same-origin app-shell entries and no
+video/private data; `python tasks.py test lint typecheck` green: 379 passed,
+68 deselected, one existing `audioop` warning; `git diff --check` green.
+**Contracts touched:** none.
+
+**Decisions made:**
+- Kept the existing React routing, Supabase search APIs, party/person data models,
+  bottom navigation and shared clip-player handoff. The supplied design changes
+  hierarchy and presentation, not data ownership or navigation semantics.
+- A matching/selected party is promoted from an ordinary list row to a dedicated
+  destination card. Clip and politician totals render only when the existing exact
+  counts are available; missing counts remain absent rather than becoming zero.
+- Recent searches work within the current app session and can be cleared, but are
+  not persisted. Political search terms can reveal sensitive interests, so a visual
+  redesign does not silently create a new durable local data store.
+- `Popul„ra debatter` remains explicitly labelled as example data because Pleni does
+  not yet measure search popularity. The supplied invented trend figures were not
+  relabelled as product telemetry.
+- The frontend skill shaped the result toward restrained editorial hierarchy:
+  Pleni's existing type and neutral palette remain, party colour is confined to
+  identity surfaces, cards are used only for destinations/interactions, and motion
+  is limited to focus, results entrance and affordance feedback with reduced-motion
+  coverage.
+
+**Observations (not fixed, out of scope):**
+- Search-popularity measurement remains a future analytics/product decision. Until
+  it exists, the example label is load-bearing and must not be removed.
+- No physical iPhone/Android device pass was added by this desktop-only redesign.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** keep search terms session-only unless a separate privacy
+decision authorizes persistence. Preserve factual count handling and the existing
+bounded media behavior when changing the party/person clip grids.
