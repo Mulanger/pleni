@@ -267,6 +267,76 @@ a {
   backdrop-filter: blur(16px);
 }
 
+.skeleton-shape {
+  display: block;
+  background: linear-gradient(100deg, #e8e9e7 18%, #f5f5f3 38%, #e8e9e7 58%);
+  background-size: 220% 100%;
+  animation: skeleton-sweep 1.45s ease-in-out infinite;
+}
+
+@keyframes skeleton-sweep {
+  from { background-position: 100% 0; }
+  to { background-position: -120% 0; }
+}
+
+.feed-skeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 35%, #22252a 0, #101216 42%, #050608 76%);
+  pointer-events: none;
+}
+
+.feed-skeleton .skeleton-shape {
+  background: linear-gradient(100deg, #23262b 18%, #34383e 38%, #23262b 58%);
+  background-size: 220% 100%;
+}
+
+.feed-skeleton-focus {
+  position: absolute;
+  top: 17%;
+  left: 50%;
+  width: min(56vw, 230px);
+  height: 46%;
+  border-radius: 48% 48% 24px 24px;
+  transform: translateX(-50%);
+  opacity: 0.64;
+}
+
+.feed-skeleton-copy {
+  position: absolute;
+  right: 76px;
+  bottom: calc(86px + env(safe-area-inset-bottom));
+  left: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.feed-skeleton-copy span {
+  height: 12px;
+  border-radius: 999px;
+}
+
+.feed-skeleton-copy span:nth-child(1) { width: 42%; height: 15px; }
+.feed-skeleton-copy span:nth-child(2) { width: 88%; }
+.feed-skeleton-copy span:nth-child(3) { width: 64%; }
+
+.feed-skeleton-actions {
+  position: absolute;
+  right: 16px;
+  bottom: calc(92px + env(safe-area-inset-bottom));
+  display: grid;
+  gap: 18px;
+}
+
+.feed-skeleton-actions span {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+}
+
 /* Honest empty state for the feed (FE-12). */
 .feed-empty {
   position: absolute;
@@ -966,23 +1036,97 @@ a {
 }
 
 .search-screen .placeholder-note {
-  padding: 0 14px 9px;
+  padding: 11px 14px 10px;
+  line-height: 1.4;
 }
 
-.search-loading {
+.search-results-skeleton {
   display: flex;
-  min-height: 132px;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 650;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.search-loading svg {
-  animation: search-spin 900ms linear infinite;
+.search-skeleton-kicker {
+  width: 62px;
+  height: 9px;
+  margin: 1px 3px 0;
+  border-radius: 999px;
 }
+
+.search-skeleton-party {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 13px;
+  align-items: center;
+  min-height: 118px;
+  padding: 16px 14px;
+  border: 1px solid #e7e7e3;
+  border-radius: 20px;
+  background: #fbfbfa;
+}
+
+.search-skeleton-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+}
+
+.search-skeleton-party .search-skeleton-avatar {
+  width: 54px;
+  height: 54px;
+}
+
+.search-skeleton-party > div,
+.search-skeleton-row > div {
+  display: grid;
+  gap: 8px;
+}
+
+.search-skeleton-party > div span,
+.search-skeleton-row > div span {
+  height: 10px;
+  border-radius: 999px;
+}
+
+.search-skeleton-party > div span:nth-child(1) { width: 34%; height: 8px; }
+.search-skeleton-party > div span:nth-child(2) { width: 72%; height: 16px; }
+.search-skeleton-party > div span:nth-child(3) { width: 52%; }
+
+.search-skeleton-heading {
+  display: flex;
+  justify-content: space-between;
+  margin: 14px 3px 0;
+}
+
+.search-skeleton-heading span {
+  width: 58px;
+  height: 9px;
+  border-radius: 999px;
+}
+
+.search-skeleton-heading span:last-child { width: 42px; }
+
+.search-skeleton-list {
+  overflow: hidden;
+  border: 1px solid #e8e8e5;
+  border-radius: 18px;
+}
+
+.search-skeleton-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 68px;
+  padding: 10px 13px;
+}
+
+.search-skeleton-row + .search-skeleton-row {
+  border-top: 1px solid #f0f0ed;
+}
+
+.search-skeleton-row > div span:first-child { width: 58%; height: 13px; }
+.search-skeleton-row > div span:last-child { width: 76%; height: 9px; }
 
 .search-results {
   display: flex;
@@ -1148,10 +1292,6 @@ a {
 .search-result-list .row-copy strong {
   font-size: 14.5px;
   font-weight: 800;
-}
-
-@keyframes search-spin {
-  to { transform: rotate(360deg); }
 }
 
 @keyframes search-results-in {
@@ -1760,11 +1900,85 @@ a {
   background: #fff;
 }
 
-.saved-grid-status {
-  padding: 28px 18px;
-  color: var(--muted);
-  font-size: 13px;
-  text-align: center;
+.skeleton-grid {
+  width: 100%;
+}
+
+.skeleton-mini-clip {
+  aspect-ratio: 9 / 16;
+  border: 1px solid #e5e5e1;
+  border-radius: 13px;
+}
+
+.profile-skeleton {
+  padding: 4px 2px 0;
+}
+
+.profile-skeleton-hero {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.profile-skeleton.party .profile-skeleton-hero {
+  grid-template-columns: 78px minmax(0, 1fr);
+  margin: 0 -14px 18px;
+  padding: 22px 16px 18px;
+  border-top: 1px solid #edede9;
+  border-bottom: 1px solid #edede9;
+  background: #fbfbfa;
+}
+
+.profile-skeleton-avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 999px;
+}
+
+.profile-skeleton.party .profile-skeleton-avatar {
+  width: 78px;
+  height: 78px;
+}
+
+.profile-skeleton-copy {
+  display: grid;
+  gap: 9px;
+}
+
+.profile-skeleton-copy span {
+  height: 10px;
+  border-radius: 999px;
+}
+
+.profile-skeleton-copy span:nth-child(1) { width: 72%; height: 20px; }
+.profile-skeleton-copy span:nth-child(2) { width: 54%; }
+.profile-skeleton-copy span:nth-child(3) { width: 84%; }
+.profile-skeleton-copy span:nth-child(4) { width: 108px; height: 36px; }
+
+.profile-skeleton-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  border-top: 1px solid #e8e8e4;
+  border-bottom: 1px solid #e8e8e4;
+}
+
+.profile-skeleton-stats span {
+  width: 52px;
+  height: 25px;
+  justify-self: center;
+  border-radius: 7px;
+}
+
+.profile-skeleton-label {
+  width: 58px;
+  height: 9px;
+  margin-bottom: 10px;
+  border-radius: 999px;
 }
 
 .party-hero {
@@ -3460,8 +3674,8 @@ a {
   .onboarding-pane,
   .pwa-notice,
   .pwa-spinner,
-  .search-loading svg,
   .search-results,
+  .skeleton-shape,
   .pwa-update-progress span {
     animation: none;
   }
