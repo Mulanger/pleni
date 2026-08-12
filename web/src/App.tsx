@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   ArrowUpRight,
@@ -52,7 +52,12 @@ import {
 } from "./comments";
 import type { CommentReportReason, CommentThread, VideoComment } from "./comments";
 import { initials, PARTIES, partyInk, partyTint, TRENDING } from "./data";
-import { useNeighborVideoPreload } from "./feed/network";
+import {
+  attachMediaSource,
+  planMediaWindow,
+  releaseMediaSource
+} from "./feed/media-policy";
+import { useSecondLookahead } from "./feed/network";
 import { Onboarding } from "./onboarding";
 import { EMPTY_ONBOARDING, readOnboarding, writeOnboarding } from "./onboarding-store";
 import { EMPTY_LIBRARY, readLibrary, toggleInList, writeLibrary } from "./library-store";
@@ -191,25 +196,9 @@ const IMPRESSION_VISIBLE_FRACTION = 0.72;
 const ACTIVATION_DWELL_MS = 180;
 
 /**
- * How many clips either side of the active one carry a `src`.
- *
- * Every clip used to mount with its Bunny URL and `preload="metadata"`, so a
- * 60-row feed opened with 119 requests to one CDN host — 59 MP4 plus 60 posters
- * — against a browser cap of about six connections. The active clip's video data
- * queued behind metadata for clips the viewer might never reach, which is both
- * the poster-sits-there delay on load and a good part of the scroll stutter.
- * Measured by setting this constant and POSTER_WINDOW to 999 and reloading.
- *
- * One either side is enough: the window is centred on the active clip, so
- * whichever clip you swipe to already had its `src` attached as a neighbour and
- * does not wait on the FE-4 dwell before it starts fetching.
- */
-const VIDEO_WINDOW = 1;
-
-/**
  * How many clips either side of the active one carry a `poster`.
  *
- * Wider than VIDEO_WINDOW because a thumbnail is far cheaper than a video and
+ * Wider than the bounded source scheduler because a thumbnail is far cheaper and
  * it is what stands in for the clip until the first frame decodes — a poster
  * that arrives late shows as a black card. Still bounded: measured on a cold
  * load, all 60 posters together took 1,089 ms to finish and were competing with
@@ -916,6 +905,7 @@ function FeedItemRow({
   flashIcon,
   flashNonce,
   shareFeedback,
+  mediaMounted,
   onTogglePlayback,
   onToggleMuted,
   onLike,
@@ -927,6 +917,7 @@ function FeedItemRow({
   onEnded,
   onPlay,
   onPause,
+  onPlayable,
   onSeek
 }: {
   clip: ClipItem;
@@ -944,6 +935,7 @@ function FeedItemRow({
   flashIcon: PlaybackFlash["icon"] | null;
   flashNonce: number | null;
   shareFeedback: ShareFeedback | null;
+  mediaMounted: boolean;
   onTogglePlayback: () => void;
   onToggleMuted: () => void;
   onLike: () => void;
@@ -955,15 +947,90 @@ function FeedItemRow({
   onEnded: (video: HTMLVideoElement) => void;
   onPlay: () => void;
   onPause: () => void;
+  onPlayable: () => void;
   onSeek: (seconds: number) => number | null;
 }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(clip.durationS);
+  const [frameReady, setFrameReady] = useState(false);
+  const [buffering, setBuffering] = useState(false);
+  const mediaRef = useRef<HTMLVideoElement | null>(null);
+  const firstFrameCancelRef = useRef<(() => void) | null>(null);
+  const bindMediaRef = useCallback(
+    (node: HTMLVideoElement | null) => {
+      mediaRef.current = node;
+      videoRef(node);
+    },
+    [videoRef]
+  );
 
   useEffect(() => {
     setCurrentTime(0);
     setDuration(clip.durationS);
-  }, [clip.id, clip.durationS]);
+    setFrameReady(false);
+    setBuffering(false);
+  }, [clip.id, clip.durationS, videoSrc]);
+
+  useEffect(() => {
+    if (!active) {
+      setBuffering(false);
+    }
+  }, [active]);
+
+  useLayoutEffect(() => {
+    const video = mediaRef.current;
+    if (!video || !videoSrc) {
+      return;
+    }
+    setFrameReady(false);
+    setBuffering(false);
+    attachMediaSource(video, videoSrc, preload);
+    return () => {
+      firstFrameCancelRef.current?.();
+      firstFrameCancelRef.current = null;
+      releaseMediaSource(video);
+    };
+  }, [videoSrc]);
+
+  useEffect(() => {
+    const video = mediaRef.current;
+    if (!video || !videoSrc || video.preload === preload) {
+      return;
+    }
+    // Promotion from neighbor to active must keep the bytes already buffered.
+    video.preload = preload;
+    video.setAttribute("preload", preload);
+  }, [preload, videoSrc]);
+
+  const revealFirstFrame = (video: HTMLVideoElement) => {
+    firstFrameCancelRef.current?.();
+    const candidate = video as HTMLVideoElement & {
+      requestVideoFrameCallback?: (callback: () => void) => number;
+      cancelVideoFrameCallback?: (handle: number) => void;
+    };
+    if (candidate.requestVideoFrameCallback) {
+      const handle = candidate.requestVideoFrameCallback(() => {
+        if (mediaRef.current === video) {
+          setFrameReady(true);
+        }
+      });
+      firstFrameCancelRef.current = () => candidate.cancelVideoFrameCallback?.(handle);
+      return;
+    }
+    let firstFrame = 0;
+    let secondFrame = 0;
+    firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        if (mediaRef.current === video) {
+          setFrameReady(true);
+        }
+      });
+    });
+    firstFrameCancelRef.current = () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
+  };
 
   return (
     <article
@@ -976,43 +1043,85 @@ function FeedItemRow({
       data-politician-id={clip.politicianId ?? ""}
       onClick={onTogglePlayback}
     >
-      <video
-        ref={videoRef}
-        /* Only clips near the active one carry a source. A clip that has
-           left the window keeps browser-buffered media, but is paused and
-           no longer competes for new bandwidth. */
-        src={videoSrc}
-        poster={posterSrc}
-        playsInline
-        controls={false}
-        controlsList="nodownload nofullscreen noremoteplayback"
-        disablePictureInPicture
-        disableRemotePlayback
-        muted={muted}
-        /* FE-3 (GATE): the explicit onEnded path keeps completion and replay
-           observable instead of hiding the boundary behind native looping. */
-        preload={preload}
-        onLoadedMetadata={(event) => {
-          const mediaDuration = event.currentTarget.duration;
-          setDuration(
-            Number.isFinite(mediaDuration) && mediaDuration > 0
-              ? mediaDuration
-              : clip.durationS
-          );
-        }}
-        onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
-        onEnded={(event) => onEnded(event.currentTarget)}
-        onPlay={onPlay}
-        onPause={onPause}
-        onClick={(event) => {
-          // Consume the media element's own click before an Android browser
-          // can interpret it as a request for its native UI.
-          event.preventDefault();
-          event.stopPropagation();
-          onTogglePlayback();
-        }}
-        onContextMenu={(event) => event.preventDefault()}
-      />
+      {posterSrc && !frameReady && <img className="feed-poster" src={posterSrc} alt="" />}
+      {mediaMounted && (
+        <video
+          ref={bindMediaRef}
+          poster={posterSrc}
+          playsInline
+          controls={false}
+          controlsList="nodownload nofullscreen noremoteplayback"
+          disablePictureInPicture
+          disableRemotePlayback
+          muted={muted}
+          /* FE-3 (GATE): the explicit onEnded path keeps completion and replay
+             observable instead of hiding the boundary behind native looping. */
+          preload={preload}
+          onLoadedMetadata={(event) => {
+            const mediaDuration = event.currentTarget.duration;
+            setDuration(
+              Number.isFinite(mediaDuration) && mediaDuration > 0
+                ? mediaDuration
+                : clip.durationS
+            );
+          }}
+          onLoadedData={(event) => {
+            setBuffering(false);
+            revealFirstFrame(event.currentTarget);
+          }}
+          onCanPlay={(event) => {
+            setBuffering(false);
+            revealFirstFrame(event.currentTarget);
+            onPlayable();
+          }}
+          onPlaying={(event) => {
+            setBuffering(false);
+            revealFirstFrame(event.currentTarget);
+          }}
+          onWaiting={(event) => {
+            if (
+              active &&
+              !event.currentTarget.paused &&
+              event.currentTarget.readyState < HTMLMediaElement.HAVE_FUTURE_DATA
+            ) {
+              setBuffering(true);
+            }
+          }}
+          onStalled={(event) => {
+            if (
+              active &&
+              !event.currentTarget.paused &&
+              event.currentTarget.readyState < HTMLMediaElement.HAVE_FUTURE_DATA
+            ) {
+              setBuffering(true);
+            }
+          }}
+          onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+          onEnded={(event) => {
+            setBuffering(false);
+            onEnded(event.currentTarget);
+          }}
+          onPlay={onPlay}
+          onPause={() => {
+            setBuffering(false);
+            onPause();
+          }}
+          onError={() => setBuffering(false)}
+          onClick={(event) => {
+            // Consume the media element's own click before an Android browser
+            // can interpret it as a request for its native UI.
+            event.preventDefault();
+            event.stopPropagation();
+            onTogglePlayback();
+          }}
+          onContextMenu={(event) => event.preventDefault()}
+        />
+      )}
+      {active && buffering && !blocked && (
+        <div className="video-buffering" role="status" aria-label="Laddar video">
+          <LoaderCircle size={24} aria-hidden="true" />
+        </div>
+      )}
       {flashIcon && flashNonce !== null && (
         <PlaybackFlashIcon key={flashNonce} icon={flashIcon} />
       )}
@@ -1128,7 +1237,8 @@ function FeedScreen({
   const [shareFeedback, setShareFeedback] = useState<ShareFeedback | null>(null);
   const [commentClip, setCommentClip] = useState<ClipItem | null>(null);
   const [predictedDirection, setPredictedDirection] = useState<1 | -1>(1);
-  const neighborVideoPreload = useNeighborVideoPreload();
+  const [playableGeneration, setPlayableGeneration] = useState<string | null>(null);
+  const secondLookaheadAllowed = useSecondLookahead();
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const videoRefCallbacks = useRef<
     Record<string, (node: HTMLVideoElement | null) => void>
@@ -1171,6 +1281,7 @@ function FeedScreen({
     setPlaybackFlash(null);
     setShareFeedback(null);
     setPredictedDirection(1);
+    setPlayableGeneration(null);
     loopCounts.current = {};
   }, [clips, initialClipId]);
 
@@ -1225,8 +1336,11 @@ function FeedScreen({
           playbackGeneration.current += 1;
           previous.pause();
           previous.removeEventListener("webkitbeginfullscreen", keepPlaybackInline);
+          if (videoRefs.current[clipId] === previous) {
+            delete videoRefs.current[clipId];
+          }
         }
-        if (node) {
+        if (node && previous !== node) {
           // `playsInline` covers modern Chrome/Safari. Samsung Internet and some
           // Android WebViews still inspect one of these vendor attributes before
           // deciding whether to hand the MP4 to their native video assistant.
@@ -1239,7 +1353,11 @@ function FeedScreen({
           node.setAttribute("x-webkit-airplay", "deny");
           node.addEventListener("webkitbeginfullscreen", keepPlaybackInline);
         }
-        videoRefs.current[clipId] = node;
+        if (node) {
+          videoRefs.current[clipId] = node;
+        } else {
+          delete videoRefs.current[clipId];
+        }
       };
     }
     return videoRefCallbacks.current[clipId];
@@ -1593,11 +1711,33 @@ function FeedScreen({
     return nextTime;
   };
 
-  // Centre of the `src` window. Falls back to the top of the list before the
-  // first activation, so a cold load still fetches the clip about to be seen.
+  // The source scheduler follows the last committed movement direction. It
+  // keeps one clip behind, then stages the immediate and second destination.
   const activeIndex = clips.findIndex((clip) => clip.id === activeId);
   const windowCentre = activeIndex >= 0 ? activeIndex : 0;
-  const predictedNeighborIndex = windowCentre + predictedDirection;
+  const immediateCandidateIndex = windowCentre + predictedDirection;
+  const immediateCandidateId = clips[immediateCandidateIndex]?.id ?? "";
+  const mediaGeneration = `${activeId}:${predictedDirection}:${immediateCandidateId}`;
+  const immediatePlayable = playableGeneration === mediaGeneration;
+  const mediaWindow = planMediaWindow({
+    activeIndex: windowCentre,
+    itemCount: clips.length,
+    direction: predictedDirection,
+    immediatePlayable,
+    allowSecondLookahead: secondLookaheadAllowed
+  });
+  const sourceIndices = new Set(mediaWindow.sourceIndices);
+
+  useLayoutEffect(() => {
+    if (mediaWindow.immediateIndex === null) {
+      return;
+    }
+    const clipId = clips[mediaWindow.immediateIndex]?.id;
+    const video = clipId ? videoRefs.current[clipId] : null;
+    if (video && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+      setPlayableGeneration(mediaGeneration);
+    }
+  }, [clips, immediatePlayable, mediaGeneration, mediaWindow.immediateIndex]);
 
   return (
     <section className="feed-screen">
@@ -1629,14 +1769,14 @@ function FeedScreen({
       <div className="feed-scroll">
         {clips.map((clip, index) => {
           const distanceFromActive = Math.abs(index - windowCentre);
-          const withinWindow = distanceFromActive <= VIDEO_WINDOW;
           const withinPosterWindow = distanceFromActive <= POSTER_WINDOW;
+          const mediaMounted = sourceIndices.has(index);
           const preload =
+            index === mediaWindow.immediateIndex ||
+            index === mediaWindow.stagedIndex ||
             clip.id === activeId
-              ? "auto"
-              : index === predictedNeighborIndex
-                ? neighborVideoPreload
-                : "metadata";
+            ? "auto"
+            : "metadata";
           const person = personForClip(clip);
           const isLiked = !!liked[clip.id];
           const isSaved = !!saved[clip.id];
@@ -1649,9 +1789,10 @@ function FeedScreen({
               clip={clip}
               person={person}
               videoRef={videoRefFor(clip.id)}
-              videoSrc={withinWindow ? clip.videoUrl : undefined}
+              videoSrc={mediaMounted ? clip.videoUrl : undefined}
               posterSrc={withinPosterWindow ? clip.thumbUrl : undefined}
               preload={preload}
+              mediaMounted={mediaMounted}
               muted={muted}
               active={clip.id === activeId}
               blocked={!!blocked[clip.id]}
@@ -1688,6 +1829,17 @@ function FeedScreen({
                 setBlocked((state) => ({ ...state, [clip.id]: false }));
               }}
               onPause={() => setPaused((state) => ({ ...state, [clip.id]: true }))}
+              onPlayable={() => {
+                const video = videoRefs.current[clip.id];
+                if (
+                  index === mediaWindow.immediateIndex &&
+                  video !== undefined &&
+                  video !== null &&
+                  video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA
+                ) {
+                  setPlayableGeneration(mediaGeneration);
+                }
+              }}
               onSeek={(seconds) => seekClip(clip.id, seconds)}
             />
           );

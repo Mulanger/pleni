@@ -4191,3 +4191,44 @@ video/private data; `python tasks.py test lint typecheck` green: 380 passed,
 **Next agent should know:** keep the search readiness key coupled to both data
 sources if more result sections are added; otherwise partial-result flashes can
 return even though each request is individually race-safe.
+
+## UI follow-up — bounded progressive video loading — IMPLEMENTED 2026-08-12
+
+**Built:** replaced the symmetric ±1 source window with a directional scheduler
+that keeps one clip behind, the active clip and the immediate destination, then
+stages a second destination after the first is genuinely playable; dynamically
+attached sources now receive explicit `load()` and obsolete media is paused,
+emptied, reset and unmounted; posters remain until a decoded frame is presented;
+the active row shows a restrained indicator only for real `waiting`/`stalled`
+events. Added pure policy/lifecycle helpers and dependency-free Node tests.
+**Tests:** 6 media scheduler/lifecycle tests green; direct TypeScript check and
+Vite production build green; `verify-pwa-build.mjs` green with exactly 9
+same-origin app-shell entries and no video/private data; `python tasks.py test
+lint typecheck` green: 380 passed, 68 deselected, one existing `audioop` warning;
+`git diff --check` green.
+**Contracts touched:** none.
+
+**Decisions made:**
+- The media window is capped at four source-bearing elements. The second forward
+  source is added only after the immediate neighbor reaches playable state, so
+  preparation advances without opening the whole 60-row catalogue.
+- Missing Network Information API data is normal connectivity. Only explicit
+  Save-Data, 2G or slow-2G disables the second look-ahead; the immediate neighbor
+  still loads eagerly.
+- Source ownership is deterministic: attach sets preload before src and calls
+  `load()`; cleanup pauses, removes src and calls `load()` before unmount. Retained
+  media is never reloaded when promoted to active, preserving its buffered bytes.
+- The browser media element and HTTP Range cache remain the only video transport.
+  No blob fetch or service-worker video caching was added.
+
+**Observations (not fixed, out of scope):** the physical Samsung Internet
+cold-cache 15-swipe acceptance pass is not possible from this desktop session.
+
+**Blocked / needs a decision:** none for deployment. Physical Samsung Internet
+acceptance remains to verify no progressive worsening, at most four `video[src]`
+elements, exactly one playing video and no transition stall over 500 ms on strong
+Wi-Fi.
+
+**Next agent should know:** `web/src/feed/media-policy.ts` is the source of truth
+for window and connection policy. Keep its Node tests and the explicit release
+lifecycle when changing feed media behavior.
