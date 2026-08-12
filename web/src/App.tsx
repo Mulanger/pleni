@@ -2816,7 +2816,9 @@ function ProfileScreen({
               subtitle={
                 pwa.installKind === "ios"
                   ? "Lägg till på hemskärmen från Dela-menyn."
-                  : "Öppna Pleni utan webbläsarens adressfält."
+                  : pwa.installKind === "manual"
+                    ? "Installera via webbläsarens meny."
+                    : "Öppna Pleni utan webbläsarens adressfält."
               }
               icon={
                 pwa.installBusy ? (
@@ -2828,31 +2830,47 @@ function ProfileScreen({
               onClick={pwa.installBusy ? undefined : () => void pwa.requestInstall()}
               chevron={!pwa.installBusy}
             />
-            {pwa.showIosInstructions && (
+            {pwa.showInstallInstructions && (
               <div className="pwa-install-guide">
                 <button
                   type="button"
                   className="pwa-install-guide-close"
                   aria-label="Stäng installationsguiden"
-                  onClick={pwa.dismissIosInstructions}
+                  onClick={pwa.dismissInstallInstructions}
                 >
                   <X size={16} aria-hidden="true" />
                 </button>
-                <div role="status" aria-atomic="true">
-                  <div className="pwa-install-guide-heading">
-                    <Share2 size={18} aria-hidden="true" />
-                    <strong>Lägg till på hemskärmen</strong>
+                {pwa.installKind === "ios" ? (
+                  <div role="status" aria-atomic="true">
+                    <div className="pwa-install-guide-heading">
+                      <Share2 size={18} aria-hidden="true" />
+                      <strong>Lägg till på hemskärmen</strong>
+                    </div>
+                    <ol>
+                      <li>Tryck på Dela-symbolen i Safari.</li>
+                      <li>
+                        Välj <b>Lägg till på hemskärmen</b>.
+                      </li>
+                      <li>
+                        Bekräfta med <b>Lägg till</b>.
+                      </li>
+                    </ol>
                   </div>
-                  <ol>
-                    <li>Tryck på Dela-symbolen i Safari.</li>
-                    <li>
-                      Välj <b>Lägg till på hemskärmen</b>.
-                    </li>
-                    <li>
-                      Bekräfta med <b>Lägg till</b>.
-                    </li>
-                  </ol>
-                </div>
+                ) : (
+                  <div role="status" aria-atomic="true">
+                    <div className="pwa-install-guide-heading">
+                      <Download size={18} aria-hidden="true" />
+                      <strong>Installera via webbläsaren</strong>
+                    </div>
+                    <ol>
+                      <li>Öppna webbläsarens meny.</li>
+                      <li>
+                        Välj <b>Installera app</b> eller <b>Lägg till på startskärmen</b>.
+                      </li>
+                      <li>Bekräfta installationen.</li>
+                    </ol>
+                  </div>
+                )}
               </div>
             )}
           </Group>

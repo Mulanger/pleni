@@ -135,7 +135,9 @@ if (!appJavaScript.includes("serviceWorker") || !appJavaScript.includes("sw.js")
 for (const fragment of [
   "riket.pwa.update-completed.v1",
   "Videon är pausad. Appen startas om strax.",
-  "Pleni är uppdaterad"
+  "Pleni är uppdaterad",
+  "Installera via webbläsarens meny.",
+  "Lägg till på startskärmen"
 ]) {
   if (!appJavaScript.includes(fragment)) {
     fail(`production application bundle is missing update lifecycle copy: ${fragment}`);

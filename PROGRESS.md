@@ -4012,3 +4012,36 @@ worker will receive one more update prompt for this interaction release.
 **Next agent should know:** preserve the automatic pause, comment-draft guard,
 two-second visual transition, controller-change wait and post-reload confirmation
 as one update lifecycle.
+
+## UI14 follow-up - persistent reinstall entry - DONE 2026-08-12
+
+**Built:** Profile now always shows `Installera Pleni` in normal browser mode and
+hides it only in actual standalone mode. When `beforeinstallprompt` is available,
+the row opens Android/Chromium's native installer. Otherwise the same row expands
+a compact three-step browser-menu guide covering `Installera app` and `Lagg till
+pa startskarmen`; the existing Safari-specific guide remains. Removed the
+session-only installed/dismissed flags that made the row disappear after an app
+was deleted without notifying the open tab. The build verifier now requires the
+manual-fallback copy in the production bundle.
+**Tests:** TypeScript, Vite production build and `verify-pwa-build.mjs` green. The
+worker still precaches exactly 9 same-origin shell entries with no video/private
+data. `python tasks.py test lint typecheck` green: 379 passed, 68 deselected, one
+existing `audioop` warning; lint and strict typing clean.
+**Contracts touched:** none.
+
+**Decisions made:**
+- Browser display mode, rather than a stale session flag, owns whether the App
+  group is visible.
+- Pleni uses the native installer only from a captured browser event; when that
+  event is unavailable, the persistent row gives honest manual instructions.
+- The frontend skill kept the fallback inside the existing App group instead of
+  adding another banner, modal or permanent explanatory block.
+
+**Observations (not fixed, out of scope):** browser menu labels vary across Android
+browsers, so the guide includes both common Swedish labels.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** never gate the Profile install entry solely on
+`beforeinstallprompt`; a manual browser-menu fallback must remain available in
+all non-standalone sessions.

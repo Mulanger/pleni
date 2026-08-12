@@ -13,7 +13,7 @@ import {
 } from "./platform";
 import type { DeferredInstallPromptEvent, InstallChoice } from "./platform";
 
-export type PwaInstallKind = "chromium" | "ios";
+export type PwaInstallKind = "chromium" | "ios" | "manual";
 export type PwaUpdatePhase =
   | "hidden"
   | "available"
@@ -48,9 +48,9 @@ export type PwaExperience = {
   standalone: boolean;
   installKind: PwaInstallKind | null;
   installBusy: boolean;
-  showIosInstructions: boolean;
+  showInstallInstructions: boolean;
   requestInstall: () => Promise<void>;
-  dismissIosInstructions: () => void;
+  dismissInstallInstructions: () => void;
   offlineMessage: string | null;
   dismissOffline: () => void;
   updatePhase: PwaUpdatePhase;
@@ -67,11 +67,9 @@ function installChoiceFrom(
 
 export function usePwaExperience(networkRequestFailed: boolean): PwaExperience {
   const [standalone, setStandalone] = useState(isStandaloneDisplayMode);
-  const [installedThisSession, setInstalledThisSession] = useState(false);
   const [installPromptAvailable, setInstallPromptAvailable] = useState(false);
-  const [installDismissed, setInstallDismissed] = useState(false);
   const [installBusy, setInstallBusy] = useState(false);
-  const [showIosInstructions, setShowIosInstructions] = useState(false);
+  const [showInstallInstructions, setShowInstallInstructions] = useState(false);
   const deferredInstallPrompt = useRef<DeferredInstallPromptEvent | null>(null);
 
   const [browserOnline, setBrowserOnline] = useState(navigator.onLine);
@@ -102,12 +100,12 @@ export function usePwaExperience(networkRequestFailed: boolean): PwaExperience {
       promptEvent.preventDefault();
       deferredInstallPrompt.current = promptEvent;
       setInstallPromptAvailable(true);
+      setShowInstallInstructions(false);
     };
     const markInstalled = () => {
       deferredInstallPrompt.current = null;
       setInstallPromptAvailable(false);
-      setInstalledThisSession(true);
-      setShowIosInstructions(false);
+      setShowInstallInstructions(false);
     };
     window.addEventListener("beforeinstallprompt", captureInstallPrompt);
     window.addEventListener("appinstalled", markInstalled);
@@ -253,18 +251,18 @@ export function usePwaExperience(networkRequestFailed: boolean): PwaExperience {
   }, [beginVisualUpdate, reloadWhenSafe, updatePhase]);
 
   const installKind = useMemo<PwaInstallKind | null>(() => {
-    if (standalone || installedThisSession || installDismissed) {
+    if (standalone) {
       return null;
     }
     if (installPromptAvailable) {
       return "chromium";
     }
-    return window.isSecureContext && isAppleMobileSafari() ? "ios" : null;
-  }, [installDismissed, installPromptAvailable, installedThisSession, standalone]);
+    return window.isSecureContext && isAppleMobileSafari() ? "ios" : "manual";
+  }, [installPromptAvailable, standalone]);
 
   const requestInstall = useCallback(async () => {
-    if (installKind === "ios") {
-      setShowIosInstructions(true);
+    if (installKind === "ios" || installKind === "manual") {
+      setShowInstallInstructions(true);
       return;
     }
 
@@ -275,16 +273,12 @@ export function usePwaExperience(networkRequestFailed: boolean): PwaExperience {
 
     setInstallBusy(true);
     try {
-      const choice = await installChoiceFrom(await promptEvent.prompt(), promptEvent);
-      if (choice.outcome === "accepted") {
-        setInstalledThisSession(true);
-      }
+      await installChoiceFrom(await promptEvent.prompt(), promptEvent);
     } catch (error: unknown) {
       console.warn("Pleni could not show the browser install prompt.", error);
     } finally {
       deferredInstallPrompt.current = null;
       setInstallPromptAvailable(false);
-      setInstallDismissed(true);
       setInstallBusy(false);
     }
   }, [installKind]);
@@ -301,12 +295,9 @@ export function usePwaExperience(networkRequestFailed: boolean): PwaExperience {
     standalone,
     installKind,
     installBusy,
-    showIosInstructions,
+    showInstallInstructions,
     requestInstall,
-    dismissIosInstructions: () => {
-      setShowIosInstructions(false);
-      setInstallDismissed(true);
-    },
+    dismissInstallInstructions: () => setShowInstallInstructions(false),
     offlineMessage,
     dismissOffline: () => setOfflineDismissed(true),
     updatePhase,
