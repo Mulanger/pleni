@@ -173,6 +173,7 @@ type ClipCollection = {
 };
 
 const partyCodes = Object.keys(PARTIES).filter((code) => code !== "NONE") as PartyCode[];
+const MAX_RECENT_SEARCHES = 4;
 
 /**
  * Visible fraction that counts as seeing a clip (prerequisite T-8).
@@ -2500,8 +2501,40 @@ function SearchScreen({
   const [results, setResults] = useState<Politician[]>([]);
   const [partyProfiles, setPartyProfiles] = useState<PartyProfile[]>([]);
   const [searching, setSearching] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const normalizedQuery = query.trim();
   const showResults = normalizedQuery.length > 0 || partyFilter !== null;
+
+  const rememberSearch = (value: string) => {
+    const normalizedValue = value.trim();
+    if (!normalizedValue) {
+      return;
+    }
+    setRecentSearches((current) => {
+      const next = [
+        normalizedValue,
+        ...current.filter(
+          (item) =>
+            item.toLocaleLowerCase("sv-SE") !== normalizedValue.toLocaleLowerCase("sv-SE")
+        )
+      ].slice(0, MAX_RECENT_SEARCHES);
+      return next;
+    });
+  };
+
+  const clearRecentSearches = () => {
+    setRecentSearches([]);
+  };
+
+  const openParty = (profile: PartyProfile) => {
+    rememberSearch(profile.name);
+    onOpenParty(profile.abbr);
+  };
+
+  const openPerson = (politician: Politician) => {
+    rememberSearch(cleanName(politician.name) || politician.name);
+    onOpenPerson(politician.id);
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2549,24 +2582,46 @@ function SearchScreen({
   }, [normalizedQuery, partyFilter, showResults]);
 
   return (
-    <section className="panel-screen">
+    <section
+      className={showResults ? "panel-screen search-screen has-results" : "panel-screen search-screen"}
+    >
       <div className="search-header">
+        {!showResults && <h1>Sök</h1>}
         <label className="search-box">
-          <Search size={17} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Sök person, parti eller ämne" />
+          <Search size={18} />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                rememberSearch(normalizedQuery);
+              }
+            }}
+            aria-label="Sök person, parti eller ämne"
+            placeholder="Sök person, parti eller ämne"
+          />
           {query.length > 0 && (
-            <button onClick={() => setQuery("")} aria-label="Rensa">
+            <button type="button" onClick={() => setQuery("")} aria-label="Rensa sökningen">
               <X size={13} />
             </button>
           )}
         </label>
-        <div className="chips">
-          <button className={partyFilter === null ? "active" : ""} onClick={() => setPartyFilter(null)}>
+        <div className="chips" aria-label="Filtrera på parti">
+          <button
+            type="button"
+            className={partyFilter === null ? "active" : ""}
+            onClick={() => setPartyFilter(null)}
+          >
             <i />
             Alla
           </button>
           {partyCodes.map((party) => (
-            <button key={party} className={partyFilter === party ? "active" : ""} onClick={() => setPartyFilter(party)}>
+            <button
+              type="button"
+              key={party}
+              className={partyFilter === party ? "active" : ""}
+              onClick={() => setPartyFilter(party)}
+            >
               <i style={{ background: PARTIES[party].color }} />
               {party}
             </button>
@@ -2576,75 +2631,131 @@ function SearchScreen({
       <div className="panel-scroll">
         {showResults ? (
           searching && resultCount === 0 ? (
-            <Group title="Söker…">
-              <ListRow title="Hämtar träffar" />
-            </Group>
+            <div className="search-loading" role="status">
+              <LoaderCircle size={18} />
+              <span>Söker i katalogen…</span>
+            </div>
           ) : resultCount === 0 ? (
             <div className="panel-empty" role="status">
               <strong>Inga träffar</strong>
               <span>Sök på en politikers namn, eller filtrera på parti.</span>
             </div>
           ) : (
-            <Group title={`${resultCount} ${resultCount === 1 ? "träff" : "träffar"}`}>
-              {matchingParties.map((profile) => (
-                <ListRow
-                  key={`party-${profile.abbr}`}
-                  avatar={<PartyAvatar party={profile.abbr} color={profile.color} />}
-                  title={profile.name}
-                  subtitle="Öppna partisidan"
-                  onClick={() => onOpenParty(profile.abbr)}
-                  chevron
-                />
-              ))}
-              {results.map((politician) => (
-                <ListRow
-                  key={politician.id}
-                  avatar={
-                    <Avatar
-                      name={cleanName(politician.name) || politician.name}
-                      party={politician.party}
-                      size="md"
-                      imageUrl={politician.avatarUrl}
-                    />
-                  }
-                  title={cleanName(politician.name) || politician.name}
-                  subtitle={[PARTIES[politician.party].name, politician.role]
-                    .filter(Boolean)
-                    .join(" · ")}
-                  onClick={() => onOpenPerson(politician.id)}
-                  chevron
-                />
-              ))}
-            </Group>
+            <div className="search-results" aria-live="polite">
+              {matchingParties.length > 0 && (
+                <section className="search-party-results" aria-label="Partier">
+                  <div className="search-kicker">Partisida</div>
+                  {matchingParties.map((profile) => (
+                    <button
+                      type="button"
+                      className="search-party-card"
+                      key={`party-${profile.abbr}`}
+                      onClick={() => openParty(profile)}
+                      style={{ "--party-color": profile.color } as React.CSSProperties}
+                    >
+                      <PartyAvatar party={profile.abbr} color={profile.color} />
+                      <span className="search-party-copy">
+                        <small>Riksdagsparti</small>
+                        <strong>{profile.name}</strong>
+                        {(profile.clipCount !== null || profile.politicianCount !== null) && (
+                          <span>
+                            {[
+                              profile.clipCount !== null
+                                ? `${formatNumber(profile.clipCount)} klipp`
+                                : null,
+                              profile.politicianCount !== null
+                                ? `${formatNumber(profile.politicianCount)} politiker`
+                                : null
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        )}
+                      </span>
+                      <span className="search-party-action" aria-hidden="true">
+                        <ArrowUpRight size={17} />
+                      </span>
+                      <span className="search-party-footer">
+                        <b>Öppna partisidan</b>
+                        <span>Alla klipp från partiets politiker</span>
+                      </span>
+                    </button>
+                  ))}
+                </section>
+              )}
+
+              {results.length > 0 && (
+                <section className="search-people-results" aria-label="Politiker">
+                  <div className="search-result-heading">
+                    <span>Politiker</span>
+                    <b>
+                      {results.length} {results.length === 1 ? "träff" : "träffar"}
+                    </b>
+                  </div>
+                  <div className="search-result-list">
+                    {results.map((politician) => (
+                      <ListRow
+                        key={politician.id}
+                        avatar={
+                          <Avatar
+                            name={cleanName(politician.name) || politician.name}
+                            party={politician.party}
+                            size="md"
+                            imageUrl={politician.avatarUrl}
+                          />
+                        }
+                        title={cleanName(politician.name) || politician.name}
+                        subtitle={[PARTIES[politician.party].name, politician.role]
+                          .filter(Boolean)
+                          .join(" · ")}
+                        onClick={() => openPerson(politician)}
+                        chevron
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
           )
         ) : (
           <>
-            {/* Placeholder surfaces, kept deliberately at the owner's request as
-                a reminder of what to build. Both are hardcoded: the chips are
-                not the viewer's search history and the trending figures are
-                invented. Labelled so nobody reads them as real — invented
-                numbers presented as fact on political content is the FE-2
-                problem, and a label is what separates a mockup from a lie. */}
-            <section className="recent-block">
-              <div className="section-label">
-                Senaste sökningar <span className="placeholder-tag">exempel</span>
-                <button onClick={() => setQuery("")}>Rensa</button>
-              </div>
-              <div className="recent-chips">
-                {["Gunnar Strömmer", "Socialdemokraterna", "polisnärvaro", "budgetdebatt"].map((item) => (
-                  <button key={item} onClick={() => setQuery(item)}>
-                    <Clock3 size={12} />
-                    {item}
+            {recentSearches.length > 0 && (
+              <section className="recent-block">
+                <div className="section-label">
+                  <span>Senaste sökningar</span>
+                  <button type="button" onClick={clearRecentSearches}>
+                    Rensa
                   </button>
-                ))}
-              </div>
-            </section>
+                </div>
+                <div className="recent-chips">
+                  {recentSearches.map((item) => (
+                    <button
+                      type="button"
+                      key={item}
+                      onClick={() => {
+                        setPartyFilter(null);
+                        setQuery(item);
+                      }}
+                    >
+                      <Clock3 size={12} />
+                      {item}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
             <Group title="Populära debatter">
               <div className="placeholder-note">
                 Exempeldata — populäritet mäts inte ännu.
               </div>
               {TRENDING.map((item) => (
-                <ListRow key={item.n} eyebrow={item.n} title={item.title} subtitle={item.meta} action={<span className="up">{item.up}</span>} />
+                <ListRow
+                  key={item.n}
+                  eyebrow={item.n}
+                  title={item.title}
+                  subtitle={item.meta}
+                  action={<span className="up">{item.up}</span>}
+                />
               ))}
             </Group>
           </>
@@ -3048,11 +3159,10 @@ function SavedScreen({
                   aria-label={`Spela: ${clip.title}`}
                 >
                   <img src={clip.thumbUrl} alt="" loading="lazy" />
+                  <span className="mini-clip-duration">{formatDuration(clip.durationS)}</span>
                   <span className="mini-clip-copy">
                     <b>{clip.title}</b>
-                    <small>
-                      {formatDate(clip.debateDate)} · {formatDuration(clip.durationS)}
-                    </small>
+                    <small>{formatDate(clip.debateDate)}</small>
                   </span>
                 </button>
               ))}
@@ -3153,11 +3263,10 @@ function PartyScreen({
                       aria-label={`Spela: ${clip.title}`}
                     >
                       <img src={clip.thumbUrl} alt="" loading="lazy" />
+                      <span className="mini-clip-duration">{formatDuration(clip.durationS)}</span>
                       <span className="mini-clip-copy">
                         <b>{clip.title}</b>
-                        <small>
-                          {formatDate(clip.debateDate)} · {formatDuration(clip.durationS)}
-                        </small>
+                        <small>{formatDate(clip.debateDate)}</small>
                       </span>
                     </button>
                   ))}
@@ -3290,14 +3399,13 @@ function PersonScreen({
                       aria-label={`Spela: ${clip.title}`}
                     >
                       <img src={clip.thumbUrl} alt="" loading="lazy" />
+                      <span className="mini-clip-duration">{formatDuration(clip.durationS)}</span>
                       <span className="mini-clip-copy">
                         <b>{clip.title}</b>
                         {/* Q-8: every clip shows its debate date, here as well
                             as in the feed. Target for "old content without a
                             visible date" is exactly zero. */}
-                        <small>
-                          {formatDate(clip.debateDate)} · {formatDuration(clip.durationS)}
-                        </small>
+                        <small>{formatDate(clip.debateDate)}</small>
                       </span>
                     </button>
                   ))}
