@@ -75,8 +75,8 @@ jobs:
       - name: Typecheck
         run: node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json
 
-      - name: Media scheduler tests
-        run: node --test tests/media-policy.test.mjs
+      - name: Browser lifecycle tests
+        run: node --test
 
       - name: Build
         # No VITE_* secrets are provided on purpose: the build must succeed

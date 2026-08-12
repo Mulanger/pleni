@@ -4291,3 +4291,45 @@ the service worker, Bunny CORS/cache headers and retry URLs were not the fault.
 politician inserts enqueue `portrait_sync:<intressent_id>:v1` automatically. Keep
 that job standalone and low priority; use `scripts/sync_politician_profiles.py`
 for occasional whole-catalogue metadata and changed-photo refreshes.
+
+## UI13 follow-up — stable portrait remounts — DONE 2026-08-12
+
+**Built:** replaced Avatar's passive URL reset with a source-keyed image child;
+added a page-session success registry for immutable Bunny portrait URLs; detects
+already-complete cached images during layout; preserves bounded retries, exact-URL
+invalidation and initials fallback across real Search/Following unmounts. Added
+dependency-free portrait lifecycle tests and made CI run the complete web test set.
+**Tests:** 6 portrait lifecycle tests and 6 progressive-media tests green; direct
+TypeScript, Vite production build and PWA verification green with exactly 9
+same-origin shell entries and no video/private caching; `python tasks.py test lint
+typecheck` green: 397 passed, 68 deselected, one existing `audioop` warning; strict
+typing clean on 82 source files; `git diff --check` green.
+**Contracts touched:** none.
+
+**Root cause confirmed:** Search and Following are mutually exclusive route
+branches, so switching tabs destroys every Avatar. A cached JPEG could fire
+`load` on the new instance before React flushed Avatar's passive mount effect.
+The load handler made the image visible, then the effect reset `imageLoaded` to
+false; no second load event existed, so CSS kept a healthy image at opacity zero.
+
+**Decisions made:**
+- URL changes now reset synchronously through the keyed `AvatarImage` lifecycle;
+  no delayed effect is allowed to overwrite a successful cached load.
+- A successful display URL is remembered only for the current page session. This
+  survives component remounts without persisting search/follow activity.
+- Later errors conditionally remove only the exact failed cached URL, so a stale
+  error cannot erase a newer retry success. Every new lifecycle receives two
+  fresh retry URLs even if an earlier lifecycle succeeded on a retry.
+- Native lazy loading remains for ordinary list/feed portraits, but a synchronous
+  `complete && naturalWidth > 0` check makes correctness independent of receiving
+  another cached-image load event. The profile hero remains eager/high-priority.
+
+**Observations (not fixed, out of scope):** no physical-phone automation was
+available in this desktop session; the exact unmount/remount and cached-complete
+states are covered by dependency-free regression tests.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** keep portrait success state keyed by the canonical
+immutable source URL. Do not reintroduce a passive mount reset or make cached
+image visibility depend solely on a future `load` event.

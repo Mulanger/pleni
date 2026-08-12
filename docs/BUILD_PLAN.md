@@ -1126,6 +1126,41 @@ green.
 
 ---
 
+### UI13 follow-up — stable portrait remounts
+
+**Depends on:** UI13. **Size:** small.
+
+**Objective.** Keep a successfully painted portrait visible when fast navigation
+unmounts and remounts Search, Following or another politician surface.
+
+**Scope — may create or modify:**
+
+```
+web/src/App.tsx
+web/src/portrait-image.ts
+web/tests/portrait-image.test.mjs
+.github/workflows/ci.yml
+docs/BUILD_PLAN.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** portrait source data, Supabase queries, navigation
+layout, service-worker routing, video delivery, private user data, migrations or
+numbered pipeline stages.
+
+**Build.** Key delivery state to the immutable source URL instead of resetting it
+in a passive effect. Remember the exact successfully painted URL in page-session
+memory, reuse it after a real component remount, and synchronously recognize an
+already-complete cached image without relying on a second `load` event. Retain the
+bounded query retry and initials fallback.
+
+**Acceptance:** a simulated Search → Following → Search lifecycle begins visibly
+loaded after the first success; cached complete images are recognized; retry URLs
+remain bounded and source-isolated; TypeScript, browser lifecycle tests, the
+production build, PWA verification and full project acceptance are green.
+
+---
+
 ## UI14 — Mobile app UX and PWA
 
 **Depends on:** UI5, UI6, UI9 and UI10. **Size:** large, split into UI14.0–UI14.6.
