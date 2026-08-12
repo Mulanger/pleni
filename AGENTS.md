@@ -186,19 +186,21 @@ Last updated: 2026-08-11.
     leaving the feed or hiding the document pauses every video before detach,
     and stale `play()` promises cannot start a muted fallback off-screen;
   - bottom nav is flush to the mobile viewport bottom.
-- Only clips near the active one carry a `src` (±1) or a `poster` (±3); see
-  `VIDEO_WINDOW` / `POSTER_WINDOW` in `web/src/App.tsx`. Mounting all 60 rows with
-  media previously cost **119** CDN requests. The verified UI14.5 release makes
-  seven fresh Bunny requests at the feed top: four thumbnails, one visible
-  politician portrait, the active MP4 and one source-window neighbor MP4. Do not
+- Video sources use a bounded directional scheduler: one clip behind, the active
+  clip, the immediate destination, then a second destination only after the first
+  is playable. At most four `<video>` elements exist; rows outside that window keep
+  only their bounded poster (±3). Leaving the window pauses, removes `src`, calls
+  `load()` and unmounts the media element so obsolete requests/decoders are released.
+  Mounting all 60 rows with media previously cost **119** CDN requests. Do not
   reintroduce unconditional `src`/`poster` attributes.
 - High-frequency playback time/duration state belongs to each feed row, so a
-  progress tick updates one row instead of rebuilding all 60. The active video is
-  always `preload="auto"`; only the predicted neighbor may use `auto` when the
-  browser explicitly reports a strong non-Save-Data connection. Missing network
-  hints, Save-Data, 2G and slow-2G keep neighbors at metadata-only. Video remains
-  owned by the media element/browser HTTP cache, never the service worker or a
-  manual blob fetch.
+  progress tick updates one row instead of rebuilding all 60. Active and forward
+  destinations use explicit `load()` with `preload="auto"`; the second look-ahead
+  is disabled only by an explicit Save-Data, 2G or slow-2G signal. Missing network
+  hints are normal (including Samsung Internet) and no longer suppress preparation.
+  The poster stays visible until a decoded frame is presented. Video remains owned
+  by the media element/browser HTTP cache, never the service worker or a manual blob
+  fetch.
 - Bunny sends no `Timing-Allow-Origin`, so `transferSize` is 0 for every CDN
   resource — request counts and timings are measurable from the page, byte totals
   are not.
