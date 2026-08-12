@@ -1,18 +1,17 @@
-# Pleni launcher icons
+# Pleni brand and launcher icons
 
-`../favicon.svg` is the canonical Pleni mark. Launcher exports use its black
-symbol, blue dot and warm-white field.
+The supplied full-resolution Pleni artwork is stored at
+`../brand/pleni-logo.png`. Keep that file as the canonical source for future
+store listings, download pages and marketing exports.
 
-- `icon-192.png` and `icon-512.png` are full-field `any` launcher exports.
-- `icon-maskable-512.png` uses `icon-maskable-source.svg`; the symbol is scaled
-  into the central maskable safe zone and the background reaches every edge.
-- `apple-touch-icon.png` is the full-field 180×180 Apple launcher export. iOS
-  applies the platform corner mask.
+The launcher and browser exports came from the supplied favicon package:
 
-PNG exports are RGBA, rendered with 4× antialiasing, and use these exact colors:
+- `icon-192.png` and `icon-512.png` are Android/PWA launcher icons.
+- `icon-maskable-512.png` uses the same safe-margin 512 px artwork and is the
+  manifest's maskable icon.
+- `apple-touch-icon.png` is the 180 px Apple home-screen icon.
+- `../favicon.ico`, `../favicon-32x32.png` and `../favicon-16x16.png` are the
+  browser favicon variants.
 
-- field: `#fafaf9`
-- symbol: `#18181b`
-- accent: `#4664e6`
-
-Do not add baked-in platform corner masks to the maskable or Apple exports.
+Do not replace these with the former black-T placeholder or add another
+platform corner mask to the supplied artwork.

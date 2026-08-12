@@ -13,7 +13,14 @@ export default defineConfig({
       manifest: false,
       injectManifest: {
         globPatterns: ["**/*.{html,js,css,json,png,svg,woff2}"],
-        globIgnores: ["**/*.mp4", "**/*.webm", "**/*.m3u8", "icons/*-source.svg"],
+        globIgnores: [
+          "**/*.mp4",
+          "**/*.webm",
+          "**/*.m3u8",
+          "brand/**",
+          "favicon-16x16.png",
+          "icons/*-source.svg"
+        ],
         minify: false,
         rollupFormat: "iife",
         sourcemap: false

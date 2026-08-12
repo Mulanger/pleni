@@ -3914,3 +3914,36 @@ TypeScript compile. `git diff --check` passed.
 until the owner provides new instructions. If a device-specific defect is later
 reported, reproduce it and reopen a narrowly scoped UI follow-up rather than
 silently changing this completed acceptance record.
+
+## UI14 follow-up - Pleni favicon and install artwork - DONE 2026-08-12
+
+**Built:** replaced the former black-T placeholder with the owner-supplied Pleni
+artwork across the browser favicon, Apple touch icon, PWA 192 px icon, PWA 512 px
+icon and maskable icon. Stored the original 1254 px source at
+`web/public/brand/pleni-logo.png` for future download pages and app-store exports.
+Updated `web/index.html`, `web/vite.config.ts` and the icon asset notes.
+**Tests:** TypeScript, Vite production build and `verify-pwa-build.mjs` passed.
+The verified service worker remains at exactly 9 same-origin app-shell entries
+with no video/private data. `python tasks.py test lint typecheck` is green:
+379 passed, 68 deselected, one existing `audioop` warning; lint and strict typing
+clean.
+**Contracts touched:** none.
+
+**Decisions made:**
+- Used the supplied favicon package without redesigning the mark so its tested
+  small-size spacing is preserved.
+- Kept the supplied 512 px safe-margin image for both the normal and maskable PWA
+  declarations. Its opaque field reaches every edge and its mark remains within
+  the maskable safe area.
+- The full-resolution brand source and the redundant 16 px favicon are distributed
+  with the site but excluded from offline precaching; the 32 px favicon remains in
+  the established nine-entry shell.
+
+**Observations (not fixed, out of scope):** existing installed copies may retain a
+launcher icon briefly until Android refreshes the PWA metadata or the app is
+reinstalled. The stable manifest icon URLs are intentionally unchanged.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** the favicon and install artwork are released through
+`main`. Preserve `/manifest.json` and the existing stable icon URLs.
