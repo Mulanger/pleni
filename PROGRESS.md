@@ -3980,3 +3980,35 @@ may still require their own review prompt, delayed metadata refresh or reinstall
 
 **Next agent should know:** increment the icon filenames and update the manifest,
 Apple link, verifier and asset test together whenever install artwork changes.
+
+## UI14 follow-up - automatic pause and minimal update progress - DONE 2026-08-12
+
+**Built:** tapping `Uppdatera` now pauses all playing videos immediately, shows a
+minimal 2 px progress line for exactly two seconds, activates the already-downloaded
+waiting worker, restarts once and retains the existing five-second success notice.
+An unsent comment still blocks activation; playback pauses, and the flow resumes
+automatically after the draft is cleared. Updated the production PWA verifier to
+require the shipped copy and two-second progress treatment.
+**Tests:** TypeScript, Vite production build and `verify-pwa-build.mjs` green. The
+worker still precaches exactly 9 same-origin shell entries with no video/private
+data. `python tasks.py test lint typecheck` green: 379 passed, 68 deselected, one
+existing `audioop` warning; lint and strict typing clean.
+**Contracts touched:** none.
+
+**Decisions made:**
+- An explicit Update tap authorizes Pleni to pause playback; viewers no longer
+  need to pause the video themselves.
+- The two-second line is a deliberate transition, not byte-download progress. The
+  update prompt is only shown once the replacement worker has already installed.
+- Kept the existing small notice and one brand-blue line. Reduced-motion mode
+  removes the fill animation while preserving the same safe update timing.
+- Comment drafts remain the only normal deferral after Update is tapped.
+
+**Observations (not fixed, out of scope):** users controlled by the preceding
+worker will receive one more update prompt for this interaction release.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** preserve the automatic pause, comment-draft guard,
+two-second visual transition, controller-change wait and post-reload confirmation
+as one update lifecycle.

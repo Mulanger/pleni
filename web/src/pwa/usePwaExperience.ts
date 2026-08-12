@@ -8,7 +8,8 @@ import {
 import {
   hasUnsafeUpdateActivity,
   isAppleMobileSafari,
-  isStandaloneDisplayMode
+  isStandaloneDisplayMode,
+  pauseAllVideoPlayback
 } from "./platform";
 import type { DeferredInstallPromptEvent, InstallChoice } from "./platform";
 
@@ -17,11 +18,13 @@ export type PwaUpdatePhase =
   | "hidden"
   | "available"
   | "deferred"
+  | "preparing"
   | "activating"
   | "completed";
 
 const UPDATE_COMPLETED_SESSION_KEY = "riket.pwa.update-completed.v1";
 const UPDATE_COMPLETED_NOTICE_MS = 5000;
+const UPDATE_VISUAL_DELAY_MS = 2000;
 
 function rememberCompletedUpdate(): void {
   try {
@@ -83,6 +86,8 @@ export function usePwaExperience(networkRequestFailed: boolean): PwaExperience {
   const activationSent = useRef(false);
   const controllerReady = useRef(false);
   const reloadStarted = useRef(false);
+  const visualDelayStarted = useRef(false);
+  const visualDelayTimer = useRef<number | null>(null);
 
   useEffect(() => {
     const displayMode = window.matchMedia("(display-mode: standalone)");
@@ -145,9 +150,33 @@ export function usePwaExperience(networkRequestFailed: boolean): PwaExperience {
     if (!activateWaitingServiceWorker()) {
       activationSent.current = false;
       activationRequested.current = false;
+      visualDelayStarted.current = false;
       setUpdatePhase("hidden");
     }
   }, []);
+
+  const beginVisualUpdate = useCallback(() => {
+    if (visualDelayStarted.current || activationSent.current) {
+      return;
+    }
+
+    visualDelayStarted.current = true;
+    pauseAllVideoPlayback();
+    setUpdatePhase("preparing");
+    visualDelayTimer.current = window.setTimeout(() => {
+      visualDelayTimer.current = null;
+      sendActivation();
+    }, UPDATE_VISUAL_DELAY_MS);
+  }, [sendActivation]);
+
+  useEffect(
+    () => () => {
+      if (visualDelayTimer.current !== null) {
+        window.clearTimeout(visualDelayTimer.current);
+      }
+    },
+    []
+  );
 
   const reloadWhenSafe = useCallback(() => {
     if (reloadStarted.current || hasUnsafeUpdateActivity()) {
@@ -208,7 +237,7 @@ export function usePwaExperience(networkRequestFailed: boolean): PwaExperience {
         reloadWhenSafe();
         return;
       }
-      sendActivation();
+      beginVisualUpdate();
     };
     const timer = window.setInterval(continueWhenSafe, 400);
     document.addEventListener("pause", continueWhenSafe, true);
@@ -221,7 +250,7 @@ export function usePwaExperience(networkRequestFailed: boolean): PwaExperience {
       document.removeEventListener("input", continueWhenSafe, true);
       window.removeEventListener("hashchange", continueWhenSafe);
     };
-  }, [reloadWhenSafe, sendActivation, updatePhase]);
+  }, [beginVisualUpdate, reloadWhenSafe, updatePhase]);
 
   const installKind = useMemo<PwaInstallKind | null>(() => {
     if (standalone || installedThisSession || installDismissed) {
@@ -283,11 +312,12 @@ export function usePwaExperience(networkRequestFailed: boolean): PwaExperience {
     updatePhase,
     requestUpdate: () => {
       activationRequested.current = true;
+      pauseAllVideoPlayback();
       if (hasUnsafeUpdateActivity()) {
         setUpdatePhase("deferred");
         return;
       }
-      sendActivation();
+      beginVisualUpdate();
     },
     dismissUpdate: () => {
       updateDismissed.current = true;

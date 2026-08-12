@@ -27,6 +27,10 @@ export function isAppleMobileSafari(): boolean {
   );
 }
 
+export function pauseAllVideoPlayback(): void {
+  document.querySelectorAll<HTMLVideoElement>("video").forEach((video) => video.pause());
+}
+
 export function hasUnsafeUpdateActivity(): boolean {
   const playingVideo = [...document.querySelectorAll("video")].some(
     (video) => !video.paused && !video.ended

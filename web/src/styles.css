@@ -1102,6 +1102,7 @@ a {
 }
 
 .pwa-notice {
+  position: relative;
   display: flex;
   min-height: 54px;
   align-items: center;
@@ -1114,8 +1115,37 @@ a {
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  overflow: hidden;
   pointer-events: auto;
   animation: pwa-notice-in 160ms ease-out both;
+}
+
+.pwa-update-progress {
+  position: absolute;
+  right: 12px;
+  bottom: 3px;
+  left: 12px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(55, 91, 152, 0.14);
+  pointer-events: none;
+}
+
+.pwa-update-progress span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: #375b98;
+  transform: scaleX(0);
+  transform-origin: left;
+  animation: pwa-update-fill 2s linear forwards;
+}
+
+.pwa-update-progress.is-complete span {
+  animation: none;
+  transform: scaleX(1);
 }
 
 .pwa-notice-icon {
@@ -1233,6 +1263,12 @@ a {
 @keyframes pwa-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes pwa-update-fill {
+  to {
+    transform: scaleX(1);
   }
 }
 
@@ -3142,8 +3178,13 @@ a {
   .onboarding-card,
   .onboarding-pane,
   .pwa-notice,
-  .pwa-spinner {
+  .pwa-spinner,
+  .pwa-update-progress span {
     animation: none;
+  }
+
+  .pwa-update-progress span {
+    transform: scaleX(1);
   }
 
   button {

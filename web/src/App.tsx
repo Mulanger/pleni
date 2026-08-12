@@ -816,15 +816,17 @@ function PwaStatusStack({ pwa }: { pwa: PwaExperience }) {
     pwa.updatePhase === "deferred"
       ? {
           title: "Uppdateringen väntar",
-          detail: "Pleni startas om när videon är pausad och kommentaren är klar."
+          detail: "Slutför eller rensa kommentaren för att fortsätta."
         }
-      : pwa.updatePhase === "activating"
-        ? { title: "Pleni startas om", detail: "Den nya versionen öppnas strax." }
+      : pwa.updatePhase === "preparing" || pwa.updatePhase === "activating"
+        ? { title: "Pleni uppdateras", detail: "Videon är pausad. Appen startas om strax." }
         : pwa.updatePhase === "completed"
           ? { title: "Pleni är uppdaterad", detail: "Du använder nu den senaste versionen." }
           : { title: "Ny version klar", detail: "Uppdatera när det passar." };
 
   const UpdateIcon = pwa.updatePhase === "completed" ? CheckCircle2 : RefreshCw;
+  const updateInProgress =
+    pwa.updatePhase === "preparing" || pwa.updatePhase === "activating";
 
   return (
     <div className="pwa-status-stack">
@@ -839,6 +841,16 @@ function PwaStatusStack({ pwa }: { pwa: PwaExperience }) {
             size={18}
             aria-hidden="true"
           />
+          {updateInProgress && (
+            <span
+              className={`pwa-update-progress${
+                pwa.updatePhase === "activating" ? " is-complete" : ""
+              }`}
+              aria-hidden="true"
+            >
+              <span />
+            </span>
+          )}
           <div className="pwa-notice-copy" role="status" aria-atomic="true">
             <strong>{updateCopy.title}</strong>
             <span>{updateCopy.detail}</span>

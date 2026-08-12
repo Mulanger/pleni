@@ -134,12 +134,23 @@ if (!appJavaScript.includes("serviceWorker") || !appJavaScript.includes("sw.js")
 }
 for (const fragment of [
   "riket.pwa.update-completed.v1",
-  "Pleni startas om",
+  "Videon är pausad. Appen startas om strax.",
   "Pleni är uppdaterad"
 ]) {
   if (!appJavaScript.includes(fragment)) {
     fail(`production application bundle is missing update lifecycle copy: ${fragment}`);
   }
+}
+const appStyles = filesBelow(join(distRoot, "assets"))
+  .filter((path) => path.endsWith(".css"))
+  .map((path) => readFileSync(path, "utf8"))
+  .join("\n");
+if (
+  !appStyles.includes("pwa-update-progress") ||
+  !appStyles.includes("@keyframes pwa-update-fill") ||
+  !/animation:[^;}]*2s linear[^;}]*pwa-update-fill/.test(appStyles)
+) {
+  fail("production styles are missing the minimal two-second update progress bar");
 }
 
 function requestUrl(request) {
