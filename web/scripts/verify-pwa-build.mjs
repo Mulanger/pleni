@@ -38,6 +38,20 @@ if (manifest.display !== "standalone") {
 if (!indexHtml.includes('rel="manifest"') || !indexHtml.includes("/manifest.json")) {
   fail("production index does not link the manifest");
 }
+const expectedInstallIcons = [
+  "/icons/pleni-icon-192-20260812.png",
+  "/icons/pleni-icon-512-20260812.png",
+  "/icons/pleni-icon-maskable-512-20260812.png"
+];
+const manifestIconUrls = manifest.icons?.map((icon) => icon.src) ?? [];
+for (const iconUrl of expectedInstallIcons) {
+  if (!manifestIconUrls.includes(iconUrl)) {
+    fail(`manifest is missing versioned install icon: ${iconUrl}`);
+  }
+}
+if (!indexHtml.includes("/icons/pleni-apple-touch-icon-20260812.png")) {
+  fail("production index does not link the versioned Apple touch icon");
+}
 if (serviceWorkerSource.includes("self.__WB_MANIFEST")) {
   fail("service worker still contains an uninjected precache placeholder");
 }
@@ -84,6 +98,17 @@ const precacheEntries = JSON.parse(precacheMatch[1]);
 const precacheUrls = precacheEntries.map((entry) =>
   typeof entry === "string" ? entry : entry.url
 );
+const precachePaths = precacheUrls.map(
+  (url) => new URL(url, "https://pleni.test/").pathname
+);
+for (const iconUrl of [
+  ...expectedInstallIcons,
+  "/icons/pleni-apple-touch-icon-20260812.png"
+]) {
+  if (!precachePaths.includes(iconUrl)) {
+    fail(`versioned install icon is absent from precache: ${iconUrl}`);
+  }
+}
 const forbiddenPrecache =
   /(?:\.(?:mp4|webm|m3u8)(?:$|[?#])|b-cdn|supabase|clerk)/i;
 const forbiddenUrl = precacheUrls.find((url) => forbiddenPrecache.test(url));
@@ -106,6 +131,15 @@ const appJavaScript = filesBelow(join(distRoot, "assets"))
   .join("\n");
 if (!appJavaScript.includes("serviceWorker") || !appJavaScript.includes("sw.js")) {
   fail("production application bundle does not contain explicit worker registration");
+}
+for (const fragment of [
+  "riket.pwa.update-completed.v1",
+  "Pleni startas om",
+  "Pleni är uppdaterad"
+]) {
+  if (!appJavaScript.includes(fragment)) {
+    fail(`production application bundle is missing update lifecycle copy: ${fragment}`);
+  }
 }
 
 function requestUrl(request) {

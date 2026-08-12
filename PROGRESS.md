@@ -3947,3 +3947,36 @@ reinstalled. The stable manifest icon URLs are intentionally unchanged.
 
 **Next agent should know:** the favicon and install artwork are released through
 `main`. Preserve `/manifest.json` and the existing stable icon URLs.
+
+## UI14 follow-up - installed-icon refresh and clear update restart - DONE 2026-08-12
+
+**Built:** versioned Android/PWA, maskable and Apple icon filenames and updated
+their manifest/HTML declarations; retained the stable Pleni app id, start URL and
+manifest location. The deferred update notice now explicitly says Pleni will
+restart, and a successful controller takeover leaves a session-scoped marker so
+the reloaded app confirms completion for five seconds. Extended the PWA build
+verifier and `tests/unit/test_pwa_assets.py` to enforce the versioned icon contract
+and shipped update copy.
+**Tests:** TypeScript, Vite production build and `verify-pwa-build.mjs` green. The
+worker still precaches exactly 9 same-origin shell entries with no video/private
+data. `python tasks.py test lint typecheck` green: 379 passed, 68 deselected, one
+existing `audioop` warning; lint and strict typing clean.
+**Contracts touched:** none.
+
+**Decisions made:**
+- Icon content changes must use new filenames. Chrome 144+ treats an unchanged
+  manifest icon URL as unchanged artwork, even if the bytes at that URL changed.
+- The existing service-worker safety boundary remains: activation waits for video
+  playback and comment drafts, then reloads only after controller takeover.
+- The frontend skill kept the existing quiet status surface. Copy now explains
+  the restart and confirms completion instead of adding a larger modal or new
+  animation.
+
+**Observations (not fixed, out of scope):** the new icon URL lets supporting
+Android WebAPK browsers detect the metadata change, but some browsers/platforms
+may still require their own review prompt, delayed metadata refresh or reinstall.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** increment the icon filenames and update the manifest,
+Apple link, verifier and asset test together whenever install artwork changes.

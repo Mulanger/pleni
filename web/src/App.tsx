@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import {
   ArrowUpRight,
   Bookmark,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock3,
@@ -815,17 +816,21 @@ function PwaStatusStack({ pwa }: { pwa: PwaExperience }) {
     pwa.updatePhase === "deferred"
       ? {
           title: "Uppdateringen väntar",
-          detail: "Pleni fortsätter när videon är pausad och kommentaren är klar."
+          detail: "Pleni startas om när videon är pausad och kommentaren är klar."
         }
       : pwa.updatePhase === "activating"
-        ? { title: "Pleni uppdateras", detail: "Ett ögonblick…" }
-        : { title: "Ny version klar", detail: "Uppdatera när det passar." };
+        ? { title: "Pleni startas om", detail: "Den nya versionen öppnas strax." }
+        : pwa.updatePhase === "completed"
+          ? { title: "Pleni är uppdaterad", detail: "Du använder nu den senaste versionen." }
+          : { title: "Ny version klar", detail: "Uppdatera när det passar." };
+
+  const UpdateIcon = pwa.updatePhase === "completed" ? CheckCircle2 : RefreshCw;
 
   return (
     <div className="pwa-status-stack">
       {pwa.updatePhase !== "hidden" && (
         <div className="pwa-notice">
-          <RefreshCw
+          <UpdateIcon
             className={
               pwa.updatePhase === "activating"
                 ? "pwa-notice-icon pwa-spinner"

@@ -13,7 +13,33 @@ import {
 import type { DeferredInstallPromptEvent, InstallChoice } from "./platform";
 
 export type PwaInstallKind = "chromium" | "ios";
-export type PwaUpdatePhase = "hidden" | "available" | "deferred" | "activating";
+export type PwaUpdatePhase =
+  | "hidden"
+  | "available"
+  | "deferred"
+  | "activating"
+  | "completed";
+
+const UPDATE_COMPLETED_SESSION_KEY = "riket.pwa.update-completed.v1";
+const UPDATE_COMPLETED_NOTICE_MS = 5000;
+
+function rememberCompletedUpdate(): void {
+  try {
+    window.sessionStorage.setItem(UPDATE_COMPLETED_SESSION_KEY, "1");
+  } catch {
+    // A storage-denied browser may skip confirmation, but must still update.
+  }
+}
+
+function takeCompletedUpdate(): boolean {
+  try {
+    const completed = window.sessionStorage.getItem(UPDATE_COMPLETED_SESSION_KEY) === "1";
+    window.sessionStorage.removeItem(UPDATE_COMPLETED_SESSION_KEY);
+    return completed;
+  } catch {
+    return false;
+  }
+}
 
 export type PwaExperience = {
   standalone: boolean;
@@ -129,7 +155,20 @@ export function usePwaExperience(networkRequestFailed: boolean): PwaExperience {
       return;
     }
     reloadStarted.current = true;
+    rememberCompletedUpdate();
     window.location.reload();
+  }, []);
+
+  useEffect(() => {
+    if (!takeCompletedUpdate()) {
+      return;
+    }
+
+    setUpdatePhase("completed");
+    const timer = window.setTimeout(() => {
+      setUpdatePhase((current) => (current === "completed" ? "hidden" : current));
+    }, UPDATE_COMPLETED_NOTICE_MS);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
