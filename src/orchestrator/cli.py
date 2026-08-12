@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import argparse
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -565,12 +565,25 @@ def _run_daemon(
                 # discovery.
                 logger.error("discovery_failed", error=str(error))
 
-        worked = any(worker.run_once().claimed for worker in workers)
+        worked = _poll_workers_once(workers)
         if not worked:
             # Nothing to do. Sleep briefly rather than spinning, but stay well
             # under the discovery interval so new work is picked up promptly.
             time.sleep(IDLE_POLL_S)
             queue.reap_expired_leases()
+
+
+def _poll_workers_once(workers: Sequence[Worker]) -> bool:
+    """Poll every configured pool once, even when an earlier pool found work.
+
+    Using ``any`` directly over the worker calls short-circuits after the first
+    claim. A sustained IO backlog can then prevent the CPU and GPU pools from
+    being polled at all, so maintenance work must not reintroduce that
+    starvation path.
+    """
+
+    results = [worker.run_once() for worker in workers]
+    return any(result.claimed for result in results)
 
 
 def _describe(result: WorkerResult) -> str:

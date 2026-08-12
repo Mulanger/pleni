@@ -417,9 +417,16 @@ The invariant is that a `clips` row never points at a missing object.
 
 ## Politician portrait mirror
 
-The public app should load politician portraits from Pleni's Bunny CDN, not
-from Riksdagen at request time. Profile enrichment and portrait mirroring stay
+The public app loads politician portraits from Pleni's Bunny CDN, not from
+Riksdagen at request time. Profile enrichment and portrait mirroring stay
 outside C1–C11 so a biography or image outage cannot block clip publication.
+
+Migration 017 enqueues one low-priority `portrait_sync` IO job whenever C11
+creates an unsynchronised politician. The job is visible only after C11's
+transaction commits, runs independently of the debate chain and retries through
+the normal queue. A failed portrait therefore cannot roll back published clips.
+The migration also queues any unsynchronised rows that already exist when it is
+applied.
 
 After applying migrations, refresh all known politician metadata and portraits:
 
@@ -434,13 +441,25 @@ Bunny verification, and only then changes `public.politicians.avatar_url`.
 `avatar_source_url` remains the official Riksdagen location and the UI credit
 remains `Foto: Sveriges riksdag`.
 
-The command is safe to repeat. An unchanged hash reuses the existing CDN URL.
-If Riksdagen or Bunny fails, the sync updates the other public profile fields
-but retains the last verified portrait; it exits with status 2 so the failure
-is visible. A politician for whom Riksdagen publishes no JPEG correctly keeps
-the initials fallback. `avatar_source_url` remains available for a later retry,
-but `avatar_url` must be null in that case: exposing a known-broken Riksdagen
-URL only creates a failed browser request and does not count as a mirror.
+The command is safe to repeat and remains the periodic whole-catalogue refresh.
+An unchanged hash reuses the existing CDN object only after its public URL is
+verified again. If Riksdagen or Bunny fails, the batch updates the other public
+profile fields but retains the last verified portrait; it exits with status 2 so
+the failure is visible. Riksdagen's explicit `HarBild=false` and an official
+portrait 404 are expected no-photo outcomes, not sync failures: the politician
+keeps the initials fallback and the job completes. `avatar_source_url` remains
+available for a later refresh, but `avatar_url` must be null when no verified
+mirror exists.
+
+To inspect automatic portrait work:
+
+```sql
+select state, count(*)
+from public.jobs
+where kind = 'portrait_sync'
+group by state
+order by state;
+```
 
 The frontend retries a failed Bunny request twice with cache-busting query
 parameters. If the mobile connection is still unavailable, the party-coloured

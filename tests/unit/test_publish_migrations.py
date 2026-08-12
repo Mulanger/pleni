@@ -135,3 +135,41 @@ def test_verified_portrait_migration_never_publishes_an_unmirrored_source() -> N
         "revoke all on function public.set_politician_avatar_url() from public, anon, authenticated"
         in sql
     )
+
+
+def test_portrait_job_migration_enqueues_new_and_existing_unsynced_profiles() -> None:
+    path = MIGRATIONS_DIR / "017_politician_portrait_jobs.up.sql"
+    sql = path.read_text(encoding="utf-8").lower()
+
+    assert "after insert on public.politicians" in sql
+    assert "new.avatar_sha256 is null" in sql
+    assert "insert into public.jobs" in sql
+    assert "from public.politicians" in sql
+    assert "avatar_sha256 is null" in sql
+    assert "'portrait_sync'" in sql
+    assert "portrait_sync:%s:v1" in sql
+    assert "'io'" in sql
+    assert "-100" in sql
+    assert "on conflict (idempotency_key) do nothing" in sql
+
+
+def test_portrait_job_trigger_is_private_and_does_no_network_work() -> None:
+    path = MIGRATIONS_DIR / "017_politician_portrait_jobs.up.sql"
+    sql = path.read_text(encoding="utf-8").lower()
+
+    assert (
+        "revoke all on function public.enqueue_politician_portrait_sync() "
+        "from public, anon, authenticated"
+    ) in sql
+    assert "http://" not in sql
+    assert "https://" not in sql
+
+
+def test_portrait_job_down_migration_removes_queue_wiring_and_jobs() -> None:
+    path = MIGRATIONS_DIR / "017_politician_portrait_jobs.down.sql"
+    sql = path.read_text(encoding="utf-8").lower()
+
+    assert "drop trigger if exists politicians_enqueue_portrait_sync" in sql
+    assert "drop function if exists public.enqueue_politician_portrait_sync()" in sql
+    assert "delete from public.jobs" in sql
+    assert "kind = 'portrait_sync'" in sql
