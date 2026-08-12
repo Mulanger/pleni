@@ -73,10 +73,17 @@ def test_upload_file_puts_then_verifies_with_head(tmp_path: Path) -> None:
     assert transport.requests[1].body == b"video"
 
 
-def test_upload_file_skips_existing_object_with_same_size(tmp_path: Path) -> None:
+def test_upload_file_reuses_existing_object_only_after_public_verification(
+    tmp_path: Path,
+) -> None:
     local_file = tmp_path / "clip.mp4"
     local_file.write_bytes(b"video")
-    transport = FakeTransport([HttpResponse(206, {"Content-Range": "bytes 0-0/5"}, b"v")])
+    transport = FakeTransport(
+        [
+            HttpResponse(206, {"Content-Range": "bytes 0-0/5"}, b"v"),
+            HttpResponse(200, {"Content-Length": "5"}, b""),
+        ]
+    )
     client = BunnyStorageClient(
         storage_zone_name="zone",
         access_key="storage-password",
@@ -89,7 +96,29 @@ def test_upload_file_skips_existing_object_with_same_size(tmp_path: Path) -> Non
     uploaded = client.upload_file(local_file, "clips/clip.mp4", content_type="video/mp4")
 
     assert uploaded.public_url == "https://cdn.example/clips/clip.mp4"
-    assert [request.method for request in transport.requests] == ["GET"]
+    assert [request.method for request in transport.requests] == ["GET", "HEAD"]
+
+
+def test_upload_file_rejects_existing_object_missing_from_public_cdn(tmp_path: Path) -> None:
+    local_file = tmp_path / "portrait.jpg"
+    local_file.write_bytes(b"image")
+    transport = FakeTransport(
+        [
+            HttpResponse(206, {"Content-Range": "bytes 0-0/5"}, b"i"),
+            HttpResponse(404, {}, b""),
+        ]
+    )
+    client = BunnyStorageClient(
+        storage_zone_name="zone",
+        access_key="storage-password",
+        cdn_base_url="https://cdn.example",
+        storage_hostname="storage.example",
+        transport=transport,
+        max_retries=0,
+    )
+
+    with pytest.raises(ExternalServiceError, match="not available from the public CDN"):
+        client.upload_file(local_file, "portraits/person/hash.jpg", content_type="image/jpeg")
 
 
 def test_upload_file_refuses_to_overwrite_different_size(tmp_path: Path) -> None:

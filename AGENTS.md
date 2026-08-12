@@ -204,6 +204,13 @@ Last updated: 2026-08-11.
 - Bunny sends no `Timing-Allow-Origin`, so `transferSize` is 0 for every CDN
   resource — request counts and timings are measurable from the page, byte totals
   are not.
+- Politician portraits are public only after a content-addressed Bunny object has
+  verified; `avatar_source_url` is provenance and never a frontend fallback.
+  Migration 017 enqueues a low-priority standalone `portrait_sync` IO job for each
+  newly published, unsynchronised politician so catalogue backfills cannot leave
+  later app pages on initials. Riksdagen's explicit no-photo records correctly
+  remain initials and complete without dead-lettering. The full profile-sync
+  script remains the periodic metadata/portrait refresh.
 - The frontend data layer is `web/src/supabase.ts`; do not bypass it with hardcoded Bunny URLs except for the fallback sample data.
 - In this Codex desktop environment, `npm run ...` scripts have previously failed due a local Bun remap issue. Prefer direct Node commands:
   - Typecheck: `node .\node_modules\typescript\bin\tsc --noEmit -p tsconfig.json`

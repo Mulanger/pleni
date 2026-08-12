@@ -220,11 +220,27 @@ STAGE_GRAPH: tuple[StageJob, ...] = (
     ),
 )
 
-STAGE_BY_KIND: Mapping[str, StageJob] = {stage.kind: stage for stage in STAGE_GRAPH}
+#: Terminal jobs that share the worker machinery but are not part of the debate
+#: pipeline. Keeping these out of ``STAGE_GRAPH`` is significant: completing
+#: one must not start ``discover`` or otherwise enter the numbered stage chain.
+STANDALONE_JOBS: tuple[StageJob, ...] = (
+    StageJob(
+        kind="portrait_sync",
+        module="src.riksdagen.profile_sync",
+        function="sync_politician_profile",
+        pool="io",
+        lease_s=600,
+        description="Refresh one politician profile and mirror its portrait",
+    ),
+)
+
+STAGE_BY_KIND: Mapping[str, StageJob] = {
+    stage.kind: stage for stage in (*STAGE_GRAPH, *STANDALONE_JOBS)
+}
 
 #: Longest lease of any stage. The reaper uses this so it never reclaims a job
 #: from a worker that is simply slow.
-MAX_LEASE_S = max(stage.lease_s for stage in STAGE_GRAPH)
+MAX_LEASE_S = max(stage.lease_s for stage in STAGE_BY_KIND.values())
 
 
 def first_stage() -> StageJob:
@@ -247,6 +263,8 @@ def next_stage(kind: str) -> StageJob | None:
     """The stage that runs after `kind`, or None at the end of the chain."""
 
     stage = stage_for(kind)
+    if stage in STANDALONE_JOBS:
+        return None
     index = STAGE_GRAPH.index(stage)
     if index + 1 >= len(STAGE_GRAPH):
         return None

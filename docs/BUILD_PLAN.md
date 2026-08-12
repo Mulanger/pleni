@@ -1083,6 +1083,49 @@ acceptance command are green.
 
 ---
 
+### UI13 follow-up — automatic portrait convergence
+
+**Depends on:** UI13 and C12. **Size:** medium.
+
+**Objective.** Ensure every newly published politician receives a verified
+Pleni-hosted portrait without relying on an operator to remember a catalogue-wide
+sync after each backfill.
+
+**Scope — may create or modify:**
+
+```
+migrations/017_politician_portrait_jobs.{up,down}.sql
+src/riksdagen/profile_sync.py
+src/riksdagen/portraits.py
+src/publish/bunny.py
+src/orchestrator/{jobs,cli}.py
+scripts/sync_politician_profiles.py
+tests/unit/test_{profile_sync,publish_bunny,publish_migrations,orchestrator_daemon,orchestrator_fanout}.py
+docs/{BUILD_PLAN,RUNBOOK}.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** `src/contracts.py`, clip selection, vision, camera,
+rendering, feed layout, service-worker routing, private user data or prior
+migration files.
+
+**Build.** Enqueue one low-priority, independently retryable IO maintenance job
+when an unsynchronised politician row is inserted. The job fetches only that
+person, treats Riksdagen's explicit no-photo state as an honest initials fallback,
+mirrors available JPEG bytes to the existing content-addressed Bunny path and
+updates Supabase only after public-CDN verification. Keep the full operator sync
+for periodic metadata/portrait refreshes. A portrait outage must not roll back or
+block clip publication.
+
+**Acceptance:** existing unsynchronised production politicians converge; every
+non-null avatar has a matching hash path and returns a JPEG from Bunny; explicit
+official no-photo records remain null without dead-lettering; a new politician
+insert enqueues exactly one terminal portrait job; IO maintenance cannot starve
+the other daemon pools; focused tests and the full project acceptance command are
+green.
+
+---
+
 ## UI14 — Mobile app UX and PWA
 
 **Depends on:** UI5, UI6, UI9 and UI10. **Size:** large, split into UI14.0–UI14.6.

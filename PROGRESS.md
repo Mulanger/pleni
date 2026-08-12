@@ -4232,3 +4232,62 @@ Wi-Fi.
 **Next agent should know:** `web/src/feed/media-policy.ts` is the source of truth
 for window and connection policy. Keep its Node tests and the explicit release
 lifecycle when changing feed media behavior.
+
+## UI13 follow-up — automatic portrait convergence — DONE 2026-08-12
+
+**Built:** added one independently retryable `portrait_sync` IO job per newly
+published politician, transactionally enqueued by
+`migrations/017_politician_portrait_jobs`; extracted the reusable targeted sync
+into `src/riksdagen/profile_sync.py`; kept the catalogue-wide operator script as
+the periodic refresh; required Bunny's public CDN to verify an already-existing
+object before it can be reused; fixed the single-process daemon so a busy first
+pool cannot prevent the other pools from being polled. Updated the runbook, build
+plan and focused portrait/queue/CDN tests.
+**Tests:** focused portrait, migration, queue and Bunny tests green; direct
+frontend TypeScript, production Vite build and PWA verification green with 9
+same-origin shell entries and no video/private caching; `python tasks.py test
+lint typecheck` green: 397 passed, 68 deselected, one existing `audioop` warning;
+lint and strict typing clean on 82 source files; `git diff --check` green.
+**Contracts touched:** none.
+
+**Root cause confirmed:** the 208 portraits mirrored on 2026-08-09 were healthy,
+but portrait sync remained a manual whole-catalogue command. Later C11 publishes
+added 36 politicians without running it. This left 46 of 738 live clips and 9 of
+the current top 60 on initials even though every affected official JPEG existed.
+All five frontend politician surfaces already used the same avatar component;
+the service worker, Bunny CORS/cache headers and retry URLs were not the fault.
+
+**Production result:**
+- Target-synced all 36 missing rows. Every one downloaded as a valid official
+  JPEG, uploaded to its immutable `portraits/<intressent_id>/<sha256>.jpg` path
+  and became public only after Bunny verification.
+- Production now has 246 politician rows: 244 verified Bunny portraits, zero
+  unsynchronised profiles, zero external Riksdagen avatar URLs and two honest
+  initials fallbacks. Johan Britz and Benjamin Dousa explicitly publish
+  `HarBild=false`; their absent photos are expected and do not fail a job.
+- Downloaded all 244 public portraits after the repair. Every response was HTTP
+  200 `image/jpeg`, every JPEG envelope was valid and every downloaded SHA-256
+  matched both Supabase and the content-addressed URL.
+- Zero published clips now belong to a politician without an available portrait;
+  the top-60 missing count is also zero. Both migration-backfill maintenance jobs
+  completed, no portrait jobs remain queued/running/dead, and the production
+  trigger is enabled.
+
+**Decisions made:**
+- Portrait work remains outside the numbered video chain and runs at priority
+  -100 in the IO pool. A Riksdagen/Bunny outage retries only that politician and
+  cannot roll back or block clip publication.
+- Explicit `HarBild=false` or an official portrait 404 is a successful no-photo
+  outcome. It refreshes profile metadata, retains a prior verified mirror if one
+  exists, otherwise leaves the deterministic initials fallback.
+- An unchanged hash still goes through the Bunny uploader's public verification
+  path; matching database state alone is not proof that the CDN can serve it.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** migration 017 is applied to production. New C11
+politician inserts enqueue `portrait_sync:<intressent_id>:v1` automatically. Keep
+that job standalone and low priority; use `scripts/sync_politician_profiles.py`
+for occasional whole-catalogue metadata and changed-photo refreshes.

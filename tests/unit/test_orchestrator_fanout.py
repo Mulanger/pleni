@@ -15,6 +15,7 @@ import pytest
 from src.errors import ConfigurationError
 from src.orchestrator.jobs import (
     STAGE_BY_KIND,
+    STAGE_GRAPH,
     advance_after,
     fan_out,
     idempotency_key,
@@ -89,6 +90,30 @@ def test_render_clip_runs_before_publish() -> None:
     assert next_stage("render").kind == "render_clip"
     assert next_stage("render_clip").kind == "publish"
     assert next_stage("publish") is None
+
+
+def test_portrait_sync_is_a_terminal_standalone_io_job() -> None:
+    portrait_sync = stage_for("portrait_sync")
+
+    assert portrait_sync not in STAGE_GRAPH
+    assert portrait_sync.pool == "io"
+    assert portrait_sync.module == "src.riksdagen.profile_sync"
+    assert portrait_sync.function == "sync_politician_profile"
+    assert next_stage("portrait_sync") is None
+
+
+def test_completing_portrait_sync_never_enters_the_debate_chain() -> None:
+    enqueuer = RecordingEnqueuer()
+
+    successor = _advance(
+        enqueuer,
+        Counter(outstanding=0),
+        kind="portrait_sync",
+        entity_id="0123456789",
+    )
+
+    assert successor is None
+    assert enqueuer.calls == []
 
 
 # -- fan-out -------------------------------------------------------------

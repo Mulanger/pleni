@@ -132,6 +132,12 @@ class BunnyStorageClient:
         existing_size = self.storage_file_size(normalized_path)
         if existing_size is not None:
             if existing_size == expected_size:
+                verified_size = self.verified_public_file_size(normalized_path)
+                if verified_size != expected_size:
+                    raise ExternalServiceError(
+                        "Existing Bunny object was not available from the public CDN: "
+                        f"{normalized_path}: expected {expected_size} bytes, got {verified_size}"
+                    )
                 return BunnyUploadedObject(
                     remote_path=normalized_path,
                     public_url=self.public_url(normalized_path),
