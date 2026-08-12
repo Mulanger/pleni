@@ -4121,3 +4121,42 @@ video/private data; `python tasks.py test lint typecheck` green: 379 passed,
 **Next agent should know:** keep search terms session-only unless a separate privacy
 decision authorizes persistence. Preserve factual count handling and the existing
 bounded media behavior when changing the party/person clip grids.
+
+## UI14 follow-up - edge-to-edge Pleni favicon artwork - DONE 2026-08-12
+
+**Built:** recreated the Pleni icon master with the deep blue field reaching all
+four canvas edges and the white P centred without the former outer white padding;
+published versioned 16/32/ICO browser favicons plus 180/192/512/maskable installed
+icons; updated the HTML, manifest, PWA verifier and icon documentation; added a
+pixel-level regression test for blue corners and a white central mark.
+**Tests:** focused icon tests green (5 passed); direct TypeScript, Vite production
+build and `verify-pwa-build.mjs` green with exactly 9 app-shell entries and no
+video/private data; `python tasks.py test lint typecheck` green: 380 passed,
+68 deselected, one existing `audioop` warning; lint and strict typing clean.
+**Contracts touched:** none.
+
+**Decisions made:**
+- Used the built-in image editing flow against `web/public/brand/pleni-logo.png`.
+  Final prompt: remove the white outer canvas, extend Pleni blue to every edge,
+  preserve the distinctive centred white P, and add no border, shadow or text.
+- Stored the project master at
+  `web/public/brand/pleni-logo-edge-20260812.png`; all runtime sizes are mechanical
+  derivatives from that one square source.
+- Changed every runtime icon URL to release `20260812b`. Stable icon URLs can keep
+  stale artwork in browser/WebAPK metadata caches even when their bytes change.
+- Removed the superseded unversioned favicons and `20260812` launcher exports after
+  verifying that no source reference still consumes them. They remain recoverable
+  from Git history.
+- The maskable icon uses the same edge-to-edge blue field; the P itself remains
+  inside the platform safe zone, so Android may apply its own shape without exposing
+  a white ring.
+
+**Observations (not fixed, out of scope):** installed platforms may still wait for
+their normal metadata-review cycle; the new URLs make the artwork change detectable
+but cannot force an immediate launcher refresh.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** derive future favicon and launcher exports from the
+edge-to-edge master, increment the release filename, and update HTML, manifest,
+verifier and tests together. The corner-pixel regression is load-bearing.
