@@ -283,6 +283,8 @@ function App() {
   const [feedError, setFeedError] = useState<string | null>(null);
   const [feedNetworkFailed, setFeedNetworkFailed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+  const manualRefreshRef = useRef(false);
   const [feedReloadKey, setFeedReloadKey] = useState(0);
   const pwa = usePwaExperience(feedNetworkFailed);
   const selectedPersonId =
@@ -664,6 +666,8 @@ function App() {
 
   const refreshFeed = () => {
     if (loading) return;
+    manualRefreshRef.current = true;
+    setManualRefreshing(true);
     setLoading(true);
     setFeedReloadKey((current) => current + 1);
   };
@@ -735,7 +739,12 @@ function App() {
       recommendationProfile.personalization;
     setLoading(true);
     setFeedError(null);
-    setClips([]);
+    // Pull/Home refresh keeps the current frame in place until its replacement
+    // is ready. Mode and preference changes still clear immediately so content
+    // from the previous context is never presented as the new feed.
+    if (!manualRefreshRef.current) {
+      setClips([]);
+    }
     void (async () => {
       try {
         if (personalized) {
@@ -778,7 +787,13 @@ function App() {
         setFeedNetworkFailed(true);
       })
       .finally(() => {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          if (manualRefreshRef.current) {
+            manualRefreshRef.current = false;
+            setManualRefreshing(false);
+          }
+        }
       });
     return () => {
       mounted = false;
@@ -1147,6 +1162,7 @@ function App() {
                 clipSource={clipSource}
                 feedError={feedError}
                 onRefresh={refreshFeed}
+                refreshing={manualRefreshing}
                 onLike={toggleLikeClip}
                 onSave={toggleSaveClip}
                 onToggleFollow={toggleFollowPolitician}
@@ -1227,7 +1243,12 @@ function App() {
             )}
             <BottomNav
               active={tab}
-              onChange={(nextTab) => navigate({ view: "tab", tab: nextTab, feedMode })}
+              onChange={(nextTab) => {
+                if (nextTab === "hem") {
+                  refreshFeed();
+                }
+                navigate({ view: "tab", tab: nextTab, feedMode });
+              }}
             />
           </>
         )}
@@ -1645,6 +1666,7 @@ function FeedScreen({
   clipSource,
   feedError,
   onRefresh,
+  refreshing = false,
   onLike,
   onSave,
   onToggleFollow,
@@ -1668,6 +1690,7 @@ function FeedScreen({
   feedError: string | null;
   /** Main-feed pull-to-refresh. Scoped collection feeds intentionally omit it. */
   onRefresh?: () => void;
+  refreshing?: boolean;
   onLike: (clipId: string) => void;
   onSave: (clipId: string) => void;
   onToggleFollow: (personId: string) => void;
@@ -1693,11 +1716,12 @@ function FeedScreen({
   const [predictedDirection, setPredictedDirection] = useState<1 | -1>(1);
   const [playableGeneration, setPlayableGeneration] = useState<string | null>(null);
   const [pullDistance, setPullDistance] = useState(0);
-  const [refreshRequested, setRefreshRequested] = useState(false);
+  const [pulling, setPulling] = useState(false);
   const secondLookaheadAllowed = useSecondLookahead();
   const feedScrollRef = useRef<HTMLDivElement | null>(null);
   const pullStartY = useRef<number | null>(null);
   const pullDistanceRef = useRef(0);
+  const wasRefreshingRef = useRef(false);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const videoRefCallbacks = useRef<
     Record<string, (node: HTMLVideoElement | null) => void>
@@ -1750,6 +1774,7 @@ function FeedScreen({
     const resetPull = () => {
       pullStartY.current = null;
       pullDistanceRef.current = 0;
+      setPulling(false);
       setPullDistance(0);
     };
     const handleTouchStart = (event: TouchEvent) => {
@@ -1758,6 +1783,7 @@ function FeedScreen({
         return;
       }
       pullStartY.current = event.touches[0].clientY;
+      setPulling(true);
     };
     const handleTouchMove = (event: TouchEvent) => {
       const startY = pullStartY.current;
@@ -1779,9 +1805,9 @@ function FeedScreen({
       const shouldRefresh = pullDistanceRef.current >= PULL_REFRESH_TRIGGER && !loading;
       pullStartY.current = null;
       pullDistanceRef.current = 0;
+      setPulling(false);
       if (shouldRefresh) {
         setPullDistance(44);
-        setRefreshRequested(true);
         onRefresh();
       } else {
         setPullDistance(0);
@@ -1801,12 +1827,17 @@ function FeedScreen({
   }, [loading, onRefresh]);
 
   useEffect(() => {
-    if (refreshRequested && !loading) {
+    if (refreshing && !wasRefreshingRef.current && pullDistance === 0) {
+      // A Home-button refresh can begin from any clip. Let the existing slate
+      // glide to its first item while the replacement is fetched.
+      feedScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    if (!refreshing && wasRefreshingRef.current) {
       feedScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
-      setRefreshRequested(false);
       setPullDistance(0);
     }
-  }, [loading, refreshRequested]);
+    wasRefreshingRef.current = refreshing;
+  }, [pullDistance, refreshing]);
 
   // Scroll the opening clip into view once, so the feed does not start at the
   // top and then jump.
@@ -2250,6 +2281,8 @@ function FeedScreen({
     allowSecondLookahead: secondLookaheadAllowed
   });
   const sourceIndices = new Set(mediaWindow.sourceIndices);
+  const pullProgress = refreshing ? 1 : Math.min(1, pullDistance / PULL_REFRESH_TRIGGER);
+  const pullOffset = Math.min(52, pullDistance * 0.72);
 
   useLayoutEffect(() => {
     if (mediaWindow.immediateIndex === null) {
@@ -2264,16 +2297,23 @@ function FeedScreen({
 
   return (
     <section className="feed-screen">
-      {onRefresh && (pullDistance > 0 || refreshRequested) && (
+      {onRefresh && (pullDistance > 0 || refreshing) && (
         <div
-          className={refreshRequested ? "feed-refresh feed-refresh--loading" : "feed-refresh"}
-          style={{ opacity: Math.min(1, pullDistance / 38) }}
+          className={refreshing ? "feed-refresh feed-refresh--loading" : "feed-refresh"}
+          style={{
+            opacity: pullProgress,
+            transform: `translate3d(-50%, ${-10 + pullProgress * 10}px, 0) scale(${0.92 + pullProgress * 0.08})`
+          }}
           role="status"
           aria-live="polite"
         >
-          <RefreshCw size={16} aria-hidden="true" />
+          <RefreshCw
+            size={16}
+            aria-hidden="true"
+            style={refreshing ? undefined : { transform: `rotate(${pullProgress * 180}deg)` }}
+          />
           <span>
-            {refreshRequested
+            {refreshing
               ? "Uppdaterar"
               : pullDistance >= PULL_REFRESH_TRIGGER
                 ? "Släpp för att uppdatera"
@@ -2293,7 +2333,9 @@ function FeedScreen({
       )}
 
       {loading && clips.length === 0 && <FeedSkeleton />}
-      {loading && clips.length > 0 && <div className="loading-chip">Hämtar klipp</div>}
+      {loading && clips.length > 0 && !refreshing && (
+        <div className="loading-chip">Hämtar klipp</div>
+      )}
 
       {clipSource === "sample" && <div className="loading-chip">Demodata</div>}
 
@@ -2306,7 +2348,11 @@ function FeedScreen({
         </div>
       )}
 
-      <div className="feed-scroll" ref={feedScrollRef}>
+      <div
+        className={pulling ? "feed-scroll feed-scroll--pulling" : "feed-scroll"}
+        ref={feedScrollRef}
+        style={{ transform: `translate3d(0, ${pullOffset}px, 0)` }}
+      >
         {clips.map((clip, index) => {
           const distanceFromActive = Math.abs(index - windowCentre);
           const withinPosterWindow = distanceFromActive <= POSTER_WINDOW;

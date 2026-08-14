@@ -4547,3 +4547,27 @@ swipes and scoped saved/person/party feeds keep their existing behavior.
 **Blocked / needs a decision:** none for these five feed scenarios. The earlier
 Clerk account-deletion webhook secret and signed-in production acceptance items
 remain separate.
+
+## F2a/F2b follow-up — refresh polish and reason copy — DONE 2026-08-14
+
+**Built:** back-catalog recommendations retain the useful explicit explanation
+(`Eftersom du valde/följer …`) without appending `äldre klipp`; the internal
+back-catalog pool and `older_*` audit reason code remain unchanged. The
+presentation change is recorded as algorithm version `explicit-rules-v1.1`.
+Production `feed-requests` was redeployed with the new shared ranker.
+
+Tapping Home now requests a fresh slate through the same path as pull-to-refresh,
+including when Home is already active. Manual refresh keeps the current video
+mounted while the replacement loads. The pull gesture now moves with the finger,
+eases into the armed/loading state, rotates and spins the refresh icon, and
+settles back after the new slate is ready; reduced-motion preferences disable
+the added transitions.
+
+**Tests:** strict frontend TypeScript and Vite/PWA production build green; 15
+frontend Node tests and 20 Edge security/ranking/webhook tests green; the ranker
+test now locks the exact back-catalog explanation copy; `git diff --check` green.
+
+**Contracts touched:** none.
+
+**Blocked / needs a decision:** none for this follow-up. The previously recorded
+Clerk deletion-webhook secret and signed-in production acceptance items remain.

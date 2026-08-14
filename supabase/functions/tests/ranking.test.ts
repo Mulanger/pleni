@@ -97,6 +97,7 @@ test("uses debate date rather than recent publication time for backfills", () =>
   );
   assert.equal(result[0].pool, "back_catalog_interest");
   assert.match(result[0].reasonCode, /^older_/);
+  assert.equal(result[0].reason, "Eftersom du valde S");
 });
 
 test("does not relabel old unrelated material as adjacent interest", () => {

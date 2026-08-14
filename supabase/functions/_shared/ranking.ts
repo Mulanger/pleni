@@ -128,7 +128,7 @@ function scoreCandidate(
     pool === "back_catalog_interest" ? `older_${interestReason.code}` : interestReason.code;
   const reason =
     pool === "back_catalog_interest"
-      ? `${interestReason.label} · äldre klipp`
+      ? interestReason.label
       : pool === "adjacent_interest"
         ? "För variation i ditt flöde"
         : interestReason.label;

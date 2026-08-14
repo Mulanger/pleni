@@ -122,6 +122,11 @@ a {
      mid-swipe. */
   overscroll-behavior-y: contain;
   scrollbar-width: none;
+  transition: transform 340ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.feed-scroll--pulling {
+  transition: none;
 }
 
 .feed-refresh {
@@ -144,8 +149,14 @@ a {
   pointer-events: none;
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
-  transition: opacity 120ms ease;
+  transform-origin: center;
+  transition:
+    opacity 180ms ease,
+    transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
 }
+
+.feed-refresh svg { transition: transform 120ms linear; }
 
 .feed-refresh--loading svg {
   animation: feed-refresh-spin 720ms linear infinite;
@@ -3740,6 +3751,12 @@ a {
   }
 
   button {
+    transition: none;
+  }
+
+  .feed-scroll,
+  .feed-refresh,
+  .feed-refresh svg {
     transition: none;
   }
 
