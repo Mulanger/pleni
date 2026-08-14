@@ -150,7 +150,7 @@ Deno.serve(async (request) => {
 
     const interestParties = [...new Set([...profile.explicitParties, ...profile.followedParties])];
     const [recentRows, interestRows] = await Promise.all([
-      loadFeedCatalogue(700),
+      loadFeedCatalogue(1000),
       loadInterestCatalogue(interestParties, profile.followedPoliticians, 500)
     ]);
     const candidates = [...recentRows, ...interestRows]

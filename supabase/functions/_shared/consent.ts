@@ -1,5 +1,5 @@
 export const PERSONALIZATION_NOTICE_VERSION = "personalization-2026-08-14-v2";
-export const RULES_ALGORITHM_VERSION = "explicit-rules-v1.2";
+export const RULES_ALGORITHM_VERSION = "explicit-rules-v1.3";
 export const PARTY_CODES = ["S", "M", "SD", "C", "V", "KD", "MP", "L"] as const;
 export type PartyCode = (typeof PARTY_CODES)[number];
 

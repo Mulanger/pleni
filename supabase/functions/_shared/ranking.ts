@@ -125,7 +125,11 @@ function scoreCandidate(
       ? "back_catalog_interest"
       : "adjacent_interest";
   const reasonCode =
-    pool === "back_catalog_interest" ? `older_${interestReason.code}` : interestReason.code;
+    pool === "back_catalog_interest"
+      ? `older_${interestReason.code}`
+      : pool === "adjacent_interest"
+        ? "catalogue_variety"
+        : interestReason.code;
   const reason =
     pool === "back_catalog_interest"
       ? interestReason.label
@@ -226,13 +230,14 @@ export function rankFeed(
   for (const candidate of candidates) {
     if (!unique.has(candidate.id)) unique.set(candidate.id, candidate);
   }
-  const allScored = [...unique.values()]
-    .map((candidate) => scoreCandidate(candidate, profile, nowMs))
-    // V1 has no reviewed topic/ideology adjacency mapping and exploration is
-    // disabled. An old unrelated clip is not "adjacent" merely because it is
-    // old; excluding it also keeps back-catalogue content to the two planned
-    // interest slots in the first ten.
-    .filter((candidate) => candidate.pool !== "adjacent_interest");
+  // `adjacent_interest` is the existing persisted compatibility name for the
+  // deterministic catalogue-variety slot. Until F5 supplies reviewed topic
+  // adjacency, its user-facing reason stays neutral and never claims a match.
+  // Keeping the pool eligible prevents a mostly back-catalogue library from
+  // collapsing into the handful of clips inside the fresh window.
+  const allScored = [...unique.values()].map((candidate) =>
+    scoreCandidate(candidate, profile, nowMs)
+  );
   const unseen = allScored.filter((candidate) => !seen.has(candidate.id)).sort(compareCandidates);
   const seenFallback = allScored.filter((candidate) => seen.has(candidate.id)).sort(compareCandidates);
   const unseenPools = new Map<CandidatePool, ScoredCandidate[]>();

@@ -4627,3 +4627,31 @@ Python acceptance command could not run because this desktop runtime has no
 **Contracts touched:** none.
 
 **Blocked / needs a decision:** none.
+
+## F2a follow-up — restore full-catalogue feed variety — DONE 2026-08-14
+
+**Diagnosis:** the live catalogue contains 3,188 published clips, but only 19
+have debate dates inside the 45-day fresh window. Ebba Busch has 59 published
+clips and all 59 are older. V1 filtered every older non-interest clip out, so an
+Ebba-only profile had just 78 eligible clips; removing that follow left only 19.
+The 60-item served-slate history therefore exhausted the pool almost
+immediately and deterministic refreshes repeated it.
+
+**Built:** older general clips again participate in the existing persisted
+`adjacent_interest` compatibility pool as deterministic catalogue variety. The
+reason is neutral (`För variation i ditt flöde`) with code
+`catalogue_variety`; it does not claim a topic/ideology match and keeps
+exploration probability at zero. The general candidate window is raised from
+700 to the existing 1,000-row database/API ceiling, while the unseen-first rule
+still prevents recent matches from winning. Ranking records use
+`explicit-rules-v1.3`.
+
+**Tests:** all 21 Edge security/ranking/webhook tests pass, including sparse
+fresh inventory, neutral older variety and an unseen old-general clip beating a
+recent perfect followed-politician match; `git diff --check` green. The default
+Python command remains unavailable because this desktop runtime has no
+`python` executable.
+
+**Contracts touched:** none.
+
+**Blocked / needs a decision:** none.

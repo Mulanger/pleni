@@ -35,7 +35,7 @@ function candidate(
   };
 }
 
-test("mixes explicit V1 as 5/2/2 plus one logged adjacency fallback", () => {
+test("mixes explicit V1 as 5/2/2 plus one catalogue-variety slot", () => {
   const profile = { ...EMPTY_PROFILE, explicitParties: ["S"] as const };
   const candidates = [
     ...Array.from({ length: 8 }, (_, index) => candidate(`fi-${index}`, { party: "S" })),
@@ -52,13 +52,10 @@ test("mixes explicit V1 as 5/2/2 plus one logged adjacency fallback", () => {
     (["fresh_interest", "fresh_general", "back_catalog_interest", "adjacent_interest"] as CandidatePool[])
       .map((pool) => [pool, pools.filter((value) => value === pool).length])
   );
-  assert.equal(counts.fresh_interest + counts.fresh_general, 8);
+  assert.equal(counts.fresh_interest, 5);
+  assert.equal(counts.fresh_general, 2);
   assert.equal(counts.back_catalog_interest, 2);
-  assert.equal(counts.adjacent_interest, 0);
-  const tenth = rankFeed(candidates, profile, 10, NOW)[9];
-  assert.ok(
-    tenth.scoreComponents.constraintRelaxations.includes("pool_fallback:adjacent_interest")
-  );
+  assert.equal(counts.adjacent_interest, 1);
 });
 
 test("followed politician is the strongest explicit reason", () => {
@@ -100,14 +97,16 @@ test("uses debate date rather than recent publication time for backfills", () =>
   assert.equal(result[0].reason, "Eftersom du valde S");
 });
 
-test("does not relabel old unrelated material as adjacent interest", () => {
+test("uses older general material for neutral catalogue variety", () => {
   const result = rankFeed(
     [candidate("unrelated", { party: "M", debateDate: "2024-01-01" })],
     { ...EMPTY_PROFILE, explicitParties: ["S"] },
     1,
     NOW
   );
-  assert.deepEqual(result, []);
+  assert.equal(result[0].pool, "adjacent_interest");
+  assert.equal(result[0].reasonCode, "catalogue_variety");
+  assert.equal(result[0].reason, "För variation i ditt flöde");
 });
 
 test("suppresses recently served clips when unseen inventory is sufficient", () => {
@@ -126,7 +125,10 @@ test("uses an unseen general clip before replaying a recent perfect match", () =
   const result = rankFeed(
     [
       candidate("recent-perfect-match", { politicianId: "followed", politicianName: "Ada" }),
-      candidate("unseen-general", { politicianId: "someone-else" })
+      candidate("unseen-general", {
+        politicianId: "someone-else",
+        debateDate: "2024-01-01"
+      })
     ],
     profile,
     2,
