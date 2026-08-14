@@ -235,23 +235,50 @@ export function rankFeed(
     .filter((candidate) => candidate.pool !== "adjacent_interest");
   const unseen = allScored.filter((candidate) => !seen.has(candidate.id)).sort(compareCandidates);
   const seenFallback = allScored.filter((candidate) => seen.has(candidate.id)).sort(compareCandidates);
-  const ranked = unseen.length >= boundedLimit ? unseen : [...unseen, ...seenFallback];
-  const pools = new Map<CandidatePool, ScoredCandidate[]>();
-  for (const pool of RANKING_POLICY.poolSchedule) pools.set(pool, []);
-  for (const candidate of ranked) pools.get(candidate.pool)?.push(candidate);
+  const unseenPools = new Map<CandidatePool, ScoredCandidate[]>();
+  const seenPools = new Map<CandidatePool, ScoredCandidate[]>();
+  for (const pool of RANKING_POLICY.poolSchedule) {
+    unseenPools.set(pool, []);
+    seenPools.set(pool, []);
+  }
+  for (const candidate of unseen) unseenPools.get(candidate.pool)?.push(candidate);
+  for (const candidate of seenFallback) seenPools.get(candidate.pool)?.push(candidate);
 
   const selected: ScoredCandidate[] = [];
   const output: RankedFeedItem[] = [];
   const used = new Set<string>();
-  while (output.length < boundedLimit && used.size < ranked.length) {
+  while (output.length < boundedLimit && used.size < allScored.length) {
     const targetPool = RANKING_POLICY.poolSchedule[output.length % 10];
-    const preferred = choose(pools.get(targetPool) ?? [], selected, used, profile);
-    const selection = preferred ?? choose(ranked, selected, used, profile);
+    const unseenPreferred = choose(
+      unseenPools.get(targetPool) ?? [],
+      selected,
+      used,
+      profile
+    );
+    let selection = unseenPreferred ?? choose(unseen, selected, used, profile);
+    let matchedTargetPool = unseenPreferred !== null;
+    let reusedRecentClip = false;
+
+    // Pool composition is a soft goal. A fresh clip from another pool is more
+    // valuable than replaying a perfect interest match that was just served.
+    // Only consider recent clips when no unseen candidate remains selectable.
+    if (!selection) {
+      const seenPreferred = choose(
+        seenPools.get(targetPool) ?? [],
+        selected,
+        used,
+        profile
+      );
+      selection = seenPreferred ?? choose(seenFallback, selected, used, profile);
+      matchedTargetPool = seenPreferred !== null;
+      reusedRecentClip = selection !== null;
+    }
     if (!selection) break;
     const { candidate } = selection;
-    const relaxations = preferred
+    const relaxations = matchedTargetPool
       ? selection.relaxations
       : [...selection.relaxations, `pool_fallback:${targetPool}`];
+    if (reusedRecentClip) relaxations.push("recent_clip_fallback");
     used.add(candidate.id);
     selected.push(candidate);
     output.push({

@@ -4607,3 +4607,23 @@ Node tests green; `git diff --check` green.
 **Contracts touched:** none.
 
 **Blocked / needs a decision:** none.
+
+## F2a follow-up — unseen-first refresh ranking — DONE 2026-08-14
+
+**Built:** personalized refreshes no longer replay a recently served perfect
+interest match merely to satisfy the planned pool for that position. Pool
+composition is now a soft goal: any selectable unseen candidate wins before a
+clip from the 30-day recent-slate history. Recent clips enter only after unseen
+eligible inventory is exhausted, and that relaxation is recorded as
+`recent_clip_fallback`. The ranking release is versioned
+`explicit-rules-v1.2`.
+
+**Tests:** added the exact regression case of a recent followed-politician match
+versus an unseen general clip; the unseen clip now ranks first. All 21 Edge
+security/ranking/webhook tests pass and `git diff --check` is green. The default
+Python acceptance command could not run because this desktop runtime has no
+`python` executable.
+
+**Contracts touched:** none.
+
+**Blocked / needs a decision:** none.

@@ -117,6 +117,28 @@ test("suppresses recently served clips when unseen inventory is sufficient", () 
   assert.equal(result.some((item) => profile.recentClipIds.includes(item.clipId)), false);
 });
 
+test("uses an unseen general clip before replaying a recent perfect match", () => {
+  const profile = {
+    ...EMPTY_PROFILE,
+    followedPoliticians: ["followed"],
+    recentClipIds: ["recent-perfect-match"]
+  };
+  const result = rankFeed(
+    [
+      candidate("recent-perfect-match", { politicianId: "followed", politicianName: "Ada" }),
+      candidate("unseen-general", { politicianId: "someone-else" })
+    ],
+    profile,
+    2,
+    NOW
+  );
+  assert.deepEqual(
+    result.map((item) => item.clipId),
+    ["unseen-general", "recent-perfect-match"]
+  );
+  assert.ok(result[1].scoreComponents.constraintRelaxations.includes("recent_clip_fallback"));
+});
+
 test("records which planned pool was unavailable when the mixer falls back", () => {
   const result = rankFeed(
     Array.from({ length: 3 }, (_, index) => candidate(`general-${index}`)),
