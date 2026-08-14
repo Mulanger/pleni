@@ -63,7 +63,7 @@ import {
 } from "./comments";
 import type { CommentReportReason, CommentThread, VideoComment } from "./comments";
 import { initials, PARTIES, partyInk, partyTint, TRENDING } from "./data";
-import { EMPTY_RECOMMENDATION_PROFILE } from "./consent";
+import { EMPTY_RECOMMENDATION_PROFILE, PERSONALIZATION_NOTICE_VERSION } from "./consent";
 import {
   attachMediaSource,
   planMediaWindow,
@@ -368,6 +368,13 @@ function App() {
           parties: profile.personalization ? profile.explicitParties : current.parties,
           consent: { ...current.consent, personal: profile.personalization }
         }));
+        // Existing accounts have never seen the server-backed V2 notice. Show
+        // the optional choice once on their next open; either answer writes the
+        // notice version, so it does not become a recurring prompt.
+        if (!profile.personalization && profile.noticeVersion !== PERSONALIZATION_NOTICE_VERSION) {
+          setOpenForYouAfterOnboarding(true);
+          setShowOnboarding(true);
+        }
       })
       .catch((error: unknown) => {
         if (!active || controller.signal.aborted) return;
@@ -984,18 +991,40 @@ function App() {
             clearNewAccountRedirect();
           }}
           onSkip={() => {
-            setShowOnboarding(false);
-            clearNewAccountRedirect();
-            setNewAccountRedirect(false);
-            if (openForYouAfterOnboarding && recommendationProfile.personalization) {
-              navigate({ view: "tab", tab: "hem", feedMode: "fordig" });
-            }
-            setOpenForYouAfterOnboarding(false);
-            // A skip is an answer. Stamping it stops the flow reappearing on
-            // every load; Profil has a row to reopen it deliberately.
-            if (onboarding.completedAt === null) {
-              saveOnboarding({ ...onboarding, completedAt: new Date().toISOString() });
-            }
+            void (async () => {
+              let currentProfile = recommendationProfile;
+              if (
+                recommendationsEnabled &&
+                !currentProfile.personalization &&
+                currentProfile.noticeVersion !== PERSONALIZATION_NOTICE_VERSION
+              ) {
+                try {
+                  currentProfile = await setRecommendationConsent(
+                    false,
+                    { parties: [], followedParties: [], followedPoliticians: [] },
+                    "onboarding",
+                    viewer.getAccessToken
+                  );
+                  setRecommendationProfile(currentProfile);
+                  setRecommendationError(null);
+                } catch {
+                  setRecommendationError("Kunde inte spara ditt val. Försök igen.");
+                  return;
+                }
+              }
+              setShowOnboarding(false);
+              clearNewAccountRedirect();
+              setNewAccountRedirect(false);
+              if (openForYouAfterOnboarding && currentProfile.personalization) {
+                navigate({ view: "tab", tab: "hem", feedMode: "fordig" });
+              }
+              setOpenForYouAfterOnboarding(false);
+              // A skip is an answer. Stamping it stops the flow reappearing on
+              // every load; Profil has a row to reopen it deliberately.
+              if (onboarding.completedAt === null) {
+                saveOnboarding({ ...onboarding, completedAt: new Date().toISOString() });
+              }
+            })();
           }}
         />
       )}
