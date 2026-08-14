@@ -4273,7 +4273,7 @@ function FeedSkeleton() {
   return (
     <div className="feed-skeleton" role="status" aria-label="Hämtar klipp">
       <span className="sr-only">Hämtar klipp…</span>
-      <div className="feed-skeleton-focus skeleton-shape" aria-hidden="true" />
+      <div className="feed-skeleton-video" aria-hidden="true" />
       <div className="feed-skeleton-copy" aria-hidden="true">
         <span className="skeleton-shape" />
         <span className="skeleton-shape" />

@@ -4571,3 +4571,18 @@ test now locks the exact back-catalog explanation copy; `git diff --check` green
 
 **Blocked / needs a decision:** none for this follow-up. The previously recorded
 Clerk deletion-webhook secret and signed-in production acceptance items remain.
+
+## F2b follow-up — full-bleed feed skeleton — DONE 2026-08-14
+
+**Built:** the initial feed loader no longer renders a narrow rounded portrait
+placeholder in the middle of the screen. Its video placeholder now fills the
+complete feed viewport, matching the real 9:16/full-bleed player, with a subtle
+composited light sweep behind the existing caption and action-rail placeholders.
+Reduced-motion mode disables the sweep.
+
+**Tests:** strict frontend TypeScript, Vite/PWA production build and 15 frontend
+Node tests green; `git diff --check` green.
+
+**Contracts touched:** none.
+
+**Blocked / needs a decision:** none.
