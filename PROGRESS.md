@@ -4407,3 +4407,31 @@ configure exact `CLERK_ISSUERS`, `ALLOWED_ORIGINS` and
 public privacy notice; only then set `VITE_RECOMMENDATIONS_ENABLED=true` for a
 controlled build. Do not enable the flag against an undeployed schema. Do not
 add playback telemetry or learned ranking under this slice.
+
+## UI14 follow-up — stale app-shell recovery — DONE 2026-08-14
+
+**Built:** navigation requests handled by the service worker now bypass the
+browser HTTP cache while keeping the existing precached shell as the offline
+fallback. Bumped the worker release namespace and extended the production PWA
+verifier to fail if online navigation can reuse cached HTML.
+**Tests:** 15 web tests green; strict TypeScript green; Vite production build
+green; PWA verifier green with 9 app-shell entries, no video/private caching,
+and the new online-navigation cache assertion; `git diff --check` green.
+**Contracts touched:** none.
+
+**Root cause:** the static host serves `index.html` without `Cache-Control` and
+the deploy command removes the previous hashed assets before copying the new
+build. The worker's network-first navigation used the request's default HTTP
+cache mode, so an existing browser could receive an older HTML shell after its
+old precache had been deleted. That shell referenced a removed JavaScript asset,
+leaving an empty root and a white screen. A fresh mobile-sized browser rendered
+the deployed feed normally, confirming that the current bundle itself loads.
+
+**Decisions made:** online app-shell navigation uses `cache: "no-store"`; media,
+Supabase, Clerk and offline behavior remain unchanged. Viewer-controlled worker
+activation remains intact.
+
+**Blocked / needs a decision:** the InstaPods build remains non-atomic. Keeping
+the previous hashed asset directory until the new build is fully copied would
+remove the brief deployment race as well, but that setting lives outside this
+repository.

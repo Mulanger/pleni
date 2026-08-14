@@ -13,7 +13,7 @@ declare global {
 const worker = self as unknown as ServiceWorkerGlobalScope;
 const PRECACHE_MANIFEST = self.__WB_MANIFEST;
 const CACHE_PREFIX = "pleni-";
-const WORKER_RELEASE = "ui14-device-acceptance-2";
+const WORKER_RELEASE = "ui14-navigation-cache-1";
 const ACTIVATE_UPDATE_MESSAGE = "SKIP_WAITING";
 
 function entryUrl(entry: PrecacheEntry): string {
@@ -77,7 +77,10 @@ async function cacheFirstPrecached(request: Request): Promise<Response> {
 
 async function networkFirstNavigation(request: Request): Promise<Response> {
   try {
-    return await fetch(request);
+    // The static host does not send Cache-Control on index.html and removes old
+    // hashed assets during a deploy. Never let the browser HTTP cache hand this
+    // worker an older HTML shell that points at an asset the host has removed.
+    return await fetch(request, { cache: "no-store" });
   } catch {
     if (NAVIGATION_FALLBACK_URL) {
       const cache = await caches.open(PRECACHE_NAME);

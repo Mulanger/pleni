@@ -172,10 +172,12 @@ async function verifyServiceWorkerRuntime() {
   const handlers = new Map();
   const cacheStores = new Map();
   let networkAvailable = true;
+  let latestNetworkOptions = null;
   let claimCount = 0;
   let skipWaitingCount = 0;
 
-  async function networkFetch(request) {
+  async function networkFetch(request, options) {
+    latestNetworkOptions = options ?? null;
     if (!networkAvailable) {
       throw new TypeError("Simulated offline network");
     }
@@ -315,6 +317,24 @@ async function verifyServiceWorkerRuntime() {
     fail("precache assets are not served cache first while offline");
   }
 
+  networkAvailable = true;
+  latestNetworkOptions = null;
+  const onlineNavigation = await dispatchFetch({
+    destination: "document",
+    headers: new Headers(),
+    method: "GET",
+    mode: "navigate",
+    url: "https://pleni.test/#profile"
+  });
+  if (
+    !onlineNavigation ||
+    !(await onlineNavigation).ok ||
+    latestNetworkOptions?.cache !== "no-store"
+  ) {
+    fail("online navigation can reuse a stale HTTP-cached app shell");
+  }
+
+  networkAvailable = false;
   const offlineNavigation = await dispatchFetch({
     destination: "document",
     headers: new Headers(),
