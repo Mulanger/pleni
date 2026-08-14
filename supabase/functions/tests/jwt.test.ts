@@ -1,11 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ClerkAuthError, clearJwksCache, verifyClerkJwt } from "../_shared/jwt.ts";
+import {
+  ClerkAuthError,
+  clearJwksCache,
+  requireAuthenticatedClerkUser,
+  verifyClerkJwt
+} from "../_shared/jwt.ts";
 
 const ISSUER = "https://clerk.example.test";
 const ORIGIN = "https://pleni.se";
 const NOW = 1_786_700_000;
+
+test("accepts a verified Clerk user when the optional Supabase role claim is absent", () => {
+  const verified = { sub: "user_test", iss: ISSUER, azp: ORIGIN, exp: NOW + 60 };
+  assert.doesNotThrow(() => requireAuthenticatedClerkUser(verified));
+  assert.doesNotThrow(() =>
+    requireAuthenticatedClerkUser({ ...verified, role: "authenticated" })
+  );
+  assert.throws(
+    () => requireAuthenticatedClerkUser({ ...verified, role: "anon" }),
+    (error: unknown) => error instanceof ClerkAuthError && error.code === "wrong_role"
+  );
+});
 
 function base64Url(value: Uint8Array | string): string {
   const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;

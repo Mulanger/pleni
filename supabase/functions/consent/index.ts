@@ -6,7 +6,12 @@ import {
   parseRecommendationProfile
 } from "../_shared/consent.ts";
 import { callServiceRpc, ServiceDatabaseError } from "../_shared/db.ts";
-import { bearerToken, ClerkAuthError, verifyClerkJwt } from "../_shared/jwt.ts";
+import {
+  bearerToken,
+  ClerkAuthError,
+  requireAuthenticatedClerkUser,
+  verifyClerkJwt
+} from "../_shared/jwt.ts";
 
 function issuers(): Set<string> {
   const configured = Deno.env.get("CLERK_ISSUERS")
@@ -22,6 +27,7 @@ function issuers(): Set<string> {
 
 function errorResponse(error: unknown, cors: Headers): Response {
   if (error instanceof ClerkAuthError) {
+    console.warn(JSON.stringify({ event: "recommendation_auth_rejected", code: error.code }));
     return jsonResponse({ error: error.code }, 401, cors);
   }
   if (error instanceof ServiceDatabaseError) {
@@ -50,7 +56,7 @@ Deno.serve(async (request) => {
       issuers: issuers(),
       authorizedParties: allowed
     });
-    if (claims.role !== "authenticated") throw new ClerkAuthError("wrong_role");
+    requireAuthenticatedClerkUser(claims);
 
     if (request.method === "GET") {
       const raw = await callServiceRpc<unknown>("get_recommendation_profile", {

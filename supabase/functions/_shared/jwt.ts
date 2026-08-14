@@ -41,6 +41,19 @@ export class ClerkAuthError extends Error {
   }
 }
 
+/**
+ * Clerk's Supabase integration may add `role: authenticated`, but that claim
+ * is optional on an otherwise valid Clerk session token. The Edge boundary
+ * authenticates the session itself (signature, issuer, azp, lifetime and sub),
+ * so absence must not reject a real user. A present contradictory role still
+ * fails closed.
+ */
+export function requireAuthenticatedClerkUser(claims: ClerkClaims): void {
+  if (claims.role !== undefined && claims.role !== "authenticated") {
+    throw new ClerkAuthError("wrong_role");
+  }
+}
+
 const jwksCache = new Map<string, { expiresAt: number; keys: ClerkJwk[] }>();
 const JWKS_CACHE_SECONDS = 300;
 

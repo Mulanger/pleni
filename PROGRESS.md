@@ -4484,3 +4484,30 @@ to `user.deleted`. After saving its signing secret to Supabase, sign in on
 `pleni.se`, grant V2 consent with at least one party, confirm `För dig` shows
 reasoned/reranked clips, reload for a distinct slate, then exercise export and
 reset. Full playback telemetry and learned ranking remain separate future work.
+
+## F2b follow-up — production consent authentication — DONE 2026-08-14
+
+**Built:** the Clerk Edge verifier now treats the Supabase-specific
+`role: authenticated` claim as optional on a session token that has already
+passed signature, issuer, authorized-origin, lifetime and subject verification.
+A present contradictory role still fails closed. Consent and feed endpoints
+write a non-identifying auth rejection code to function logs for future
+diagnosis.
+
+**Root cause:** production consent invocations returned 401 before every
+database call. The endpoints incorrectly required Clerk's optional Supabase
+integration role claim even though the Edge boundary verifies Clerk sessions
+itself. That claim exists in the development token captured earlier but is not
+part of Clerk's base session-token authentication contract.
+
+**Production deployment:** updated `consent` and `feed-requests` functions were
+deployed immediately. No database migration or frontend rebuild is required.
+
+**Tests:** 20 Edge security/ranking tests green, including absent role accepted,
+authenticated role accepted and contradictory role rejected; web strict
+TypeScript green; `git diff --check` green.
+
+**Contracts touched:** none.
+
+**Blocked / needs a decision:** none for consent authentication. The previously
+recorded Clerk deletion-webhook signing-secret task remains separate.

@@ -10,7 +10,12 @@ import {
   loadInterestCatalogue,
   ServiceDatabaseError
 } from "../_shared/db.ts";
-import { bearerToken, ClerkAuthError, verifyClerkJwt } from "../_shared/jwt.ts";
+import {
+  bearerToken,
+  ClerkAuthError,
+  requireAuthenticatedClerkUser,
+  verifyClerkJwt
+} from "../_shared/jwt.ts";
 import { rankFeed, type CandidateClip } from "../_shared/ranking.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -91,7 +96,10 @@ function mapCandidate(value: unknown): CandidateClip | null {
 }
 
 function errorResponse(error: unknown, cors: Headers): Response {
-  if (error instanceof ClerkAuthError) return jsonResponse({ error: error.code }, 401, cors);
+  if (error instanceof ClerkAuthError) {
+    console.warn(JSON.stringify({ event: "recommendation_auth_rejected", code: error.code }));
+    return jsonResponse({ error: error.code }, 401, cors);
+  }
   if (error instanceof ServiceDatabaseError) {
     const consentRequired = error.detail.includes("personalization_consent_required");
     return jsonResponse(
@@ -121,7 +129,7 @@ Deno.serve(async (request) => {
       issuers: issuers(),
       authorizedParties: allowed
     });
-    if (claims.role !== "authenticated") throw new ClerkAuthError("wrong_role");
+    requireAuthenticatedClerkUser(claims);
     const body = (await request.json()) as Record<string, unknown>;
     if (body.mode !== "for_you") throw new Error("invalid_feed_mode");
     const clientRequestId = typeof body.clientRequestId === "string" ? body.clientRequestId : "";
