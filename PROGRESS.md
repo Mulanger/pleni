@@ -4586,3 +4586,24 @@ Node tests green; `git diff --check` green.
 **Contracts touched:** none.
 
 **Blocked / needs a decision:** none.
+
+## F2b follow-up — stable follow interactions — DONE 2026-08-14
+
+**Built:** following or unfollowing a politician/party updates the visible button
+and consented server preference projection without replacing, clearing or
+scrolling the slate currently being watched. The choice affects the next Home,
+pull or normal feed refresh instead. Preference writes settle for 180 ms and run
+through a single ordered queue, preventing rapid follow/unfollow taps from
+leaving an older request as the final server state.
+
+**Audit:** the remaining immediate feed replacements are intentional: completed
+onboarding, saving the explicit interest editor, consent withdrawal/reset/delete,
+switching feed mode, and explicit Home/pull refresh. Likes and saves remain local
+library updates and do not enter recommendation sync.
+
+**Tests:** strict frontend TypeScript, Vite/PWA production build and 15 frontend
+Node tests green; `git diff --check` green.
+
+**Contracts touched:** none.
+
+**Blocked / needs a decision:** none.

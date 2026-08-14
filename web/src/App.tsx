@@ -131,10 +131,6 @@ function shuffledClips(clips: ClipItem[], limit = 60): ClipItem[] {
   return shuffled.slice(0, limit);
 }
 
-function sameStringSet(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((value) => right.includes(value));
-}
-
 function downloadJson(value: Record<string, unknown>, filename: string): void {
   const blob = new Blob([JSON.stringify(value, null, 2)], {
     type: "application/json;charset=utf-8"
@@ -285,6 +281,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const manualRefreshRef = useRef(false);
+  const preferenceSyncQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [feedReloadKey, setFeedReloadKey] = useState(0);
   const pwa = usePwaExperience(feedNetworkFailed);
   const selectedPersonId =
@@ -686,26 +683,23 @@ function App() {
       return;
     }
     const preferences = preferencePayload();
-    if (
-      sameStringSet(preferences.parties, recommendationProfile.explicitParties) &&
-      sameStringSet(preferences.followedParties, recommendationProfile.followedParties) &&
-      sameStringSet(preferences.followedPoliticians, recommendationProfile.followedPoliticians)
-    ) {
-      return;
-    }
-    const controller = new AbortController();
-    void syncRecommendationPreferences(
-      preferences,
-      viewer.getAccessToken,
-      controller.signal
-    )
-      .then((profile) => {
-        setRecommendationProfile(profile);
-        setRecommendationError(null);
-        setFeedReloadKey((current) => current + 1);
-      })
-      .catch((error: unknown) => {
-        if (!controller.signal.aborted) {
+    let active = true;
+    // A follow is an input to the *next* slate, not permission to replace the
+    // video someone is currently watching. Briefly settle rapid taps, then run
+    // writes in order so an older follow/unfollow request cannot finish last.
+    const timer = window.setTimeout(() => {
+      const syncPreferences = async () => {
+        if (!active) return;
+        try {
+          const profile = await syncRecommendationPreferences(
+            preferences,
+            viewer.getAccessToken
+          );
+          if (!active) return;
+          setRecommendationProfile(profile);
+          setRecommendationError(null);
+        } catch (error: unknown) {
+          if (!active) return;
           setRecommendationError(
             error instanceof RecommendationApiError &&
               error.code === "personalization_consent_required"
@@ -713,8 +707,16 @@ function App() {
               : "Ett följval kunde inte synkroniseras. Försök igen om en stund."
           );
         }
-      });
-    return () => controller.abort();
+      };
+      preferenceSyncQueueRef.current = preferenceSyncQueueRef.current.then(
+        syncPreferences,
+        syncPreferences
+      );
+    }, 180);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
   }, [
     library.followedParties,
     library.followedPoliticians,
