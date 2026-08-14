@@ -4,20 +4,15 @@ import type { LibraryState, PartyCode } from "./types";
  * Device-local storage for follows, saves and likes.
  *
  * Like `onboarding-store.ts`, this module is deliberately the *only* place the
- * viewer's library is written, so "does any of this leave the device?" is
- * answerable by reading one file. The answer is no: `localStorage` and nothing
- * else.
+ * viewer's library is written. Likes and saves remain device-local. After the
+ * viewer gives explicit recommendation consent, followed party and politician
+ * IDs are projected into the private recommendation service.
  *
  * That is not a placeholder for a missing fetch call. **A list of politicians
  * someone follows reveals political opinion**, which makes it special-category
- * data under GDPR Article 9 exactly as the onboarding leaning slider is. The
- * schema that could lawfully hold it does not exist yet: `C-1` (private
- * schema), `C-2` (append-only consent ledger carrying the Article 6 basis,
- * Article 9 condition and notice version) and `C-6` (server-side enforcement)
- * are all open GATE items, as are the F0 documents that decide retention.
- *
- * `C-9` asks for these to persist server-side. That is `F1`, and when it lands
- * the ledger becomes the source of truth and this store becomes its cache.
+ * data under GDPR Article 9. The private schema, append-only consent ledger and
+ * server-side enforcement now own that projection; this store remains the UI's
+ * per-account cache and the source for likes and saves.
  *
  * Politicians are keyed by `public.politicians.id` and never by a display-name
  * slug (`Q-2`).

@@ -29,3 +29,10 @@ model.
 - `@clerk/react==6.12.10` - sole identity provider for the mobile app; supplies `<ClerkProvider>`, the prebuilt sign-in/sign-up modals and the session token used for Supabase third-party auth. Chosen over Supabase Auth per the locked decision in `docs/RECOMMENDATION_PREREQUISITES.md` §0.
 - `@clerk/localizations==4.13.10` - Swedish (`svSE`) strings for the Clerk components. The app is Swedish-only, so the default English UI is not acceptable; this is Clerk's own localization package rather than a hand-maintained string table.
 - `vite-plugin-pwa==1.3.0` - Vite 8-compatible build integration for compiling Pleni's explicit TypeScript service worker and injecting a revisioned app-shell precache manifest; runtime cache policy remains in repo-owned code rather than a generated default.
+
+# Recommendation Edge Functions (F2a/F3a)
+
+No runtime dependency was added. Clerk RS256 and Svix HMAC verification use the
+Web Crypto API built into the Supabase Deno runtime; ranking, CORS and request
+validation use platform APIs only. This keeps the new serving path exactly
+reproducible without an unpinned URL or npm import.

@@ -1,13 +1,18 @@
 # Data-flow inventory
 
-Current release inventory, 2026-08-09. “Basis” is the project's in-house GDPR
+Current release inventory, updated 2026-08-14. “Basis” is the project's in-house GDPR
 analysis under the F0-2 risk acceptance; it has not been reviewed by counsel.
+
+The rule-based recommender is implemented but inactive behind
+`VITE_RECOMMENDATIONS_ENABLED=false`. The migrations and Edge Functions have
+not been applied/deployed by this change, so the current production data flows
+below remain unchanged.
 
 ## Browser and device-local state
 
 | Data | Source → destination | Purpose | Basis / terminal-storage class | Retention |
 |---|---|---|---|---|
-| `riket.onboarding.v1:<clerk_user_id>`: leaning, selected parties, personalisation flag, completion time | Signed-in viewer → that browser only | Remember optional onboarding choices for that account | Explicit personalisation choice; storage requested by the viewer. Article 9(2)(a) is the planned condition if the choice is used to reveal political opinion. | Until changed or browser site data is cleared. |
+| `riket.onboarding.v1:<clerk_user_id>`: selected parties, personalisation flag, completion time | Signed-in viewer → that browser only | Remember optional onboarding choices for that account | Explicit personalisation choice; storage requested by the viewer. Article 9(2)(a) is the planned condition if the choice is used to reveal political opinion. | Until changed or browser site data is cleared. Legacy `leaning` properties are ignored and disappear on the next write. |
 | `riket.library.v1:<clerk_user_id>`: followed people/parties, saved/liked clip ids | Signed-in viewer → that browser only | Provide follows, saves and likes requested by the viewer | Necessary to provide the requested device-local feature. | Until toggled off or browser site data is cleared. |
 | Player state: current time, duration, visible/active clip | Video element → React memory | Play, pause, seek and choose the active inline video | Necessary transient application state; not persistent terminal storage. | Page lifetime only. |
 
@@ -59,3 +64,19 @@ CDN access logs to a Clerk account or use them as a viewing-history profile.
 Any implementation that changes one of these statements must update this
 inventory, the DPIA, the public notice version and the relevant consent/storage
 surface before deployment.
+
+## Inactive recommendation rollout boundary
+
+If the owner approves the remaining F0 gates, deploys migrations 018/019 and the
+Edge Functions, and enables the flag, V1 adds only these flows:
+
+| Data | Source → destination | Purpose | Basis | Retention status |
+|---|---|---|---|---|
+| Versioned personalisation grant/withdrawal | Signed-in viewer → Clerk-authenticated Edge Function → `private.consent_records` | Prove and enforce the viewer's separate choice | Consent; Article 6(1)(a) and Article 9(2)(a) recorded with the notice version | Final period remains an F0-6 launch gate. |
+| Explicitly selected/followed parties and followed politician UUIDs | Viewer/device cache → consent Edge Function → `private.viewer_preferences` | Order `För dig` using choices the viewer made | Explicit consent for political-interest personalisation | Deleted immediately on withdrawal/account webhook; backup/fixed-period policy remains open. |
+| Served personalised slate: request/item ids, algorithm version, clip, position, pool, reason and score components | Feed Edge Function → `private.feed_requests` / `private.feed_items` | Return an idempotent slate, suppress recent repeats and preserve the evaluation denominator | Same personalisation consent | Fixed cleanup remains an F0-6 launch gate; current repeat suppression reads 30 days. |
+
+The left/right question has been removed. V1 sends no likes, saves, watch time, playback event,
+inferred interest, ad identifier or randomized exploration outcome. Anonymous,
+signed-out and non-consenting viewers continue to use `Senaste` without a
+persistent recommendation subject.

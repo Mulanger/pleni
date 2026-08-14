@@ -38,6 +38,14 @@ import {
   UserButton,
   useUser
 } from "@clerk/react";
+import {
+  RecommendationApiError,
+  loadRecommendationProfile,
+  loadRuleBasedFeed,
+  recommendationsEnabled,
+  setRecommendationConsent,
+  syncRecommendationPreferences
+} from "./account";
 import { clerkEnabled, useViewer } from "./clerk";
 import {
   COMMENT_MAX_LENGTH,
@@ -52,6 +60,7 @@ import {
 } from "./comments";
 import type { CommentReportReason, CommentThread, VideoComment } from "./comments";
 import { initials, PARTIES, partyInk, partyTint, TRENDING } from "./data";
+import { EMPTY_RECOMMENDATION_PROFILE } from "./consent";
 import {
   attachMediaSource,
   planMediaWindow,
@@ -95,6 +104,7 @@ import type {
   PartyCode,
   PartyProfile,
   Politician,
+  RecommendationProfile,
   Tab
 } from "./types";
 
@@ -259,13 +269,27 @@ function App() {
   const [savedError, setSavedError] = useState<string | null>(null);
   const [savedLoading, setSavedLoading] = useState(false);
   // Onboarding answers and consent live together because the flow collects
-  // both. Defaults are off and everything stays on the device until F1 gives it
-  // somewhere lawful to go (C-1, C-2, C-5).
+  // both. Defaults are off; the server ledger receives explicit party and
+  // follow choices only after rollout is enabled and the viewer grants it.
   const [onboarding, setOnboarding] = useState<OnboardingState>(EMPTY_ONBOARDING);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [openForYouAfterOnboarding, setOpenForYouAfterOnboarding] = useState(false);
+  const [onboardingLoadedUserId, setOnboardingLoadedUserId] = useState<string | null>(null);
+  const [libraryLoadedUserId, setLibraryLoadedUserId] = useState<string | null>(null);
+  const [recommendationProfile, setRecommendationProfile] =
+    useState<RecommendationProfile>(EMPTY_RECOMMENDATION_PROFILE);
+  const [recommendationProfileLoaded, setRecommendationProfileLoaded] = useState(
+    !recommendationsEnabled
+  );
+  const [recommendationError, setRecommendationError] = useState<string | null>(null);
   const [newAccountRedirect, setNewAccountRedirect] = useState(hasNewAccountRedirect);
-  const consent = onboarding.consent;
   const viewer = useViewer();
+  const consent = {
+    ...onboarding.consent,
+    personal: recommendationsEnabled
+      ? recommendationProfile.personalization
+      : onboarding.consent.personal
+  };
 
   useLayoutEffect(() => {
     applyBrowserTheme(darkSurface ? "dark" : "light");
@@ -274,11 +298,13 @@ function App() {
   useEffect(() => {
     if (!viewer.signedIn || !viewer.userId) {
       setOnboarding(EMPTY_ONBOARDING);
+      setOnboardingLoadedUserId(null);
       setShowOnboarding(false);
       return;
     }
     const stored = readOnboarding(viewer.userId);
     setOnboarding(stored);
+    setOnboardingLoadedUserId(viewer.userId);
     // Missing local state alone does not mean the account is new. Clerk can
     // restore an existing session on app launch, including on another device.
     // The flow opens only after Clerk's completed-sign-up redirect and only
@@ -292,6 +318,52 @@ function App() {
     }
   }, [newAccountRedirect, viewer.newAccountSession, viewer.signedIn, viewer.userId]);
 
+  // The server ledger is authoritative whenever the recommendation rollout is
+  // enabled. Legacy device-local consent is never uploaded automatically: the
+  // older notice promised that those choices stayed on this device.
+  useEffect(() => {
+    if (!recommendationsEnabled) {
+      setRecommendationProfileLoaded(true);
+      return;
+    }
+    if (!viewer.signedIn || !viewer.userId) {
+      setRecommendationProfile(EMPTY_RECOMMENDATION_PROFILE);
+      setRecommendationProfileLoaded(true);
+      setRecommendationError(null);
+      return;
+    }
+    const controller = new AbortController();
+    let active = true;
+    setRecommendationProfileLoaded(false);
+    setRecommendationError(null);
+    void loadRecommendationProfile(viewer.getAccessToken, controller.signal)
+      .then((profile) => {
+        if (!active) return;
+        setRecommendationProfile(profile);
+        setOnboarding((current) => ({
+          ...current,
+          parties: profile.personalization ? profile.explicitParties : current.parties,
+          consent: { ...current.consent, personal: profile.personalization }
+        }));
+      })
+      .catch((error: unknown) => {
+        if (!active || controller.signal.aborted) return;
+        setRecommendationProfile(EMPTY_RECOMMENDATION_PROFILE);
+        setRecommendationError(
+          error instanceof RecommendationApiError && error.code === "sign_in_required"
+            ? "Logga in igen för att läsa dina rekommendationsval."
+            : "Kunde inte läsa dina rekommendationsval. Senaste används tills vidare."
+        );
+      })
+      .finally(() => {
+        if (active) setRecommendationProfileLoaded(true);
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [viewer.signedIn, viewer.userId]);
+
   /**
    * The library belongs to an account, not to a device.
    *
@@ -304,7 +376,13 @@ function App() {
   // Load on sign-in, drop on sign-out. Reading is keyed on the account, so
   // switching users on a shared device swaps the library rather than merging it.
   useEffect(() => {
-    setLibrary(viewer.signedIn ? readLibrary(viewer.userId) : EMPTY_LIBRARY);
+    if (viewer.signedIn && viewer.userId) {
+      setLibrary(readLibrary(viewer.userId));
+      setLibraryLoadedUserId(viewer.userId);
+    } else {
+      setLibrary(EMPTY_LIBRARY);
+      setLibraryLoadedUserId(null);
+    }
   }, [viewer.signedIn, viewer.userId]);
 
   /**
@@ -378,37 +456,211 @@ function App() {
     writeOnboarding(viewer.userId, next);
   };
 
-  const setConsent = (
-    update: (current: OnboardingState["consent"]) => OnboardingState["consent"]
-  ) => saveOnboarding({ ...onboarding, consent: update(onboarding.consent) });
+  const preferencePayload = (
+    parties: PartyCode[] = onboarding.parties,
+    currentLibrary: LibraryState = library
+  ) => ({
+    parties,
+    followedParties: currentLibrary.followedParties,
+    followedPoliticians: currentLibrary.followedPoliticians
+  });
 
+  const completeOnboarding = async (next: OnboardingState): Promise<void> => {
+    if (!recommendationsEnabled) {
+      saveOnboarding(next);
+      return;
+    }
+    if (!viewer.signedIn) {
+      viewer.requireSignIn();
+      throw new Error("sign_in_required");
+    }
+    const profile = await setRecommendationConsent(
+      next.consent.personal,
+      preferencePayload(next.parties),
+      "onboarding",
+      viewer.getAccessToken
+    );
+    setRecommendationProfile(profile);
+    setRecommendationProfileLoaded(true);
+    setRecommendationError(null);
+    saveOnboarding({
+      ...next,
+      parties: profile.personalization ? profile.explicitParties : next.parties,
+      consent: { ...next.consent, personal: profile.personalization }
+    });
+  };
+
+  const withdrawPersonalization = async (): Promise<void> => {
+    try {
+      const profile = await setRecommendationConsent(
+        false,
+        { parties: [], followedParties: [], followedPoliticians: [] },
+        "profile",
+        viewer.getAccessToken
+      );
+      setRecommendationProfile(profile);
+      setRecommendationError(null);
+      saveOnboarding({
+        ...onboarding,
+        consent: { ...onboarding.consent, personal: false }
+      });
+      if (feedMode === "fordig") {
+        navigate({ view: "tab", tab: "hem", feedMode: "senaste" }, { replace: true });
+      }
+    } catch {
+      setRecommendationError("Kunde inte stänga av personalisering. Försök igen.");
+    }
+  };
+
+  const changeFeedMode = (nextMode: FeedMode) => {
+    if (!recommendationsEnabled || nextMode === "senaste") {
+      navigate({ view: "tab", tab: "hem", feedMode: nextMode });
+      return;
+    }
+    if (!viewer.signedIn) {
+      viewer.requireSignIn();
+      return;
+    }
+    if (!recommendationProfileLoaded) return;
+    if (!recommendationProfile.personalization) {
+      setOpenForYouAfterOnboarding(true);
+      setShowOnboarding(true);
+      return;
+    }
+    navigate({ view: "tab", tab: "hem", feedMode: "fordig" });
+  };
+
+  // A changed follow or onboarding party is synced only after the account,
+  // local caches and server consent have all loaded. Likes/saves are not inputs
+  // to this explicit-only V1 and therefore do not leave the device.
   useEffect(() => {
-    let mounted = true;
-    loadPublishedClips()
-      .then((feed) => {
-        if (mounted) {
-          setClips(feed.clips);
-          setClipSource(feed.source);
-          setFeedError(feed.error ?? null);
-          setFeedNetworkFailed(false);
-        }
+    if (
+      !recommendationsEnabled ||
+      !recommendationProfile.personalization ||
+      !viewer.userId ||
+      onboardingLoadedUserId !== viewer.userId ||
+      libraryLoadedUserId !== viewer.userId
+    ) {
+      return;
+    }
+    const controller = new AbortController();
+    void syncRecommendationPreferences(
+      preferencePayload(),
+      viewer.getAccessToken,
+      controller.signal
+    )
+      .then((profile) => {
+        setRecommendationProfile(profile);
+        setRecommendationError(null);
       })
       .catch((error: unknown) => {
-        if (mounted) {
-          setClips([]);
-          setFeedError(error instanceof Error ? error.message : "Okänt fel");
-          setFeedNetworkFailed(true);
+        if (!controller.signal.aborted) {
+          setRecommendationError(
+            error instanceof RecommendationApiError &&
+              error.code === "personalization_consent_required"
+              ? "Personaliseringen har stängts av. Senaste används."
+              : "Ett följval kunde inte synkroniseras. Försök igen om en stund."
+          );
         }
+      });
+    return () => controller.abort();
+  }, [
+    library.followedParties,
+    library.followedPoliticians,
+    libraryLoadedUserId,
+    onboarding.parties,
+    onboardingLoadedUserId,
+    recommendationProfile.personalization,
+    viewer.userId
+  ]);
+
+  // `För dig` is never an anonymous or unconsented alias for `Senaste` once
+  // the rollout is enabled. Normalize stale/deep-linked routes explicitly.
+  useEffect(() => {
+    if (
+      recommendationsEnabled &&
+      recommendationProfileLoaded &&
+      route.view === "tab" &&
+      route.tab === "hem" &&
+      feedMode === "fordig" &&
+      (!viewer.signedIn || !recommendationProfile.personalization)
+    ) {
+      navigate({ view: "tab", tab: "hem", feedMode: "senaste" }, { replace: true });
+    }
+  }, [
+    feedMode,
+    navigate,
+    recommendationProfile.personalization,
+    recommendationProfileLoaded,
+    route,
+    viewer.signedIn
+  ]);
+
+  useEffect(() => {
+    if (recommendationsEnabled && feedMode === "fordig" && !recommendationProfileLoaded) {
+      setLoading(true);
+      return;
+    }
+    let mounted = true;
+    const controller = new AbortController();
+    const personalized =
+      recommendationsEnabled &&
+      feedMode === "fordig" &&
+      viewer.signedIn &&
+      recommendationProfile.personalization;
+    setLoading(true);
+    setFeedError(null);
+    setClips([]);
+    void (async () => {
+      try {
+        return personalized
+          ? await loadRuleBasedFeed(viewer.getAccessToken, {
+              limit: 60,
+              clientRequestId: crypto.randomUUID(),
+              signal: controller.signal
+            })
+          : await loadPublishedClips();
+      } catch (error) {
+        if (controller.signal.aborted) throw error;
+        if (personalized) {
+          navigate({ view: "tab", tab: "hem", feedMode: "senaste" }, { replace: true });
+          const fallback = await loadPublishedClips();
+          return {
+            ...fallback,
+            error: fallback.error ?? "För dig är tillfälligt otillgängligt. Senaste visas."
+          };
+        }
+        throw error;
+      }
+    })()
+      .then((feed) => {
+        if (!mounted) return;
+        setClips(feed.clips);
+        setClipSource(feed.source);
+        setFeedError(feed.error ?? null);
+        setFeedNetworkFailed(Boolean(feed.error));
+      })
+      .catch((error: unknown) => {
+        if (!mounted || controller.signal.aborted) return;
+        setClips([]);
+        setFeedError(error instanceof Error ? error.message : "Okänt fel");
+        setFeedNetworkFailed(true);
       })
       .finally(() => {
-        if (mounted) {
-          setLoading(false);
-        }
+        if (mounted) setLoading(false);
       });
     return () => {
       mounted = false;
+      controller.abort();
     };
-  }, []);
+  }, [
+    feedMode,
+    navigate,
+    recommendationProfile.personalization,
+    recommendationProfileLoaded,
+    viewer.signedIn,
+    viewer.userId
+  ]);
 
   /**
    * The open person page, loaded from `public.politicians` rather than derived
@@ -636,14 +888,19 @@ function App() {
       {viewer.signedIn && showOnboarding && (
         <Onboarding
           initial={onboarding}
-          onComplete={(next) => {
-            saveOnboarding(next);
+          recommendationsConnected={recommendationsEnabled}
+          onComplete={async (next) => {
+            await completeOnboarding(next);
             clearNewAccountRedirect();
           }}
           onSkip={() => {
             setShowOnboarding(false);
             clearNewAccountRedirect();
             setNewAccountRedirect(false);
+            if (openForYouAfterOnboarding && recommendationProfile.personalization) {
+              navigate({ view: "tab", tab: "hem", feedMode: "fordig" });
+            }
+            setOpenForYouAfterOnboarding(false);
             // A skip is an answer. Stamping it stops the flow reappearing on
             // every load; Profil has a row to reopen it deliberately.
             if (onboarding.completedAt === null) {
@@ -717,9 +974,7 @@ function App() {
               <FeedScreen
                 clips={clips}
                 feedMode={feedMode}
-                setFeedMode={(nextMode) =>
-                  navigate({ view: "tab", tab: "hem", feedMode: nextMode })
-                }
+                setFeedMode={changeFeedMode}
                 playbackSuspended={showOnboarding}
                 muted={muted}
                 setMuted={setMuted}
@@ -767,16 +1022,35 @@ function App() {
                 onOpenFollowing={() =>
                   viewer.signedIn ? openFollowing() : viewer.requireSignIn()
                 }
-                onEditInterests={() =>
-                  viewer.signedIn ? setShowOnboarding(true) : viewer.requireSignIn()
-                }
+                onEditInterests={() => {
+                  if (!viewer.signedIn) {
+                    viewer.requireSignIn();
+                    return;
+                  }
+                  setOpenForYouAfterOnboarding(false);
+                  setShowOnboarding(true);
+                }}
                 onToggleConsent={(key) => {
                   if (!viewer.signedIn) {
                     viewer.requireSignIn();
                     return;
                   }
-                  setConsent((state) => ({ ...state, [key]: !state[key] }));
+                  if (key !== "personal" || !recommendationsEnabled) {
+                    saveOnboarding({
+                      ...onboarding,
+                      consent: { ...onboarding.consent, [key]: !onboarding.consent[key] }
+                    });
+                    return;
+                  }
+                  if (recommendationProfile.personalization) {
+                    void withdrawPersonalization();
+                  } else {
+                    setOpenForYouAfterOnboarding(false);
+                    setShowOnboarding(true);
+                  }
                 }}
+                recommendationsConnected={recommendationsEnabled}
+                recommendationError={recommendationError}
                 onOpenLegal={openLegal}
                 pwa={pwa}
               />
@@ -2440,6 +2714,11 @@ function ClipMeta({
           {following ? "Följer" : "Följ"}
         </button>
       </div>
+      {clip.recommendationReason && (
+        <div className="recommendation-reason" title="Varför visas klippet?">
+          {clip.recommendationReason}
+        </div>
+      )}
       <div className="clip-title">{clip.title}</div>
       <div className="clip-subtitle">
         {clip.sourceTitle} · {formatDate(clip.debateDate)}
@@ -3051,7 +3330,9 @@ function ProfileScreen({
   onEditInterests,
   onToggleConsent,
   onOpenLegal,
-  pwa
+  pwa,
+  recommendationsConnected,
+  recommendationError
 }: {
   consent: { personal: boolean; analytics: boolean; email: boolean };
   selectedParties: number;
@@ -3065,6 +3346,8 @@ function ProfileScreen({
   onToggleConsent: (key: keyof typeof consent) => void;
   onOpenLegal: (page: LegalPageId) => void;
   pwa: PwaExperience;
+  recommendationsConnected: boolean;
+  recommendationError: string | null;
 }) {
   const totalFollowed = followedCount + followedPartyCount;
   const followedSummary = [
@@ -3081,7 +3364,11 @@ function ProfileScreen({
     {
       key: "personal" as const,
       title: "Personaliserat flöde",
-      help: "Sparar dina val på enheten. Tittarhistorik skickas inte till Pleni."
+      help: consent.personal
+        ? "Använder partier och politiker du själv väljer. Tittarhistorik används inte i denna version."
+        : recommendationsConnected
+          ? "Avstängt. Dina lokala val används inte av För dig förrän du slår på personalisering."
+        : "Sparar dina val på enheten. Tittarhistorik skickas inte till Pleni."
     }
   ];
   return (
@@ -3099,7 +3386,7 @@ function ProfileScreen({
             subtitle={
               savedCount === 0
                 ? "Inga sparade klipp ännu"
-                : `${savedCount} ${savedCount === 1 ? "klipp" : "klipp"} · sparas bara på den här enheten`
+                : `${savedCount} ${savedCount === 1 ? "klipp" : "klipp"} · sparas på den här enheten`
             }
             icon={<Bookmark size={18} />}
             onClick={savedCount > 0 && !savedLoading ? onOpenSaved : undefined}
@@ -3110,7 +3397,7 @@ function ProfileScreen({
             subtitle={
               totalFollowed === 0
                 ? "Du följer ingen ännu"
-                : `${followedSummary} · sparas bara på den här enheten`
+                : `${followedSummary} · används i För dig när personalisering är på`
             }
             icon={<UserPlus size={18} />}
             onClick={onOpenFollowing}
@@ -3188,7 +3475,7 @@ function ProfileScreen({
             title="Redigera mina intressen"
             subtitle={
               selectedParties > 0
-                ? `${selectedParties} partier valda · sparas bara på den här enheten`
+                ? `${selectedParties} partier valda${consent.personal ? " · kopplade till För dig" : " · sparas på enheten"}`
                 : "Inga partier valda ännu"
             }
             icon={<Sliders size={18} />}
@@ -3210,6 +3497,11 @@ function ProfileScreen({
               }
             />
           ))}
+          {recommendationError && (
+            <div className="recommendation-error" role="alert">
+              {recommendationError}
+            </div>
+          )}
         </Group>
         <nav className="profile-legal-links" aria-label="Juridisk information">
           {LEGAL_PAGE_ORDER.map((page) => (

@@ -600,9 +600,10 @@ a supplied clip array, so the player, the FE-4 dwell activation and the FE-3
 loop instrumentation are reused rather than duplicated.
 
 **A followed politician is Article 9 data.** A list of politicians a person
-chose to follow reveals political opinion as surely as the onboarding leaning
-slider does. It stays on the device, it is never put in a URL or a log
-(`C-13`), and the Profil copy says where it lives.
+chose to follow can reveal political opinion. The library remains device-local;
+only followed party and politician IDs are projected into the private
+recommendation service after explicit consent. It is never put in a URL or a
+log (`C-13`), and the Profil copy says where it lives.
 
 **Demo data that stays, by owner's decision:** `TRENDING` and the recent-search
 chips in Sök. Kept as a reminder of what to build, and labelled in the UI so
@@ -1308,10 +1309,85 @@ is gated.
 prerequisite Block T. Frontend gates `FE-1` … `FE-4` must land **before**
 collection starts, or the first data is already corrupt.
 
+### F2a — Served-slate envelope for explicit-interest V1
+
+**Approved 2026-08-14. Depends on:** the F1 consent/profile slice and P1.
+**Status:** implementation may proceed; production activation remains gated on
+F0 owner approval. This is not the playback-event half of F2 and must not be
+recorded as completing F2.
+
+**Objective.** Give the deterministic feed an idempotent request/served-item
+denominator without collecting watch behaviour. Anonymous `Senaste` requests
+still create no viewer row. Playback events, inferred interests, analytics and
+model-training reuse remain out of scope.
+
+**Scope — may create or modify:**
+
+```
+migrations/018_recommendation_identity.{up,down}.sql
+migrations/019_rule_based_feed.{up,down}.sql
+supabase/functions/_shared/{cors,jwt,db,consent,ranking,svix}.ts
+supabase/functions/{consent,feed-requests,clerk-webhook}/index.ts
+supabase/functions/{deno.d.ts,tsconfig.json}
+supabase/functions/tests/*.test.ts
+supabase/config.toml
+web/src/{account,consent}.ts
+web/src/{App,onboarding}.tsx
+web/src/{library-store,onboarding-store,supabase,types}.ts
+web/src/vite-env.d.ts
+web/src/styles.css
+web/tests/recommendation-api.test.mjs
+tests/unit/test_recommendation_migrations.py
+tests/live/test_private_rls.py
+tasks.py
+.github/workflows/ci.yml
+.env.example
+web/.env.example
+docs/DEPENDENCIES.md
+docs/RECOMMENDATION_PREREQUISITES.md   (status only)
+docs/privacy/*                         (status/processing-description only)
+PROGRESS.md                            (handoff only)
+```
+
+No pipeline file or `src/contracts.py` is in scope. Migrations start at 018
+because 009 and 012–017 already exist and 010/011 were never created;
+migration numbers are monotonic, not gap-filling.
+
+**Build.** A private append-only consent ledger and explicit preference rows;
+service-role-only RPCs used by Edge Functions after Clerk JWT verification; an
+idempotent `feed_requests`/`feed_items` envelope; a public security-invoker clip
+catalogue view ordered by `sources.debate_date`; and an inactive-by-default
+frontend rollout flag. The only stored ranking inputs are parties the viewer
+affirmatively selected and parties/politicians they follow. The left/right
+onboarding question is removed because V1 has no approved or reliable
+ideological-to-party mapping.
+
+**Acceptance.** A retry returns the same slate; withdrawal makes the next
+personalized request fail closed; signed-out `Senaste` writes nothing; every
+served item records position, pool, reason, algorithm version and score
+components; no playback or inferred-interest row is created by this slice.
+
 ## F3 — Deterministic `För dig`
 
 **Depends on:** F2 **and** P1 continuous supply. **Gated** — see the exit
 criteria in `RECOMMENDATION_PREREQUISITES.md` §13. Do not start.
+
+### F3a — Explicit-interest deterministic ranker
+
+**Approved 2026-08-14 as part of F2a.** This is a rules-only preview behind
+`VITE_RECOMMENDATIONS_ENABLED`; it does not mark F3 complete and must not be
+enabled for real viewers until the F0 notice/retention decisions are approved
+and the F2a migrations and functions are deployed together.
+
+**Policy.** Candidate pools are `fresh_interest`, `fresh_general`,
+`back_catalog_interest` and `adjacent_interest`, mixed 5/2/2/1 per ten when
+inventory permits. Rank uses explicit party/politician affinity, freshness from
+`sources.debate_date`, and `rank_in_speech` as the initial quality prior. Raw C7
+`final_score` is not compared across speeches. The slate suppresses recently
+served clips, prevents adjacent speaker repeats, applies transparent soft
+speaker/party caps, and relaxes them deterministically for sparse inventory.
+Random exploration remains disabled because no selection propensity is sampled
+in this slice.
 
 ## F4 — Frontend integration & controlled launch
 ## F5 — Content understanding & exploration

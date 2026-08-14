@@ -11,19 +11,24 @@ export interface ConsentState {
 }
 
 /**
- * Answers from the onboarding flow. Device-local only until `F1` — see
- * `onboarding-store.ts`.
- *
- * `leaning` is 0 (left) to 100 (right), 50 being centre. It is a self-declared
- * political opinion, so it is Article 9 special-category data and the most
- * sensitive field the app holds.
+ * Answers from the onboarding flow. The device cache retains this shape; an
+ * enabled, consented rule feed sends only explicit parties and follows through
+ * the private recommendation service.
  */
 export interface OnboardingState {
-  leaning: number;
   parties: PartyCode[];
   consent: ConsentState;
   acceptedTerms: boolean;
   completedAt: string | null;
+}
+
+/** Server-confirmed explicit-interest state. Absence always means denied. */
+export interface RecommendationProfile {
+  personalization: boolean;
+  noticeVersion: string | null;
+  explicitParties: PartyCode[];
+  followedParties: PartyCode[];
+  followedPoliticians: string[];
 }
 
 /**
@@ -48,12 +53,10 @@ export interface Politician {
 /**
  * Everything the viewer has chosen to keep: follows, saves, likes.
  *
- * **Device-local, and deliberately so.** A list of politicians someone follows
- * reveals political opinion just as the onboarding leaning slider does, so it
- * is Article 9 special-category data. `library-store.ts` is the only writer and
- * nothing here is transmitted until `F1` provides a lawful place to put it —
- * `C-1` (private schema), `C-2` (consent ledger) and `C-6` (server enforcement)
- * are open GATEs.
+ * **Device-local library with a consented recommendation projection.** Saves
+ * and likes never leave this store in rule V1. Followed party/politician IDs
+ * are copied to the private recommendation service only while the viewer has
+ * explicitly enabled personalisation.
  *
  * Politicians are keyed by `politicians.id` and never by a display name
  * (`Q-2`); clips by `clips.id`.
@@ -149,6 +152,12 @@ export interface ClipItem {
    * them only when a real count exists behind them.
    */
   isSample: boolean;
+  /** Present only when the server placed this clip in a consented `För dig` slate. */
+  recommendationReason?: string;
+  recommendationReasonCode?: string;
+  feedRequestId?: string;
+  feedItemId?: string;
+  feedPosition?: number;
 }
 
 /**
@@ -163,4 +172,19 @@ export interface ClipFeed {
   source: ClipSource;
   /** Present when the Supabase read failed and the feed is empty. */
   error?: string;
+}
+
+export interface RecommendationFeedResponse {
+  feedRequestId: string;
+  algorithmVersion: string;
+  items: Array<{
+    feedItemId: string;
+    position: number;
+    pool: string;
+    reasonCode: string;
+    reason: string;
+    score: number;
+    scoreComponents: Record<string, unknown>;
+    clip: ClipItem;
+  }>;
 }

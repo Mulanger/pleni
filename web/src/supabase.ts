@@ -1,4 +1,5 @@
 import { normalizeParty, SAMPLE_CLIPS } from "./data";
+import { recommendationsEnabled } from "./account";
 import type { ClipFeed, ClipItem, PartyCode, PartyProfile, Politician } from "./types";
 
 interface RawSource {
@@ -55,6 +56,30 @@ interface RawPartyProfile {
   short_name: string | null;
   color: string | null;
   display_order: number | null;
+}
+
+interface RawFeedCatalogueClip {
+  id: string;
+  speech_id: string;
+  politician_id: string | null;
+  politician_name: string | null;
+  politician_role: string | null;
+  politician_avatar_url: string | null;
+  speaker_name: string;
+  party: string | null;
+  anforandetyp: string | null;
+  archetype: string | null;
+  title: string | null;
+  transcript: string | null;
+  topic: string | null;
+  duration_s: number | string;
+  url_540x960: string;
+  thumb_url: string;
+  source_title: string;
+  source_url: string;
+  debate_date: string;
+  published_at: string | null;
+  rank_in_speech: number;
 }
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, "") ?? "";
@@ -312,6 +337,31 @@ export async function loadPublishedClips(limit = 60): Promise<ClipFeed> {
       : { clips: [], source: "supabase", error: "Supabase is not configured" };
   }
 
+  if (recommendationsEnabled) {
+    const catalogueQuery = new URLSearchParams({
+      select: "*",
+      order: "debate_date.desc,published_at.desc,id.asc",
+      limit: String(limit)
+    });
+    try {
+      const response = await supabaseRest(`feed_clip_catalogue?${catalogueQuery.toString()}`);
+      if (!response.ok) {
+        return { clips: [], source: "supabase", error: `Supabase svarade ${response.status}` };
+      }
+      const rows = (await response.json()) as RawFeedCatalogueClip[];
+      return {
+        clips: rows.map(mapFeedCatalogueClip).filter((clip) => clip.videoUrl.length > 0),
+        source: "supabase"
+      };
+    } catch (error) {
+      return {
+        clips: [],
+        source: "supabase",
+        error: error instanceof Error ? error.message : "Kunde inte hämta klippen"
+      };
+    }
+  }
+
   const query = new URLSearchParams({
     select: clipSelect(),
     order: "published_at.desc",
@@ -339,6 +389,34 @@ export async function loadPublishedClips(limit = 60): Promise<ClipFeed> {
     return { clips: SAMPLE_CLIPS, source: "sample" };
   }
   return { clips, source: "supabase" };
+}
+
+function mapFeedCatalogueClip(row: RawFeedCatalogueClip): ClipItem {
+  const party = normalizeParty(row.party);
+  return {
+    id: row.id,
+    speechId: row.speech_id,
+    politicianId: row.politician_id,
+    politicianName: row.politician_name,
+    politicianRole: row.politician_role,
+    politicianAvatarUrl: row.politician_avatar_url,
+    speakerName: row.speaker_name?.trim() || "Riksdagen",
+    party,
+    anforandetyp: row.anforandetyp?.trim() ?? "",
+    archetype: row.archetype?.trim() ?? "",
+    title: row.title?.trim() || "Anförande i riksdagen",
+    transcript: row.transcript?.trim() ?? "",
+    topic: row.topic?.trim() || null,
+    durationS: Number(row.duration_s) || 0,
+    videoUrl: row.url_540x960?.trim() ?? "",
+    thumbUrl: row.thumb_url?.trim() ?? "",
+    sourceTitle: row.source_title?.trim() || "Riksdagen",
+    sourceUrl: row.source_url?.trim() ?? "",
+    debateDate: row.debate_date,
+    publishedAt: row.published_at,
+    rank: row.rank_in_speech,
+    isSample: false
+  };
 }
 
 /* ------------------------------------------------------------------ *

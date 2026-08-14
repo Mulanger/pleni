@@ -2,11 +2,19 @@
 
 **Status:** Working checklist. Not yet reviewed or signed off.
 
-**Last updated:** 2026-08-09 (UI12 legal surfaces and F0 evidence pack)
+**Last updated:** 2026-08-14 (inactive explicit-interest rule-serving slice)
 
 **Companion to:** `docs/RECOMMENDATION_LAUNCH_PLAN.md` (the architecture), `docs/BUILD_PLAN.md` (the chunks), `AGENTS.md` (the rules).
 
 **Question this answers:** *What has to be true before we can start building the recommender?*
+
+**Engineering preview status (2026-08-14):** migrations 018/019, service-only
+consent/feed RPCs, Clerk JWT and Svix verification, deterministic 5/2/2/1 rule
+ranking, served-slate recording, and onboarding/feed wiring now exist behind
+`VITE_RECOMMENDATIONS_ENABLED=false`. They are not deployed or activated by
+this work. Checkboxes below remain open wherever acceptance still requires the
+real Supabase project, lifecycle/rights workflows, retention, owner approval,
+telemetry or production QA.
 
 ---
 
@@ -379,6 +387,12 @@ used — it requires sharing the Supabase JWT secret with a third party.
 Nothing in this block may ship before `F0` has produced its decisions, because the table shapes
 encode the legal answers.
 
+**Partial engineering evidence, 2026-08-14:** C-1–C-8 have an inactive
+implementation in migration 018 and the `consent` Edge Function. It defaults
+off, keeps the ledger append-only, derives the subject from verified Clerk JWTs,
+and deletes explicit preferences on withdrawal. C-10–C-12 and the required
+real-database RLS matrix are still open, so this is not F1 completion.
+
 - [ ] **C-1 · GATE — Create the `private` schema** and revoke `usage` from `anon` and
       `authenticated`. It must not be exposed through PostgREST at all. Public political content
       stays in `public`; viewer behaviour and political-interest profiles never do.
@@ -424,6 +438,12 @@ Without this there is no denominator, so there is nothing to evaluate a ranker a
 This block is the reason `Senaste` ships before `För dig` — it is instrumented first on the easy
 feed.
 
+**Partial engineering evidence, 2026-08-14:** migration 019 records an
+idempotent, transactionally served denominator for consented `for_you` slates
+(part of T-1/T-2/T-4). It deliberately creates no playback-event table, event
+token, outbox or inferred aggregate, and records nothing for `latest`. This is
+not F2 telemetry completion and does not create ML training data.
+
 - [ ] **T-1 · GATE — `private.feed_requests`**: request id, nullable subject/session, mode,
       algorithm version, model version, experiment snapshot, consent state, request time.
 - [ ] **T-2 · GATE — `private.feed_items`**: request, clip, position, pool, reason, score
@@ -461,6 +481,12 @@ feed.
 
 `web/src/App.tsx` is 1042 lines of demo. Several current behaviours would actively corrupt the
 training data, so they must change *before* telemetry is switched on, not after.
+
+**Partial engineering evidence, 2026-08-14:** behind the inactive flag, feed
+mode cancels stale requests, renders the server order, connects the consented
+onboarding party/follow choices, shows a reason label, and falls back honestly to
+`Senaste`. Cursor pagination, not-interested/reset, the event state machine and
+the full mobile QA matrix remain open.
 
 - [x] **FE-1 · DONE 2026-08-02 — Remove `SAMPLE_CLIPS` fallback from any telemetry-bearing build.**
       `loadPublishedClips()` returns samples on missing env vars, on empty results and never
@@ -504,7 +530,9 @@ training data, so they must change *before* telemetry is switched on, not after.
 
 ## 10. Block Q — Content and data readiness
 
-- [ ] **Q-1 · BLOCKER — Inventory volume.** 16 clips from one debate cannot fill five retrieval
+- [ ] **Q-1 · BLOCKER — Inventory volume.** The owner reports more than 3,000 clips as of
+      2026-08-14, so the original 16-clip volume blocker is likely obsolete, but party/speaker/date
+      distribution and the minimum viable catalogue still need a committed measurement. 16 clips from one debate cannot fill five retrieval
       pools or a 5/2/2/1 mix. Define the minimum viable catalogue (parties covered, speakers,
       debate dates, clips per party) before `För dig` is anything but a shuffle. This is
       gated on `P1`, and it is the single slowest prerequisite.

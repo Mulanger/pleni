@@ -2,6 +2,11 @@
 
 Decision record for the current release, 2026-08-09.
 
+Implementation note, 2026-08-14: an explicit-choice rule recommender is present
+behind `VITE_RECOMMENDATIONS_ENABLED=false`. It must remain inactive until the
+open approval, retention, access-review and real-database test gates are closed.
+Its first version excludes playback history, inference and exploration.
+
 ## Minors and onboarding (F0-7)
 
 - Public parliamentary video is available without an account or age check.

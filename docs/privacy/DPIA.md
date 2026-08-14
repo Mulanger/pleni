@@ -1,6 +1,6 @@
 # Data protection impact assessment
 
-Draft for owner approval, 2026-08-09. Scope: current Pleni web app plus the
+Draft for owner approval, updated 2026-08-14. Scope: current Pleni web app plus the
 planned personalised political-video recommender described in
 `docs/RECOMMENDATION_LAUNCH_PLAN.md`.
 
@@ -14,7 +14,11 @@ state are collected from real viewers.
 
 The current release is materially narrower: it serves a public feed, keeps
 follows/preferences in account-scoped browser storage, and does not send watch
-history or an inferred interest profile to Pleni's server.
+history or an inferred interest profile to Pleni's server. An explicit-choice
+rule recommender now exists behind an inactive build flag. If separately
+approved and deployed it stores selected/followed parties, followed politicians
+and served slates, but still no watch history or inferred state. The former
+left/right self-placement question has been removed.
 
 ## 2. Proposed processing
 
@@ -61,7 +65,7 @@ not remove the Article 5, 6, 9, 12–15, 21, 25, 32 and 35 obligations.
 | Risk | Likelihood / impact before controls | Required control | Residual position |
 |---|---|---|---|
 | Political preference leaks between people sharing a device | Medium / high | Storage keys include Clerk user id; anonymous/bare legacy keys are never adopted. | Low/medium; device owner can still inspect browser storage. |
-| A breach reveals a named viewer's political profile | Medium / high | No server profile in V1; future private schema, RLS, least privilege, encryption, access audit and consent enforcement are gates. | Not acceptable until F1/F0 controls are tested. |
+| A breach reveals a named viewer's political profile | Medium / high | Inactive V1 uses a non-exposed `private` schema, service-only RPCs, Clerk JWT verification, explicit consent and immediate preference deletion on withdrawal. Deployment, real-Postgres RLS matrix, staff access audit, retention and owner approval remain gates. | Not acceptable to activate until remaining F1/F0 controls are tested. |
 | Consent is coerced by blocking the public feed | High / high | `Senaste` works without account or consent; onboarding appears only after sign-in and can be skipped. | Low. |
 | Privacy notice is mistaken for contractual consent | Medium / medium | Separate terms and privacy links; no “accept privacy policy” checkbox. | Low. |
 | Watch history is collected through CDN logs without consent | Medium / high | Do not join/access Bunny logs for recommendations; provider logs limited to delivery/security; document any future access. | Low/medium pending provider configuration audit. |
@@ -87,6 +91,10 @@ Server-side personalisation may not launch until:
    neutrality.
 7. Incident response, access review, export, deletion and takedown exercises
    have completed successfully.
+
+The inactive rule-based implementation is engineering evidence for controls
+1–2, not approval of them. Static migration tests and local Edge tests do not
+replace deployment validation against the real database or owner approval.
 
 ## 7. Approval
 

@@ -1,19 +1,19 @@
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Fingerprint, ShieldCheck, Sparkles, User } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Fingerprint, ShieldCheck, Sparkles } from "lucide-react";
 
 import { PARTIES } from "./data";
 import type { OnboardingState, PartyCode } from "./types";
 
 /**
- * Three-step onboarding, shown once per signed-in account and re-openable from
+ * Two-step onboarding, shown once per signed-in account and re-openable from
  * Profil. Anonymous visitors never see this flow.
  *
- * **Everything here stays on the device.** `C-5` allows exactly this and no
- * more: "Until the user actively grants, party choices stay local and no watch
- * history or inferred state is transmitted or persisted." The private schema
- * (`C-1`), the consent ledger (`C-2`) and the F0 documents do not exist yet, so
- * there is nowhere lawful to send any of it. `persistOnboarding` writes to
- * `localStorage` and nothing else — see `web/src/onboarding-store.ts`.
+ * Party choices remain on the device until the viewer actively grants
+ * personalisation. In the recommendation rollout, that grant stores only the
+ * explicitly selected parties plus followed parties/politicians in the private
+ * recommendation schema. Watch history is not sent or used by this first
+ * rule-based version. The former left/right self-placement question was removed
+ * because V1 has no approved or reliable ideological-to-content mapping.
  *
  * Two deliberate departures from the supplied design, both required by
  * `docs/RECOMMENDATION_PREREQUISITES.md`:
@@ -34,17 +34,20 @@ const PARTY_ORDER: PartyCode[] = ["V", "S", "MP", "C", "L", "KD", "M", "SD"];
 export function Onboarding({
   initial,
   onComplete,
-  onSkip
+  onSkip,
+  recommendationsConnected = false
 }: {
   initial: OnboardingState;
-  onComplete: (state: OnboardingState) => void;
+  onComplete: (state: OnboardingState) => void | Promise<void>;
   onSkip: () => void;
+  recommendationsConnected?: boolean;
 }) {
   const [step, setStep] = useState(1);
-  const [leaning, setLeaning] = useState(initial.leaning);
   const [parties, setParties] = useState<PartyCode[]>(initial.parties);
   const [consent, setConsent] = useState(initial.consent);
   const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const toggleParty = (party: PartyCode) =>
     setParties((current) =>
@@ -61,18 +64,25 @@ export function Onboarding({
    * the personalised feed on its own. Analytics and email remain false because
    * neither purpose is offered in the current product.
    */
-  const finish = (granted: OnboardingState["consent"]) => {
-    onComplete({
-      leaning,
-      parties,
-      consent: granted,
-      // Account creation presents the current terms before Clerk opens. This
-      // local marker is UI state, not the future F1 consent ledger.
-      acceptedTerms: true,
-      completedAt: new Date().toISOString()
-    });
-    setConsent(granted);
-    setDone(true);
+  const finish = async (granted: OnboardingState["consent"]) => {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onComplete({
+        parties,
+        consent: granted,
+        // Account creation presents the current terms before Clerk opens. This
+        // local marker is UI state, not the future F1 consent ledger.
+        acceptedTerms: true,
+        completedAt: new Date().toISOString()
+      });
+      setConsent(granted);
+      setDone(true);
+    } catch {
+      setSubmitError("Kunde inte spara ditt val. Kontrollera anslutningen och försök igen.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (done) {
@@ -107,7 +117,7 @@ export function Onboarding({
         className={`onboarding-card onboarding-card--step-${step}`}
         role="dialog"
         aria-modal="true"
-        aria-label={`Onboarding, steg ${step} av 3`}
+        aria-label={`Onboarding, steg ${step} av 2`}
       >
         <div className="onboarding-progress">
           <div className="onboarding-progress-start">
@@ -122,7 +132,7 @@ export function Onboarding({
               </button>
             )}
             <div className="onboarding-bars">
-              {[1, 2, 3].map((index) => (
+              {[1, 2].map((index) => (
                 <span
                   key={index}
                   className={
@@ -136,57 +146,11 @@ export function Onboarding({
               ))}
             </div>
           </div>
-          <span className="onboarding-step">Steg {step} av 3</span>
+          <span className="onboarding-step">Steg {step} av 2</span>
         </div>
 
         <div className="onboarding-body">
           {step === 1 && (
-            <div className="onboarding-pane">
-              <span className="onboarding-icon">
-                <User size={22} />
-              </span>
-              <h2>Var står du politiskt?</h2>
-              <p className="onboarding-lede">
-                Frivilligt. Det hjälper oss föreslå klipp, och svaret lämnar aldrig din enhet
-                förrän du slår på personalisering.
-              </p>
-
-              <div className="leaning">
-                <div className="leaning-track">
-                  <span className="leaning-centre" />
-                  <span
-                    className={
-                      leaning < 50
-                        ? "leaning-fill leaning-fill--left"
-                        : leaning > 50
-                          ? "leaning-fill leaning-fill--right"
-                          : "leaning-fill"
-                    }
-                    style={{
-                      left: `${Math.min(leaning, 50)}%`,
-                      width: `${Math.abs(leaning - 50)}%`
-                    }}
-                  />
-                  <span className="leaning-thumb" style={{ left: `calc(${leaning}% - 13px)` }} />
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={leaning}
-                    aria-label="Politisk inriktning från vänster till höger"
-                    onChange={(event) => setLeaning(Number(event.target.value))}
-                  />
-                </div>
-                <div className="leaning-labels">
-                  <span className={leaning < 50 ? "is-on" : ""}>Vänster</span>
-                  <span className={leaning === 50 ? "is-on" : ""}>Mitten</span>
-                  <span className={leaning > 50 ? "is-on" : ""}>Höger</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {step === 2 && (
             <div className="onboarding-pane">
               <span className="onboarding-icon">
                 <Fingerprint size={22} />
@@ -221,15 +185,17 @@ export function Onboarding({
             </div>
           )}
 
-          {step === 3 && (
+          {step === 2 && (
             <div className="onboarding-pane">
               <span className="onboarding-icon">
                 <ShieldCheck size={22} />
               </span>
               <h2>Ditt flöde, ditt val</h2>
               <p className="onboarding-lede">
-                Dina val sparas bara på den här enheten. Utan personalisering ser du{" "}
-                <strong>Senaste</strong> — alla klipp, senaste först.
+                {recommendationsConnected
+                  ? "Om du slår på personalisering sparar Pleni partierna och politikerna du väljer och använder dem för att ordna För dig. Valen kan avslöja politiska åsikter. Tittarhistorik används inte i den här versionen."
+                  : "Dina val sparas bara på den här enheten."}{" "}
+                Utan personalisering ser du <strong>Senaste</strong> — alla klipp, senaste först.
               </p>
 
               <div className="onboarding-age-note">
@@ -244,39 +210,47 @@ export function Onboarding({
                 <button
                   type="button"
                   className="onboarding-primary"
-                  onClick={() => finish({ personal: true, analytics: false, email: false })}
+                  disabled={submitting}
+                  onClick={() => void finish({ personal: true, analytics: false, email: false })}
                 >
-                  Slå på personalisering
+                  {submitting ? "Sparar…" : "Slå på personalisering"}
                 </button>
                 <button
                   type="button"
                   className="onboarding-primary onboarding-primary--ghost"
-                  onClick={() => finish({ personal: false, analytics: false, email: false })}
+                  disabled={submitting}
+                  onClick={() => void finish({ personal: false, analytics: false, email: false })}
                 >
                   Fortsätt utan
                 </button>
               </div>
 
+              {submitError && (
+                <p className="onboarding-submit-error" role="alert">
+                  {submitError}
+                </p>
+              )}
+
               <p className="onboarding-fineprint">
-                Du kan stänga av personalisering när som helst under Profil. Villkor och
-                integritetsinformation finns alltid där.
+                Du kan stänga av personalisering när som helst under Profil. Då används Senaste
+                direkt och sparade rekommendationsval tas bort från Plenis server.
               </p>
             </div>
           )}
 
-          {step < 3 && (
+          {step < 2 && (
             <div className="onboarding-actions">
               <button
                 type="button"
                 className="onboarding-primary"
-                onClick={() => setStep((s) => Math.min(3, s + 1))}
+                onClick={() => setStep((s) => Math.min(2, s + 1))}
               >
                 Nästa steg <ArrowRight size={16} />
               </button>
             </div>
           )}
 
-          {step < 3 && (
+          {step < 2 && (
             <button type="button" className="onboarding-skip" onClick={onSkip}>
               Hoppa över — visa Senaste
             </button>

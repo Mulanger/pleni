@@ -3,22 +3,11 @@ import type { OnboardingState, PartyCode } from "./types";
 /**
  * Device-local, account-scoped storage for onboarding answers.
  *
- * This module is deliberately the *only* place onboarding state is written, so
- * "does any of this leave the device?" is answerable by reading one file. The
- * answer is no: `localStorage` and nothing else. The Clerk user id is part of
- * the key so two accounts on one device never share political preferences.
- *
- * That is not a placeholder for a server call. Political leaning and party
- * preferences are special-category data under GDPR Article 9, and the schema
- * that could lawfully hold them does not exist yet — `C-1` (private schema),
- * `C-2` (append-only consent ledger with Article 6 basis, Article 9 condition
- * and notice version) and `C-6` (server-side enforcement) are all open GATE
- * items, as are the F0 documents that decide retention. Sending any of this to
- * Supabase before those exist would be collection without a lawful basis and
- * without a record of what was agreed.
- *
- * When `F1` lands, this becomes the local half of a sync: the ledger is the
- * source of truth and this cache follows it.
+ * This remains the device cache for presentation state. When the recommendation
+ * rollout is enabled, the private
+ * consent service is authoritative for personalisation and stores only the
+ * explicitly selected parties plus followed parties/politicians after a grant.
+ * The Clerk user id in this cache key keeps accounts separate on one device.
  */
 
 const KEY_PREFIX = "riket.onboarding.v1";
@@ -32,7 +21,6 @@ function keyFor(userId: string): string {
 }
 
 export const EMPTY_ONBOARDING: OnboardingState = {
-  leaning: 50,
   parties: [],
   consent: { personal: false, analytics: false, email: false },
   acceptedTerms: false,
@@ -55,11 +43,7 @@ export function readOnboarding(userId: string | null): OnboardingState {
       return EMPTY_ONBOARDING;
     }
     const value = parsed as Partial<OnboardingState>;
-    const leaning = typeof value.leaning === "number" ? value.leaning : 50;
     return {
-      // Clamp rather than trust: this is user-writable storage, and a value
-      // outside 0-100 would render the slider off its track.
-      leaning: Math.min(100, Math.max(0, leaning)),
       parties: Array.isArray(value.parties)
         ? value.parties.filter((p): p is PartyCode => VALID_PARTIES.includes(p as PartyCode))
         : [],

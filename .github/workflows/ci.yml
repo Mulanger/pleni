@@ -84,6 +84,31 @@ jobs:
         # a bad deploy would hit (ADR 006).
         run: node ./node_modules/vite/bin/vite.js build
 
+  recommendations:
+    name: Recommendations (rules, auth, Edge typecheck)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci --prefix web
+
+      - name: Edge Function typecheck
+        run: node web/node_modules/typescript/bin/tsc --noEmit -p supabase/functions/tsconfig.json
+
+      - name: Rule, Clerk JWT and webhook tests
+        run: >-
+          node --experimental-strip-types --test
+          supabase/functions/tests/ranking.test.ts
+          supabase/functions/tests/jwt.test.ts
+          supabase/functions/tests/svix.test.ts
+
   hygiene:
     name: Repository hygiene
     runs-on: ubuntu-latest

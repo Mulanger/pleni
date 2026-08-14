@@ -4333,3 +4333,77 @@ states are covered by dependency-free regression tests.
 **Next agent should know:** keep portrait success state keyed by the canonical
 immutable source URL. Do not reintroduce a passive mount reset or make cached
 image visibility depend solely on a future `load` event.
+
+## F2a/F3a — explicit-interest rule feed — IMPLEMENTED, INACTIVE 2026-08-14
+
+**Built:** migrations 018/019 add a non-exposed `private` schema, append-only
+versioned personalisation consent, explicit party/politician preferences, and an
+idempotent served-slate envelope. Added Clerk RS256/JWKS verification, strict
+origin checks, Svix-verified Clerk deletion, consent/feed Edge Functions, and a
+deterministic rule ranker. The React app now sends onboarding party choices and
+followed parties/politicians only after a server-confirmed grant, requests the
+server order for `För dig`, cancels stale requests, shows reason labels, deletes
+preferences on withdrawal, and falls back to `Senaste` on failure. Onboarding is
+now two steps; the unused left/right page and its stored field were removed, and
+legacy `leaning` values are ignored. The complete slice is behind
+`VITE_RECOMMENDATIONS_ENABLED=false`; no migration or function was deployed and
+no real viewer data was collected.
+
+**Tests:** 19 dependency-free Edge tests green (mixer, date freshness, quality
+prior, seen suppression, diversity/cap relaxation, deterministic fallback,
+Clerk signature/issuer/expiry/authorized-party/key rotation, Svix tamper/age);
+15 complete web tests green; strict TypeScript checks green for web and Edge;
+production Vite build green; PWA verifier green with exactly 9 app-shell entries
+and no video/private caching; 6 recommendation migration guard tests green;
+full Python test phase green: **403 passed, 68 deselected**, one existing
+`audioop` warning; strict mypy green on 82 source files; focused new Python lint
+green; `git diff --check` green. The combined `python tasks.py test lint
+typecheck` stopped after the green test phase because the pre-existing untracked
+`scripts/_publish_2026_jan_apr.py` has an unsorted import block. That user-owned
+file was preserved unchanged.
+
+**Contracts touched:** none.
+
+**Decisions made:**
+- Rule V1 uses only parties explicitly selected in onboarding and followed
+  parties/politicians. Likes, saves, watch history and inferred interests never
+  leave the device in this slice. The left/right onboarding question was removed;
+  no ideological-to-party mapping has been approved.
+- The explainable score weights explicit interest, freshness from
+  `sources.debate_date`, and `rank_in_speech`; raw cross-speech C7
+  `final_score` is never compared. Backfills do not become new because they were
+  recently published.
+- The planned first-ten mix is five fresh-interest, two fresh-general, two older
+  matching-interest and one adjacent slot. Because V1 has no reviewed adjacency
+  taxonomy and exploration is disabled, the final slot falls back
+  deterministically and records that fallback instead of relabelling an old
+  unrelated clip as adjacent.
+- The slate has a hard two-clips-per-speech ceiling, soft speaker/party caps,
+  adjacent-speaker suppression and deterministic sparse-inventory relaxation.
+  Recently served clips are suppressed for 30 days while unseen inventory is
+  sufficient.
+- Browser roles have no private-schema access or RPC execution. Edge Functions
+  derive the Clerk subject exclusively from a verified token and use the service
+  role only after that boundary. A consent recheck and slate insert occur in one
+  database function, so withdrawal wins over an in-flight request.
+
+**Observations (not fixed, out of scope):** the Browser control surface was not
+available in this desktop session, so no interactive visual pass was possible;
+the TypeScript/build/PWA and component-level checks completed. The owner reports
+more than 3,000 clips, but party/speaker/date distribution still needs a
+committed readiness measurement before closing Q-1.
+
+**Blocked / needs a decision:** production activation remains blocked on the
+explicit F0 owner approval, retention periods/jobs, access audit, subject
+export/reset/delete workflows, a real-Postgres RLS/grant/idempotency/deletion
+matrix, deployment of both migrations and all three functions, Clerk webhook
+configuration, and controlled mobile QA. Full F2 playback telemetry and ML data
+collection remain deliberately unbuilt.
+
+**Next agent should know:** deploy migrations 018 then 019 and the
+`consent`, `feed-requests` and `clerk-webhook` functions as one gated release;
+configure exact `CLERK_ISSUERS`, `ALLOWED_ORIGINS` and
+`CLERK_WEBHOOK_SIGNING_SECRET`; validate in staging/real Postgres; update the
+public privacy notice; only then set `VITE_RECOMMENDATIONS_ENABLED=true` for a
+controlled build. Do not enable the flag against an undeployed schema. Do not
+add playback telemetry or learned ranking under this slice.

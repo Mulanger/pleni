@@ -43,9 +43,12 @@ enabled = true
 # instances have different domains, so it is an addition, not an edit.
 domain = "leading-seasnail-33.clerk.accounts.dev"
 
-[functions.feed]
+[functions.feed-requests]
 # A-11: the platform-level check does not validate Clerk's RS256 tokens against
 # the Clerk JWKS. Verification happens inside the handler instead.
+verify_jwt = false
+
+[functions.consent]
 verify_jwt = false
 
 [functions.events]
