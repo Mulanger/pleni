@@ -4511,3 +4511,39 @@ TypeScript green; `git diff --check` green.
 
 **Blocked / needs a decision:** none for consent authentication. The previously
 recorded Clerk deletion-webhook signing-secret task remains separate.
+
+## F2b follow-up — feed refresh and interest editing — DONE 2026-08-14
+
+**Built:** `För dig` is now the default discovery surface for every viewer.
+With explicit consent it requests a new server-ranked slate; without consent or
+an account it draws a fresh 60-clip shuffle from a 240-clip public candidate
+window without creating private viewer data. `Senaste` remains chronological
+and is shown only when the viewer selects that tab. A custom top-of-feed
+pull-down gesture now requests a new slate and presents visible Swedish refresh
+feedback instead of delegating to the browser's disabled page refresh.
+
+Party and politician follow changes now reload `För dig` after their consented
+preference projection reaches the server. Saving onboarding choices and editing
+selected parties does the same. Profile's `Redigera mina intressen` action now
+opens a one-step editor that preserves the existing consent state and never
+re-presents the consent prompt.
+
+**Tests:** frontend strict TypeScript green; Vite production/PWA build green
+(nine precache entries); 15 frontend Node tests green; 20 Edge
+security/ranking/webhook tests green; `git diff --check` green. The default
+Python acceptance command could not run in this desktop runtime because its
+bundled Python has no `pytest`, `ruff` or `mypy` installed; no Python or pipeline
+file changed in this follow-up.
+
+**Contracts touched:** none.
+
+**Decisions made:** anonymous and declined-consent discovery is deliberately
+random rather than a disguised copy of `Senaste`; it creates no request history
+or recommendation profile. A personalized feed failure also stays on `För dig`
+and falls back to the same general shuffle instead of silently changing tabs.
+Pull-to-refresh is available only at the top of the main feed, so normal clip
+swipes and scoped saved/person/party feeds keep their existing behavior.
+
+**Blocked / needs a decision:** none for these five feed scenarios. The earlier
+Clerk account-deletion webhook secret and signed-in production acceptance items
+remain separate.

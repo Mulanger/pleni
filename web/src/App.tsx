@@ -113,6 +113,28 @@ import type {
 
 const NEW_ACCOUNT_QUERY = "pleni_new_account";
 
+type OnboardingMode = "consent" | "interests";
+
+/**
+ * Build a fresh general-discovery slate without creating a viewer profile.
+ * The source catalogue stays date ordered for `Senaste`; only `För dig` uses
+ * this cryptographically seeded Fisher-Yates shuffle.
+ */
+function shuffledClips(clips: ClipItem[], limit = 60): ClipItem[] {
+  const shuffled = [...clips];
+  const entropy = new Uint32Array(shuffled.length);
+  crypto.getRandomValues(entropy);
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = entropy[index] % (index + 1);
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled.slice(0, limit);
+}
+
+function sameStringSet(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value) => right.includes(value));
+}
+
 function downloadJson(value: Record<string, unknown>, filename: string): void {
   const blob = new Blob([JSON.stringify(value, null, 2)], {
     type: "application/json;charset=utf-8"
@@ -243,6 +265,7 @@ const ACTIVATION_DWELL_MS = 180;
  * gesture to one clip, so the window cannot be outrun by a single swipe.
  */
 const POSTER_WINDOW = 3;
+const PULL_REFRESH_TRIGGER = 64;
 
 function App() {
   const { route, navigate, backTo } = useAppNavigation();
@@ -260,6 +283,7 @@ function App() {
   const [feedError, setFeedError] = useState<string | null>(null);
   const [feedNetworkFailed, setFeedNetworkFailed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [feedReloadKey, setFeedReloadKey] = useState(0);
   const pwa = usePwaExperience(feedNetworkFailed);
   const selectedPersonId =
     route.view === "person" || route.view === "person-clips" ? route.personId : null;
@@ -290,6 +314,7 @@ function App() {
   // follow choices only after rollout is enabled and the viewer grants it.
   const [onboarding, setOnboarding] = useState<OnboardingState>(EMPTY_ONBOARDING);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingMode, setOnboardingMode] = useState<OnboardingMode>("consent");
   const [openForYouAfterOnboarding, setOpenForYouAfterOnboarding] = useState(false);
   const [onboardingLoadedUserId, setOnboardingLoadedUserId] = useState<string | null>(null);
   const [libraryLoadedUserId, setLibraryLoadedUserId] = useState<string | null>(null);
@@ -334,6 +359,9 @@ function App() {
     // when this is genuinely the account's first sign-in session.
     const shouldShow =
       newAccountRedirect && viewer.newAccountSession && stored.completedAt === null;
+    if (shouldShow) {
+      setOnboardingMode("consent");
+    }
     setShowOnboarding(shouldShow);
     if (newAccountRedirect && !shouldShow) {
       clearNewAccountRedirect();
@@ -373,6 +401,7 @@ function App() {
         // notice version, so it does not become a recurring prompt.
         if (!profile.personalization && profile.noticeVersion !== PERSONALIZATION_NOTICE_VERSION) {
           setOpenForYouAfterOnboarding(true);
+          setOnboardingMode("consent");
           setShowOnboarding(true);
         }
       })
@@ -382,7 +411,7 @@ function App() {
         setRecommendationError(
           error instanceof RecommendationApiError && error.code === "sign_in_required"
             ? "Logga in igen för att läsa dina rekommendationsval."
-            : "Kunde inte läsa dina rekommendationsval. Senaste används tills vidare."
+            : "Kunde inte läsa dina rekommendationsval. Ett allmänt För dig visas tills vidare."
         );
       })
       .finally(() => {
@@ -498,6 +527,7 @@ function App() {
   const completeOnboarding = async (next: OnboardingState): Promise<void> => {
     if (!recommendationsEnabled) {
       saveOnboarding(next);
+      setFeedReloadKey((current) => current + 1);
       return;
     }
     if (!viewer.signedIn) {
@@ -518,6 +548,31 @@ function App() {
       parties: profile.personalization ? profile.explicitParties : next.parties,
       consent: { ...next.consent, personal: profile.personalization }
     });
+    setFeedReloadKey((current) => current + 1);
+  };
+
+  const saveEditedInterests = async (next: OnboardingState): Promise<void> => {
+    if (!recommendationsEnabled || !recommendationProfile.personalization) {
+      saveOnboarding(next);
+      setFeedReloadKey((current) => current + 1);
+      return;
+    }
+    if (!viewer.signedIn) {
+      viewer.requireSignIn();
+      throw new Error("sign_in_required");
+    }
+    const profile = await syncRecommendationPreferences(
+      preferencePayload(next.parties),
+      viewer.getAccessToken
+    );
+    setRecommendationProfile(profile);
+    setRecommendationError(null);
+    saveOnboarding({
+      ...next,
+      parties: profile.explicitParties,
+      consent: { ...next.consent, personal: profile.personalization }
+    });
+    setFeedReloadKey((current) => current + 1);
   };
 
   const withdrawPersonalization = async (): Promise<void> => {
@@ -534,9 +589,7 @@ function App() {
         ...onboarding,
         consent: { ...onboarding.consent, personal: false }
       });
-      if (feedMode === "fordig") {
-        navigate({ view: "tab", tab: "hem", feedMode: "senaste" }, { replace: true });
-      }
+      setFeedReloadKey((current) => current + 1);
     } catch {
       setRecommendationError("Kunde inte stänga av personalisering. Försök igen.");
     }
@@ -572,9 +625,7 @@ function App() {
         parties: [],
         consent: { ...onboarding.consent, personal: false }
       });
-      if (feedMode === "fordig") {
-        navigate({ view: "tab", tab: "hem", feedMode: "senaste" }, { replace: true });
-      }
+      setFeedReloadKey((current) => current + 1);
       setRecommendationActionMessage("Rekommendationerna är återställda och personalisering är avstängd.");
     } catch {
       setRecommendationError("Kunde inte återställa rekommendationerna. Försök igen.");
@@ -598,9 +649,7 @@ function App() {
         parties: [],
         consent: { ...onboarding.consent, personal: false }
       });
-      if (feedMode === "fordig") {
-        navigate({ view: "tab", tab: "hem", feedMode: "senaste" }, { replace: true });
-      }
+      setFeedReloadKey((current) => current + 1);
       setRecommendationActionMessage("All rekommendationsdata hos Pleni har raderats.");
     } catch {
       setRecommendationError("Kunde inte radera rekommendationsdata. Försök igen.");
@@ -610,21 +659,13 @@ function App() {
   };
 
   const changeFeedMode = (nextMode: FeedMode) => {
-    if (!recommendationsEnabled || nextMode === "senaste") {
-      navigate({ view: "tab", tab: "hem", feedMode: nextMode });
-      return;
-    }
-    if (!viewer.signedIn) {
-      viewer.requireSignIn();
-      return;
-    }
-    if (!recommendationProfileLoaded) return;
-    if (!recommendationProfile.personalization) {
-      setOpenForYouAfterOnboarding(true);
-      setShowOnboarding(true);
-      return;
-    }
-    navigate({ view: "tab", tab: "hem", feedMode: "fordig" });
+    navigate({ view: "tab", tab: "hem", feedMode: nextMode });
+  };
+
+  const refreshFeed = () => {
+    if (loading) return;
+    setLoading(true);
+    setFeedReloadKey((current) => current + 1);
   };
 
   // A changed follow or onboarding party is synced only after the account,
@@ -640,22 +681,31 @@ function App() {
     ) {
       return;
     }
+    const preferences = preferencePayload();
+    if (
+      sameStringSet(preferences.parties, recommendationProfile.explicitParties) &&
+      sameStringSet(preferences.followedParties, recommendationProfile.followedParties) &&
+      sameStringSet(preferences.followedPoliticians, recommendationProfile.followedPoliticians)
+    ) {
+      return;
+    }
     const controller = new AbortController();
     void syncRecommendationPreferences(
-      preferencePayload(),
+      preferences,
       viewer.getAccessToken,
       controller.signal
     )
       .then((profile) => {
         setRecommendationProfile(profile);
         setRecommendationError(null);
+        setFeedReloadKey((current) => current + 1);
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
           setRecommendationError(
             error instanceof RecommendationApiError &&
               error.code === "personalization_consent_required"
-              ? "Personaliseringen har stängts av. Senaste används."
+              ? "Personaliseringen har stängts av. Ett allmänt För dig används."
               : "Ett följval kunde inte synkroniseras. Försök igen om en stund."
           );
         }
@@ -669,28 +719,6 @@ function App() {
     onboardingLoadedUserId,
     recommendationProfile.personalization,
     viewer.userId
-  ]);
-
-  // `För dig` is never an anonymous or unconsented alias for `Senaste` once
-  // the rollout is enabled. Normalize stale/deep-linked routes explicitly.
-  useEffect(() => {
-    if (
-      recommendationsEnabled &&
-      recommendationProfileLoaded &&
-      route.view === "tab" &&
-      route.tab === "hem" &&
-      feedMode === "fordig" &&
-      (!viewer.signedIn || !recommendationProfile.personalization)
-    ) {
-      navigate({ view: "tab", tab: "hem", feedMode: "senaste" }, { replace: true });
-    }
-  }, [
-    feedMode,
-    navigate,
-    recommendationProfile.personalization,
-    recommendationProfileLoaded,
-    route,
-    viewer.signedIn
   ]);
 
   useEffect(() => {
@@ -710,21 +738,27 @@ function App() {
     setClips([]);
     void (async () => {
       try {
-        return personalized
-          ? await loadRuleBasedFeed(viewer.getAccessToken, {
-              limit: 60,
-              clientRequestId: crypto.randomUUID(),
-              signal: controller.signal
-            })
-          : await loadPublishedClips();
+        if (personalized) {
+          return await loadRuleBasedFeed(viewer.getAccessToken, {
+            limit: 60,
+            clientRequestId: crypto.randomUUID(),
+            signal: controller.signal
+          });
+        }
+        const published = await loadPublishedClips(feedMode === "fordig" ? 240 : 60);
+        return feedMode === "fordig"
+          ? { ...published, clips: shuffledClips(published.clips) }
+          : published;
       } catch (error) {
         if (controller.signal.aborted) throw error;
         if (personalized) {
-          navigate({ view: "tab", tab: "hem", feedMode: "senaste" }, { replace: true });
-          const fallback = await loadPublishedClips();
+          const fallback = await loadPublishedClips(240);
           return {
             ...fallback,
-            error: fallback.error ?? "För dig är tillfälligt otillgängligt. Senaste visas."
+            clips: shuffledClips(fallback.clips),
+            error:
+              fallback.error ??
+              "Personaliseringen är tillfälligt otillgänglig. Ett allmänt För dig visas."
           };
         }
         throw error;
@@ -752,7 +786,7 @@ function App() {
     };
   }, [
     feedMode,
-    navigate,
+    feedReloadKey,
     recommendationProfile.personalization,
     recommendationProfileLoaded,
     viewer.signedIn,
@@ -985,12 +1019,21 @@ function App() {
       {viewer.signedIn && showOnboarding && (
         <Onboarding
           initial={onboarding}
+          mode={onboardingMode}
           recommendationsConnected={recommendationsEnabled}
           onComplete={async (next) => {
-            await completeOnboarding(next);
-            clearNewAccountRedirect();
+            if (onboardingMode === "interests") {
+              await saveEditedInterests(next);
+            } else {
+              await completeOnboarding(next);
+              clearNewAccountRedirect();
+            }
           }}
           onSkip={() => {
+            if (onboardingMode === "interests") {
+              setShowOnboarding(false);
+              return;
+            }
             void (async () => {
               let currentProfile = recommendationProfile;
               if (
@@ -1103,6 +1146,7 @@ function App() {
                 loading={loading}
                 clipSource={clipSource}
                 feedError={feedError}
+                onRefresh={refreshFeed}
                 onLike={toggleLikeClip}
                 onSave={toggleSaveClip}
                 onToggleFollow={toggleFollowPolitician}
@@ -1147,6 +1191,7 @@ function App() {
                     return;
                   }
                   setOpenForYouAfterOnboarding(false);
+                  setOnboardingMode("interests");
                   setShowOnboarding(true);
                 }}
                 onToggleConsent={(key) => {
@@ -1165,6 +1210,7 @@ function App() {
                     void withdrawPersonalization();
                   } else {
                     setOpenForYouAfterOnboarding(false);
+                    setOnboardingMode("consent");
                     setShowOnboarding(true);
                   }
                 }}
@@ -1598,6 +1644,7 @@ function FeedScreen({
   loading,
   clipSource,
   feedError,
+  onRefresh,
   onLike,
   onSave,
   onToggleFollow,
@@ -1619,6 +1666,8 @@ function FeedScreen({
   loading: boolean;
   clipSource: ClipSource;
   feedError: string | null;
+  /** Main-feed pull-to-refresh. Scoped collection feeds intentionally omit it. */
+  onRefresh?: () => void;
   onLike: (clipId: string) => void;
   onSave: (clipId: string) => void;
   onToggleFollow: (personId: string) => void;
@@ -1643,7 +1692,12 @@ function FeedScreen({
   const [commentClip, setCommentClip] = useState<ClipItem | null>(null);
   const [predictedDirection, setPredictedDirection] = useState<1 | -1>(1);
   const [playableGeneration, setPlayableGeneration] = useState<string | null>(null);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [refreshRequested, setRefreshRequested] = useState(false);
   const secondLookaheadAllowed = useSecondLookahead();
+  const feedScrollRef = useRef<HTMLDivElement | null>(null);
+  const pullStartY = useRef<number | null>(null);
+  const pullDistanceRef = useRef(0);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const videoRefCallbacks = useRef<
     Record<string, (node: HTMLVideoElement | null) => void>
@@ -1689,6 +1743,70 @@ function FeedScreen({
     setPlayableGeneration(null);
     loopCounts.current = {};
   }, [clips, initialClipId]);
+
+  useEffect(() => {
+    const scroll = feedScrollRef.current;
+    if (!scroll || !onRefresh) return;
+    const resetPull = () => {
+      pullStartY.current = null;
+      pullDistanceRef.current = 0;
+      setPullDistance(0);
+    };
+    const handleTouchStart = (event: TouchEvent) => {
+      if (loading || event.touches.length !== 1 || scroll.scrollTop > 1) {
+        resetPull();
+        return;
+      }
+      pullStartY.current = event.touches[0].clientY;
+    };
+    const handleTouchMove = (event: TouchEvent) => {
+      const startY = pullStartY.current;
+      if (startY === null || event.touches.length !== 1 || scroll.scrollTop > 1) return;
+      const downwardDistance = event.touches[0].clientY - startY;
+      if (downwardDistance <= 0) {
+        pullDistanceRef.current = 0;
+        setPullDistance(0);
+        return;
+      }
+      // Once the first feed item is already at the top, the downward gesture
+      // belongs to Pleni's refresh affordance rather than the browser chrome.
+      event.preventDefault();
+      const dampedDistance = Math.min(88, downwardDistance * 0.7);
+      pullDistanceRef.current = dampedDistance;
+      setPullDistance(dampedDistance);
+    };
+    const handleTouchEnd = () => {
+      const shouldRefresh = pullDistanceRef.current >= PULL_REFRESH_TRIGGER && !loading;
+      pullStartY.current = null;
+      pullDistanceRef.current = 0;
+      if (shouldRefresh) {
+        setPullDistance(44);
+        setRefreshRequested(true);
+        onRefresh();
+      } else {
+        setPullDistance(0);
+      }
+    };
+
+    scroll.addEventListener("touchstart", handleTouchStart, { passive: true });
+    scroll.addEventListener("touchmove", handleTouchMove, { passive: false });
+    scroll.addEventListener("touchend", handleTouchEnd, { passive: true });
+    scroll.addEventListener("touchcancel", resetPull, { passive: true });
+    return () => {
+      scroll.removeEventListener("touchstart", handleTouchStart);
+      scroll.removeEventListener("touchmove", handleTouchMove);
+      scroll.removeEventListener("touchend", handleTouchEnd);
+      scroll.removeEventListener("touchcancel", resetPull);
+    };
+  }, [loading, onRefresh]);
+
+  useEffect(() => {
+    if (refreshRequested && !loading) {
+      feedScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+      setRefreshRequested(false);
+      setPullDistance(0);
+    }
+  }, [loading, refreshRequested]);
 
   // Scroll the opening clip into view once, so the feed does not start at the
   // top and then jump.
@@ -2146,6 +2264,23 @@ function FeedScreen({
 
   return (
     <section className="feed-screen">
+      {onRefresh && (pullDistance > 0 || refreshRequested) && (
+        <div
+          className={refreshRequested ? "feed-refresh feed-refresh--loading" : "feed-refresh"}
+          style={{ opacity: Math.min(1, pullDistance / 38) }}
+          role="status"
+          aria-live="polite"
+        >
+          <RefreshCw size={16} aria-hidden="true" />
+          <span>
+            {refreshRequested
+              ? "Uppdaterar"
+              : pullDistance >= PULL_REFRESH_TRIGGER
+                ? "Släpp för att uppdatera"
+                : "Dra ned för att uppdatera"}
+          </span>
+        </div>
+      )}
       {header ?? (
         <div className="feed-tabs" role="tablist" aria-label="Flöde">
           <button className={feedMode === "fordig" ? "active" : ""} onClick={() => setFeedMode("fordig")}>
@@ -2171,7 +2306,7 @@ function FeedScreen({
         </div>
       )}
 
-      <div className="feed-scroll">
+      <div className="feed-scroll" ref={feedScrollRef}>
         {clips.map((clip, index) => {
           const distanceFromActive = Math.abs(index - windowCentre);
           const withinPosterWindow = distanceFromActive <= POSTER_WINDOW;

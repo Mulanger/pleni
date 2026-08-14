@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Fingerprint, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Fingerprint, ShieldCheck, Sparkles, X } from "lucide-react";
 
 import { PARTIES } from "./data";
 import type { OnboardingState, PartyCode } from "./types";
 
 /**
- * Two-step onboarding, shown once per signed-in account and re-openable from
- * Profil. Anonymous visitors never see this flow.
+ * Two-step consent onboarding, shown once per signed-in account. Profil opens
+ * the separate one-step interest editor, so an existing grant is not requested
+ * again. Anonymous visitors never see either account flow.
  *
  * Party choices remain on the device until the viewer actively grants
  * personalisation. In the recommendation rollout, that grant stores only the
@@ -24,7 +25,7 @@ import type { OnboardingState, PartyCode } from "./types";
  *    not a bundled acceptance. Personalisation defaults to off.
  * 2. **Onboarding can be skipped.** The design gated the whole app behind
  *    accepting terms. `A-9` and decision 3 of the launch plan both require the
- *    non-personalised `Senaste` feed to stay fully usable without consent —
+ *    non-personalised experience to stay fully usable without consent —
  *    consent obtained as the price of entry is not "freely given" under IMY's
  *    guidance, so it would not be valid consent at all.
  */
@@ -35,13 +36,16 @@ export function Onboarding({
   initial,
   onComplete,
   onSkip,
+  mode = "consent",
   recommendationsConnected = false
 }: {
   initial: OnboardingState;
   onComplete: (state: OnboardingState) => void | Promise<void>;
   onSkip: () => void;
+  mode?: "consent" | "interests";
   recommendationsConnected?: boolean;
 }) {
+  const editingInterests = mode === "interests";
   const [step, setStep] = useState(1);
   const [parties, setParties] = useState<PartyCode[]>(initial.parties);
   const [consent, setConsent] = useState(initial.consent);
@@ -76,6 +80,10 @@ export function Onboarding({
         acceptedTerms: true,
         completedAt: new Date().toISOString()
       });
+      if (editingInterests) {
+        onSkip();
+        return;
+      }
       setConsent(granted);
       setDone(true);
     } catch {
@@ -85,7 +93,7 @@ export function Onboarding({
     }
   };
 
-  if (done) {
+  if (done && !editingInterests) {
     return (
       <div className="onboarding-backdrop">
         <div
@@ -101,7 +109,7 @@ export function Onboarding({
           <p>
             {consent.personal
               ? "Ditt flöde anpassas efter dina val. Du kan stänga av det när som helst under Profil."
-              : "Du ser Senaste — alla klipp, senaste först. Slå på personalisering under Profil när du vill."}
+              : "Du ser ett allmänt blandat För dig. Slå på personalisering under Profil när du vill."}
           </p>
           <button className="onboarding-primary" onClick={onSkip}>
             Börja titta
@@ -114,43 +122,59 @@ export function Onboarding({
   return (
     <div className="onboarding-backdrop">
       <div
-        className={`onboarding-card onboarding-card--step-${step}`}
+        className={`onboarding-card onboarding-card--step-${step}${editingInterests ? " onboarding-card--interests" : ""}`}
         role="dialog"
         aria-modal="true"
-        aria-label={`Onboarding, steg ${step} av 2`}
+        aria-label={editingInterests ? "Redigera mina intressen" : `Onboarding, steg ${step} av 2`}
       >
         <div className="onboarding-progress">
-          <div className="onboarding-progress-start">
-            {step > 1 && (
-              <button
-                type="button"
-                className="onboarding-back"
-                aria-label="Föregående steg"
-                onClick={() => setStep((s) => Math.max(1, s - 1))}
-              >
-                <ArrowLeft size={15} />
-              </button>
-            )}
-            <div className="onboarding-bars">
-              {[1, 2].map((index) => (
-                <span
-                  key={index}
-                  className={
-                    index === step
-                      ? "onboarding-bar onboarding-bar--active"
-                      : index < step
-                        ? "onboarding-bar onboarding-bar--done"
-                        : "onboarding-bar"
-                  }
-                />
-              ))}
-            </div>
-          </div>
-          <span className="onboarding-step">Steg {step} av 2</span>
+          {editingInterests ? (
+            <strong className="onboarding-edit-title">Mina intressen</strong>
+          ) : (
+            <>
+              <div className="onboarding-progress-start">
+                {step > 1 && (
+                  <button
+                    type="button"
+                    className="onboarding-back"
+                    aria-label="Föregående steg"
+                    onClick={() => setStep((s) => Math.max(1, s - 1))}
+                  >
+                    <ArrowLeft size={15} />
+                  </button>
+                )}
+                <div className="onboarding-bars">
+                  {[1, 2].map((index) => (
+                    <span
+                      key={index}
+                      className={
+                        index === step
+                          ? "onboarding-bar onboarding-bar--active"
+                          : index < step
+                            ? "onboarding-bar onboarding-bar--done"
+                            : "onboarding-bar"
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+              <span className="onboarding-step">Steg {step} av 2</span>
+            </>
+          )}
+          {editingInterests && (
+            <button
+              type="button"
+              className="onboarding-back"
+              aria-label="Stäng"
+              onClick={onSkip}
+            >
+              <X size={16} />
+            </button>
+          )}
         </div>
 
         <div className="onboarding-body">
-          {step === 1 && (
+          {(editingInterests || step === 1) && (
             <div className="onboarding-pane">
               <span className="onboarding-icon">
                 <Fingerprint size={22} />
@@ -185,7 +209,7 @@ export function Onboarding({
             </div>
           )}
 
-          {step === 2 && (
+          {!editingInterests && step === 2 && (
             <div className="onboarding-pane">
               <span className="onboarding-icon">
                 <ShieldCheck size={22} />
@@ -195,7 +219,8 @@ export function Onboarding({
                 {recommendationsConnected
                   ? "Om du slår på personalisering sparar Pleni partierna och politikerna du väljer och använder dem för att ordna För dig. Valen kan avslöja politiska åsikter. Tittarhistorik används inte i den här versionen."
                   : "Dina val sparas bara på den här enheten."}{" "}
-                Utan personalisering ser du <strong>Senaste</strong> — alla klipp, senaste först.
+                Utan personalisering ser du ett allmänt blandat <strong>För dig</strong>. Senaste
+                finns kvar som ett separat val.
               </p>
 
               <div className="onboarding-age-note">
@@ -232,15 +257,36 @@ export function Onboarding({
               )}
 
               <p className="onboarding-fineprint">
-                Du kan stänga av personalisering när som helst under Profil. Då används Senaste
-                direkt och sparade rekommendationsval tas bort från Plenis server. Där kan du
+                Du kan stänga av personalisering när som helst under Profil. Då blir För dig
+                allmänt blandat och sparade rekommendationsval tas bort från Plenis server. Där kan du
                 också exportera, återställa eller radera rekommendationsdata. Tidigare visade
                 rekommendationslistor sparas i högst 30 dagar för att undvika upprepningar.
               </p>
             </div>
           )}
 
-          {step < 2 && (
+          {editingInterests ? (
+            <>
+              <div className="onboarding-actions">
+                <button
+                  type="button"
+                  className="onboarding-primary"
+                  disabled={submitting}
+                  onClick={() => void finish(consent)}
+                >
+                  {submitting ? "Sparar…" : "Spara intressen"}
+                </button>
+              </div>
+              {submitError && (
+                <p className="onboarding-submit-error" role="alert">
+                  {submitError}
+                </p>
+              )}
+              <button type="button" className="onboarding-skip" onClick={onSkip}>
+                Avbryt
+              </button>
+            </>
+          ) : step < 2 && (
             <div className="onboarding-actions">
               <button
                 type="button"
@@ -252,9 +298,9 @@ export function Onboarding({
             </div>
           )}
 
-          {step < 2 && (
+          {!editingInterests && step < 2 && (
             <button type="button" className="onboarding-skip" onClick={onSkip}>
-              Hoppa över — visa Senaste
+              Hoppa över — fortsätt till För dig
             </button>
           )}
         </div>

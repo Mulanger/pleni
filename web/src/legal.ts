@@ -126,7 +126,7 @@ export const LEGAL_PAGES: Record<LegalPageId, LegalPage> = {
         paragraphs: [
           "Efter inloggning kan valda partier, följningar, gillningar och sparade klipp lagras i webbläsarens localStorage. Nycklarna skiljs åt med ditt Clerk-användar-id så att konton på samma enhet inte delar bibliotek.",
           "Om du aktivt slår på För dig sparar Pleni ditt Clerk-användar-id, den version av informationen du samtyckte till, valda partier och de partier eller politiker du följer i en privat del av Supabase. Dessa val kan avslöja politiska åsikter och behandlas med ditt uttryckliga samtycke enligt GDPR 6.1 a och 9.2 a.",
-          "Gillningar, sparade klipp, tittartid och tittarhistorik skickas inte till rekommendationssystemet i den här versionen. Om personalisering är avstängd används Senaste och ingen personlig rekommendationslista skapas."
+          "Gillningar, sparade klipp, tittartid och tittarhistorik skickas inte till rekommendationssystemet i den här versionen. Om personalisering är avstängd blandas För dig slumpmässigt från det publicerade utbudet utan att en personlig rekommendationslista eller användarprofil skapas. Senaste finns som ett separat val och visar klippen i datumordning."
         ]
       },
       {

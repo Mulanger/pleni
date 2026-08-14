@@ -124,6 +124,37 @@ a {
   scrollbar-width: none;
 }
 
+.feed-refresh {
+  position: absolute;
+  z-index: 9;
+  top: calc(58px + env(safe-area-inset-top));
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(19, 19, 18, 0.78);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+  transform: translateX(-50%);
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transition: opacity 120ms ease;
+}
+
+.feed-refresh--loading svg {
+  animation: feed-refresh-spin 720ms linear infinite;
+}
+
+@keyframes feed-refresh-spin {
+  to { transform: rotate(360deg); }
+}
+
 .feed-item {
   position: relative;
   /* Sized from the scroller, deliberately not from a viewport unit. `100dvh`
@@ -3269,8 +3300,8 @@ a {
 }
 
 /* --- Onboarding ------------------------------------------------------- */
-/* Three-step flow shown once, re-openable from Profil. Everything the user
-   answers here stays on the device (C-5) — see onboarding-store.ts. */
+/* Consent onboarding is shown once; the one-step interest editor can be
+   reopened from Profil without presenting the consent choice again. */
 
 .onboarding-backdrop {
   position: fixed;
@@ -3311,6 +3342,7 @@ a {
 
 .onboarding-progress-start { display: flex; align-items: center; gap: 10px; }
 .onboarding-bars { display: flex; gap: 6px; }
+.onboarding-edit-title { font-size: 14px; letter-spacing: -0.01em; }
 
 .onboarding-bar {
   height: 5px;
@@ -3697,6 +3729,7 @@ a {
   .pwa-spinner,
   .search-results,
   .skeleton-shape,
+  .feed-refresh--loading svg,
   .video-buffering svg,
   .pwa-update-progress span {
     animation: none;
