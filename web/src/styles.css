@@ -3372,6 +3372,13 @@ a {
   padding: 10px 14px 12px;
 }
 
+.recommendation-success {
+  padding: 10px 14px 12px;
+  color: #1f6b43;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .party-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .party-tile {
   display: grid;

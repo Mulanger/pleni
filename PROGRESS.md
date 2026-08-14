@@ -4435,3 +4435,52 @@ activation remains intact.
 the previous hashed asset directory until the new build is fully copied would
 remove the brief deployment race as well, but that setting lives outside this
 repository.
+
+## F2b — Recommendation launch controls — DONE 2026-08-14
+
+**Built:** migration 020 adds a current versioned notice, authenticated JSON
+export, recommendation reset, recommendation deletion support and a daily
+retention job. The consent Edge Function exposes those service-only workflows;
+Profile provides real export/reset/delete controls; onboarding and the Swedish
+privacy notice now describe the active rule feed and its fixed periods. The
+release defaults on after backend deployment, with an explicit
+`VITE_RECOMMENDATIONS_ENABLED=false` remaining as the emergency kill switch.
+
+**Production deployment:** migrations 018, 019 and 020 are applied and recorded
+in the Supabase migration ledger. `consent`, `feed-requests` and
+`clerk-webhook` are deployed with exact Pleni origins and Clerk dev/prod
+issuers. Production checks confirm the private schema and recommendation RPCs
+are denied to browser roles, the version-2 notice is active, and the daily
+30-day slate cleanup job is active. A rollback-only production probe passed
+grant, slate recording, export, reset and deletion without retaining test data.
+
+**Tests:** strict TypeScript green; production Vite/PWA build green with nine
+shell entries; 19 Edge security/ranking tests green; three web recommendation
+tests green; seven migration guard functions green; `git diff --check` green.
+The full Python task runner could not run in this desktop runtime because no
+project Python environment/pytest installation was available; the dependency-
+free migration guards were executed directly with the bundled Python runtime.
+
+**Contracts touched:** none.
+
+**Decisions made:** explicit preferences persist until withdrawal/reset/delete;
+served slates persist for 30 days; superseded consent and completed rights-audit
+rows persist for 24 months while the newest consent state is retained. The V1
+balance policy is the deterministic 5/2/2 mix plus speech/speaker/party caps,
+recorded relaxations, per-clip reasons and the complete chronological `Senaste`
+alternative. No watch history, likes, saves, playback event, inferred interest,
+exploration or ML state is collected.
+
+**Blocked / needs a decision:** the Clerk `user.deleted` webhook endpoint still
+needs its dashboard-generated Svix signing secret set as
+`CLERK_WEBHOOK_SIGNING_SECRET`; the authenticated browser-control runtime was
+not available in this session. Until then, in-app recommendation deletion works
+but deleting an account directly in Clerk cannot be claimed to cascade. A
+signed-in mobile production acceptance pass is also still required.
+
+**Next agent should know:** endpoint for Clerk is
+`https://nlooigmwuqqhhnontlgp.supabase.co/functions/v1/clerk-webhook`, subscribed
+to `user.deleted`. After saving its signing secret to Supabase, sign in on
+`pleni.se`, grant V2 consent with at least one party, confirm `För dig` shows
+reasoned/reranked clips, reload for a distinct slate, then exercise export and
+reset. Full playback telemetry and learned ranking remain separate future work.

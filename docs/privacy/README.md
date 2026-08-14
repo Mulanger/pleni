@@ -1,6 +1,6 @@
 # Pleni privacy and legal pack
 
-Last updated: 2026-08-09. Public notice version: `2026-08-09`.
+Last updated: 2026-08-14. Public notice version: `2026-08-14`.
 
 This directory is the evidence pack for F0 in
 `docs/RECOMMENDATION_PREREQUISITES.md`. The public Swedish copy rendered by the
@@ -19,9 +19,9 @@ says what it says and what remains incomplete.
   disproportionate for public parliamentary content.
 - Account creation presents links to the terms and privacy notice. The privacy
   notice is information, not something bundled into contractual acceptance.
-- Optional personalisation stays off until affirmatively selected. The current
-  release does not send viewing history or an inferred political profile to a
-  Pleni server.
+- Optional personalisation stays off until affirmatively selected. The released
+  V1 sends only explicitly selected/followed party and politician IDs plus the
+  served slate; it sends no viewing history or inferred political profile.
 - Pleni has no advertising or first-party analytics. Political-interest data
   must never be passed to an advertising system.
 - Public contact for general, privacy and content notices is
@@ -45,19 +45,19 @@ says what it says and what remains incomplete.
 
 | Item | Status | Evidence / remaining work |
 |---|---|---|
-| F0-1 DPIA | Drafted | `DPIA.md`; owner sign-off and re-run before server profiling launches. |
+| F0-1 DPIA | Owner-approved for explicit V1 | `DPIA.md`; reassess before playback profiling, inference or ML. |
 | F0-2 counsel | Decided | Owner accepts in-house analysis; no external counsel. |
-| F0-3 Article 13 notice | Live for current processing | `web/src/legal.ts`; must be revised before watch-history profiling. |
+| F0-3 Article 13 notice | Updated for explicit V1 | `web/src/legal.ts` version `2026-08-14`; revise before watch-history profiling. |
 | F0-4 data inventory | Drafted | `DATA_FLOW_INVENTORY.md`; verify provider log configuration. |
 | F0-5 processors/transfers | Partial | Public mechanisms documented; execute/verify account DPAs and regions. |
-| F0-6 retention | Partial | Current criteria documented; future telemetry/model periods remain gated. |
+| F0-6 retention | Implemented for V1 | 30-day slates, 24-month superseded consent/rights audit, daily migration-020 cleanup. |
 | F0-7 minors | Decided for V1 | No universal age gate; guardian permission under 13 for accounts; no age data. |
 | F0-8 ePrivacy | Decided for V1 | Necessary auth and requested local features only; no analytics/ads. |
 | F0-9 DSA | Conservative operating position | Treat comments as hosting for notice/action; formal classification remains. |
 | F0-10 advertising | Decided | No ads and no reuse of political-interest data. |
-| F0-11 security | Partial | Existing RLS/RPC/auth controls; incident and access audit remains. |
-| F0-12 deletion/export | Not complete | Public request email exists; processor-wide tested runbook does not. |
-| F0-13 party balance | Not complete | No neutrality claim; recommender policy still required. |
+| F0-11 security | Verified for V1 database path | Production privilege matrix and rollback-only lifecycle probe passed 2026-08-14; broader provider access review remains. |
+| F0-12 deletion/export | Implemented for recommendation data | Authenticated UI/API export, reset and delete; broader processor requests remain at contact email. |
+| F0-13 party balance | Owner-approved for V1 | 5/2/2 rule mix, documented party/speaker/speech caps, explanations and full `Senaste` alternative. |
 | F0-14 takedown | Implemented at product level | Comment reporting plus `kontakt@pleni.se`; operator runbook below. |
 
 This pack records product decisions and engineering evidence. It is not a claim

@@ -1,4 +1,4 @@
-export const LEGAL_VERSION = "2026-08-09";
+export const LEGAL_VERSION = "2026-08-14";
 
 export type LegalPageId = "terms" | "privacy" | "storage" | "about";
 
@@ -122,10 +122,18 @@ export const LEGAL_PAGES: Record<LegalPageId, LegalPage> = {
         ]
       },
       {
-        title: "Val och bibliotek på din enhet",
+        title: "Personalisering och val",
         paragraphs: [
-          "Efter inloggning kan politisk inriktning, valda partier, personaliseringsval, följningar, gillningar och sparade klipp lagras i webbläsarens localStorage. Nycklarna skiljs åt med ditt Clerk-användar-id så att konton på samma enhet inte delar bibliotek.",
-          "Uppgifterna skickas inte till Plenis databas i den här versionen. Val för personalisering sparas först när du aktivt väljer det. Du kan stänga av personalisering eller rensa webbplatsdata i webbläsaren."
+          "Efter inloggning kan valda partier, följningar, gillningar och sparade klipp lagras i webbläsarens localStorage. Nycklarna skiljs åt med ditt Clerk-användar-id så att konton på samma enhet inte delar bibliotek.",
+          "Om du aktivt slår på För dig sparar Pleni ditt Clerk-användar-id, den version av informationen du samtyckte till, valda partier och de partier eller politiker du följer i en privat del av Supabase. Dessa val kan avslöja politiska åsikter och behandlas med ditt uttryckliga samtycke enligt GDPR 6.1 a och 9.2 a.",
+          "Gillningar, sparade klipp, tittartid och tittarhistorik skickas inte till rekommendationssystemet i den här versionen. Om personalisering är avstängd används Senaste och ingen personlig rekommendationslista skapas."
+        ]
+      },
+      {
+        title: "Så fungerar För dig",
+        paragraphs: [
+          "För dig är ett regelbaserat flöde, inte en maskininlärningsmodell. Klipp får högre prioritet när de kommer från ett parti eller en politiker du uttryckligen valt eller följer. Flödet väger också in debattens datum och klippets rang inom anförandet.",
+          "Listan blandar intressebaserade klipp med nytt material från riksdagen, begränsar upprepningar från samma talare, parti och anförande och visar en kort förklaring vid rekommenderade klipp. Tidigare serverade listor används i högst 30 dagar för att undvika att samma klipp återkommer direkt. Ingen betald politisk placering eller slumpmässig utforskning används."
         ]
       },
       {
@@ -158,6 +166,9 @@ export const LEGAL_PAGES: Record<LegalPageId, LegalPage> = {
         title: "Hur länge uppgifterna finns kvar",
         bullets: [
           "Enhetslokala val finns kvar tills du rensar dem i Pleni eller webbläsaren.",
+          "Valda partier och följningar i rekommendationsprofilen finns kvar tills du stänger av, återställer eller raderar personalisering eller kontot tas bort.",
+          "Serverade rekommendationslistor och deras klippositioner raderas automatiskt efter 30 dagar.",
+          "Äldre samtyckesposter och genomförda export-/raderingsärenden raderas efter 24 månader, men den senaste posten per ändamål behålls så länge den behövs för att visa ditt aktuella val.",
           "Kontouppgifter behandlas medan kontot finns och därefter enligt Clerks nödvändiga säkerhets-, backup- och rättsliga perioder.",
           "En offentlig kommentar finns kvar tills du tar bort den eller Pleni modererar den. Raderad kommentarstext töms, medan en minimal post kan finnas kvar för databasens integritet och modereringshistorik.",
           "Anmälningar och modereringshändelser sparas så länge de behövs för att hantera ärendet, missbruk, invändningar eller rättsliga anspråk.",
@@ -168,7 +179,7 @@ export const LEGAL_PAGES: Record<LegalPageId, LegalPage> = {
         title: "Dina rättigheter",
         paragraphs: [
           "Du kan, när GDPR är tillämplig, begära tillgång, rättelse, radering, begränsning och dataportabilitet samt invända mot behandling som bygger på berättigat intresse. Du kan när som helst återkalla ett personaliseringsval utan att tidigare behandling blir olaglig.",
-          "Mejla kontakt@pleni.se. Vi kan behöva kontrollera att begäran gäller rätt konto. Du har också rätt att klaga hos Integritetsskyddsmyndigheten, IMY."
+          "Under Profil kan du direkt hämta rekommendationsdata som JSON, återställa rekommendationerna eller radera hela rekommendationsprofilen. Du kan också mejla kontakt@pleni.se. Vi kan behöva kontrollera att begäran gäller rätt konto. Du har rätt att klaga hos Integritetsskyddsmyndigheten, IMY."
         ],
         links: [
           { label: "Kontakta Pleni", href: "mailto:kontakt@pleni.se" },
@@ -201,7 +212,7 @@ export const LEGAL_PAGES: Record<LegalPageId, LegalPage> = {
       {
         title: "Pleni – localStorage",
         bullets: [
-          "riket.onboarding.v1:<konto-id> – dina frivilliga onboardingval, personaliseringsstatus och när flödet slutfördes eller hoppades över. Sparas tills du ändrar eller rensar valet.",
+          "riket.onboarding.v1:<konto-id> – dina frivilliga onboardingval, en lokal kopia av personaliseringsstatus och när flödet slutfördes eller hoppades över. Sparas tills du ändrar eller rensar valet. När För dig är aktivt är serverns samtyckespost styrande.",
           "riket.library.v1:<konto-id> – följda personer och partier samt gillade och sparade klipp. Uppdateras när du använder funktionen och finns kvar tills den rensas.",
           "Äldre ospecificerade nycklar kan finnas kvar från tidigare versioner men läses inte in i ett nytt konto."
         ]
@@ -209,7 +220,7 @@ export const LEGAL_PAGES: Record<LegalPageId, LegalPage> = {
       {
         title: "Så ändrar eller rensar du",
         paragraphs: [
-          "Personalisering kan stängas av under Profil. Webbläsarens inställningar kan radera Plenis webbplatsdata och Clerk-cookies. Då loggas du ut och lokala intressen, följningar, gillningar och sparade klipp kan försvinna från den enheten.",
+          "Personalisering kan stängas av, exporteras, återställas eller raderas under Profil. Webbläsarens inställningar kan radera Plenis webbplatsdata och Clerk-cookies. Då loggas du ut och lokala intressen, följningar, gillningar och sparade klipp kan försvinna från den enheten.",
           "Om Pleni inför analys, marknadsföring eller annan lagring som inte är nödvändig kommer den att vara avstängd tills ett separat val har gjorts, och det ska vara lika enkelt att tacka nej som ja."
         ]
       }

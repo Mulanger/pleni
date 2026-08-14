@@ -84,3 +84,25 @@ def test_recommendation_functions_are_service_only_and_pin_search_path() -> None
     ):
         assert f"revoke all on function public.{function}" in sql
         assert f"grant execute on function public.{function}" in sql
+
+
+def test_launch_controls_fix_retention_and_subject_rights() -> None:
+    sql = _sql("020_recommendation_launch_controls.up.sql")
+
+    assert "personalization-2026-08-14-v2" in sql
+    assert "export_recommendation_subject_data" in sql
+    assert "reset_recommendation_subject" in sql
+    assert "purge_expired_recommendation_data" in sql
+    assert "interval '30 days'" in sql
+    assert "interval '730 days'" in sql
+    assert "pleni-recommendation-retention-v1" in sql
+    assert "cron.schedule" in sql
+    assert "playback_events" not in sql
+    assert "watch_history" not in sql
+
+    for function in (
+        "export_recommendation_subject_data(text)",
+        "reset_recommendation_subject(text)",
+        "purge_expired_recommendation_data()",
+    ):
+        assert f"revoke all on function public.{function}" in sql

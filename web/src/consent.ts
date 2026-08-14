@@ -1,6 +1,6 @@
 import type { PartyCode, RecommendationProfile } from "./types";
 
-export const PERSONALIZATION_NOTICE_VERSION = "personalization-2026-08-14-v1";
+export const PERSONALIZATION_NOTICE_VERSION = "personalization-2026-08-14-v2";
 
 export const EMPTY_RECOMMENDATION_PROFILE: RecommendationProfile = {
   personalization: false,

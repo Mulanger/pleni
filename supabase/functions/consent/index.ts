@@ -98,6 +98,24 @@ Deno.serve(async (request) => {
         cors
       );
     }
+    if (action === "export") {
+      const exported = await callServiceRpc<unknown>("export_recommendation_subject_data", {
+        p_subject: claims.sub
+      });
+      return jsonResponse(exported, 200, cors);
+    }
+    if (action === "reset") {
+      const raw = await callServiceRpc<unknown>("reset_recommendation_subject", {
+        p_subject: claims.sub
+      });
+      return jsonResponse(parseRecommendationProfile(raw), 200, cors);
+    }
+    if (action === "delete") {
+      const deleted = await callServiceRpc<unknown>("delete_recommendation_subject", {
+        p_subject: claims.sub
+      });
+      return jsonResponse(deleted, 200, cors);
+    }
     throw new Error("unknown_action");
   } catch (error) {
     return errorResponse(error, cors);

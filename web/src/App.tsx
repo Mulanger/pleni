@@ -40,9 +40,12 @@ import {
 } from "@clerk/react";
 import {
   RecommendationApiError,
+  deleteRecommendationData,
+  exportRecommendationData,
   loadRecommendationProfile,
   loadRuleBasedFeed,
   recommendationsEnabled,
+  resetRecommendationData,
   setRecommendationConsent,
   syncRecommendationPreferences
 } from "./account";
@@ -109,6 +112,20 @@ import type {
 } from "./types";
 
 const NEW_ACCOUNT_QUERY = "pleni_new_account";
+
+function downloadJson(value: Record<string, unknown>, filename: string): void {
+  const blob = new Blob([JSON.stringify(value, null, 2)], {
+    type: "application/json;charset=utf-8"
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 
 function hasNewAccountRedirect(): boolean {
   return new URLSearchParams(window.location.search).get(NEW_ACCOUNT_QUERY) === "1";
@@ -282,6 +299,12 @@ function App() {
     !recommendationsEnabled
   );
   const [recommendationError, setRecommendationError] = useState<string | null>(null);
+  const [recommendationAction, setRecommendationAction] = useState<
+    "export" | "reset" | "delete" | null
+  >(null);
+  const [recommendationActionMessage, setRecommendationActionMessage] = useState<string | null>(
+    null
+  );
   const [newAccountRedirect, setNewAccountRedirect] = useState(hasNewAccountRedirect);
   const viewer = useViewer();
   const consent = {
@@ -509,6 +532,73 @@ function App() {
       }
     } catch {
       setRecommendationError("Kunde inte stänga av personalisering. Försök igen.");
+    }
+  };
+
+  const exportMyRecommendationData = async (): Promise<void> => {
+    setRecommendationAction("export");
+    setRecommendationActionMessage(null);
+    setRecommendationError(null);
+    try {
+      const exported = await exportRecommendationData(viewer.getAccessToken);
+      downloadJson(exported, `pleni-rekommendationsdata-${new Date().toISOString().slice(0, 10)}.json`);
+      setRecommendationActionMessage("Exporten har hämtats till din enhet.");
+    } catch {
+      setRecommendationError("Kunde inte exportera rekommendationsdata. Försök igen.");
+    } finally {
+      setRecommendationAction(null);
+    }
+  };
+
+  const resetMyRecommendationData = async (): Promise<void> => {
+    if (!window.confirm("Återställ dina rekommendationer och radera sparade listor från Plenis server?")) {
+      return;
+    }
+    setRecommendationAction("reset");
+    setRecommendationActionMessage(null);
+    setRecommendationError(null);
+    try {
+      const profile = await resetRecommendationData(viewer.getAccessToken);
+      setRecommendationProfile(profile);
+      saveOnboarding({
+        ...onboarding,
+        parties: [],
+        consent: { ...onboarding.consent, personal: false }
+      });
+      if (feedMode === "fordig") {
+        navigate({ view: "tab", tab: "hem", feedMode: "senaste" }, { replace: true });
+      }
+      setRecommendationActionMessage("Rekommendationerna är återställda och personalisering är avstängd.");
+    } catch {
+      setRecommendationError("Kunde inte återställa rekommendationerna. Försök igen.");
+    } finally {
+      setRecommendationAction(null);
+    }
+  };
+
+  const deleteMyRecommendationData = async (): Promise<void> => {
+    if (!window.confirm("Radera all rekommendationsdata hos Pleni? Ditt Clerk-konto och lokala bibliotek påverkas inte.")) {
+      return;
+    }
+    setRecommendationAction("delete");
+    setRecommendationActionMessage(null);
+    setRecommendationError(null);
+    try {
+      await deleteRecommendationData(viewer.getAccessToken);
+      setRecommendationProfile(EMPTY_RECOMMENDATION_PROFILE);
+      saveOnboarding({
+        ...onboarding,
+        parties: [],
+        consent: { ...onboarding.consent, personal: false }
+      });
+      if (feedMode === "fordig") {
+        navigate({ view: "tab", tab: "hem", feedMode: "senaste" }, { replace: true });
+      }
+      setRecommendationActionMessage("All rekommendationsdata hos Pleni har raderats.");
+    } catch {
+      setRecommendationError("Kunde inte radera rekommendationsdata. Försök igen.");
+    } finally {
+      setRecommendationAction(null);
     }
   };
 
@@ -1051,6 +1141,11 @@ function App() {
                 }}
                 recommendationsConnected={recommendationsEnabled}
                 recommendationError={recommendationError}
+                recommendationAction={recommendationAction}
+                recommendationActionMessage={recommendationActionMessage}
+                onExportRecommendationData={() => void exportMyRecommendationData()}
+                onResetRecommendationData={() => void resetMyRecommendationData()}
+                onDeleteRecommendationData={() => void deleteMyRecommendationData()}
                 onOpenLegal={openLegal}
                 pwa={pwa}
               />
@@ -3262,7 +3357,7 @@ function LegalScreen({
           <span className="legal-kicker">Pleni</span>
           <h1>{document.title}</h1>
           <p>{document.summary}</p>
-          <time dateTime={LEGAL_VERSION}>Gäller från 9 augusti 2026 · version {LEGAL_VERSION}</time>
+          <time dateTime={LEGAL_VERSION}>Gäller från 14 augusti 2026 · version {LEGAL_VERSION}</time>
         </header>
 
         <div className="legal-document">
@@ -3332,7 +3427,12 @@ function ProfileScreen({
   onOpenLegal,
   pwa,
   recommendationsConnected,
-  recommendationError
+  recommendationError,
+  recommendationAction,
+  recommendationActionMessage,
+  onExportRecommendationData,
+  onResetRecommendationData,
+  onDeleteRecommendationData
 }: {
   consent: { personal: boolean; analytics: boolean; email: boolean };
   selectedParties: number;
@@ -3348,6 +3448,11 @@ function ProfileScreen({
   pwa: PwaExperience;
   recommendationsConnected: boolean;
   recommendationError: string | null;
+  recommendationAction: "export" | "reset" | "delete" | null;
+  recommendationActionMessage: string | null;
+  onExportRecommendationData: () => void;
+  onResetRecommendationData: () => void;
+  onDeleteRecommendationData: () => void;
 }) {
   const totalFollowed = followedCount + followedPartyCount;
   const followedSummary = [
@@ -3503,6 +3608,54 @@ function ProfileScreen({
             </div>
           )}
         </Group>
+        {recommendationsConnected && (
+          <Group title="Mina rekommendationsdata">
+            <ListRow
+              title={recommendationAction === "export" ? "Skapar export…" : "Hämta mina data"}
+              subtitle="Ladda ner samtycke, val och rekommendationslistor som JSON."
+              icon={
+                recommendationAction === "export" ? (
+                  <LoaderCircle className="pwa-spinner" size={18} aria-hidden="true" />
+                ) : (
+                  <Download size={18} />
+                )
+              }
+              onClick={recommendationAction ? undefined : onExportRecommendationData}
+              chevron={!recommendationAction}
+            />
+            <ListRow
+              title={recommendationAction === "reset" ? "Återställer…" : "Återställ rekommendationer"}
+              subtitle="Stänger av personalisering och raderar serverns val och tidigare listor."
+              icon={
+                recommendationAction === "reset" ? (
+                  <LoaderCircle className="pwa-spinner" size={18} aria-hidden="true" />
+                ) : (
+                  <RefreshCw size={18} />
+                )
+              }
+              onClick={recommendationAction ? undefined : onResetRecommendationData}
+              chevron={!recommendationAction}
+            />
+            <ListRow
+              title={recommendationAction === "delete" ? "Raderar…" : "Radera rekommendationsdata"}
+              subtitle="Raderar rekommendationsprofilen utan att radera ditt Clerk-konto."
+              icon={
+                recommendationAction === "delete" ? (
+                  <LoaderCircle className="pwa-spinner" size={18} aria-hidden="true" />
+                ) : (
+                  <Trash2 size={18} />
+                )
+              }
+              onClick={recommendationAction ? undefined : onDeleteRecommendationData}
+              chevron={!recommendationAction}
+            />
+            {recommendationActionMessage && (
+              <div className="recommendation-success" role="status">
+                {recommendationActionMessage}
+              </div>
+            )}
+          </Group>
+        )}
         <nav className="profile-legal-links" aria-label="Juridisk information">
           {LEGAL_PAGE_ORDER.map((page) => (
             <button key={page} type="button" onClick={() => onOpenLegal(page)}>

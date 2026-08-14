@@ -14,8 +14,10 @@ import type {
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL ?? "").replace(/\/$/, "");
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "";
 
+// The production backend is deployed as of the V1 release. An explicit false
+// remains the emergency kill switch; an absent value now means released.
 export const recommendationsEnabled =
-  (import.meta.env.VITE_RECOMMENDATIONS_ENABLED ?? "").trim().toLowerCase() === "true";
+  (import.meta.env.VITE_RECOMMENDATIONS_ENABLED ?? "true").trim().toLowerCase() !== "false";
 
 export type AccessTokenGetter = () => Promise<string | null>;
 
@@ -120,6 +122,45 @@ export async function syncRecommendationPreferences(
       signal
     })
   );
+}
+
+export async function exportRecommendationData(
+  getAccessToken: AccessTokenGetter,
+  signal?: AbortSignal
+): Promise<Record<string, unknown>> {
+  const value = await functionRequest("consent", getAccessToken, {
+    method: "POST",
+    body: { action: "export" },
+    signal
+  });
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Ogiltigt export-svar");
+  }
+  return value as Record<string, unknown>;
+}
+
+export async function resetRecommendationData(
+  getAccessToken: AccessTokenGetter,
+  signal?: AbortSignal
+): Promise<RecommendationProfile> {
+  return parseRecommendationProfile(
+    await functionRequest("consent", getAccessToken, {
+      method: "POST",
+      body: { action: "reset" },
+      signal
+    })
+  );
+}
+
+export async function deleteRecommendationData(
+  getAccessToken: AccessTokenGetter,
+  signal?: AbortSignal
+): Promise<void> {
+  await functionRequest("consent", getAccessToken, {
+    method: "POST",
+    body: { action: "delete" },
+    signal
+  });
 }
 
 function parseFeedResponse(value: unknown): RecommendationFeedResponse {

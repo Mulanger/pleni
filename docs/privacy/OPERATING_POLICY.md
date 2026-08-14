@@ -1,11 +1,11 @@
 # Privacy, safety and legal operating policy
 
-Decision record for the current release, 2026-08-09.
+Decision record for the current release, updated 2026-08-14.
 
-Implementation note, 2026-08-14: an explicit-choice rule recommender is present
-behind `VITE_RECOMMENDATIONS_ENABLED=false`. It must remain inactive until the
-open approval, retention, access-review and real-database test gates are closed.
-Its first version excludes playback history, inference and exploration.
+Implementation note, 2026-08-14: the owner approved the explicit-choice V1
+policy and its production release. It excludes playback history, inference and
+exploration. `VITE_RECOMMENDATIONS_ENABLED=false` is now an emergency kill
+switch rather than the normal release state.
 
 ## Minors and onboarding (F0-7)
 
@@ -72,11 +72,19 @@ automation are still operational work.
 
 ## Retention (F0-6)
 
-Current-release criteria are in `DATA_FLOW_INVENTORY.md`. Where no fixed job
-exists, public copy states a purpose-based criterion rather than inventing a
-number. Before future telemetry launches, the owner must approve and implement
-fixed periods for raw events, served items, derived profiles, consent evidence,
-backup copies and model lineage.
+Current-release criteria are in `DATA_FLOW_INVENTORY.md`. V1 uses these fixed
+database periods:
+
+- served recommendation requests/items: 30 days;
+- explicit preferences: until withdrawal, reset, deletion or account deletion;
+- superseded consent evidence and completed recommendation-rights requests: 24
+  months; the newest consent state per purpose remains while it is current.
+
+Migration 020 schedules a daily `pg_cron` cleanup and was exercised against the
+production schema. V1 creates no raw playback event, inferred profile or model
+lineage row, so no period is assigned to data that does not exist. Provider
+backup and log deletion windows remain governed by the verified provider
+configuration and processor terms.
 
 Deletion removes public comment text immediately but may retain a minimal row
 and moderation evidence. Such retained data may not be reused for ranking or
@@ -84,7 +92,12 @@ marketing.
 
 ## Rights, deletion and export (F0-12)
 
-`kontakt@pleni.se` is the current intake. For each request:
+Profile now provides authenticated JSON export, recommendation reset and
+recommendation deletion. All three derive the subject from a verified Clerk
+JWT and use service-only RPCs. Clerk account deletion is designed to reach the
+same deletion RPC through the signed Svix webhook. `kontakt@pleni.se` remains
+the intake for broader processor-wide and account/comment requests. For each
+request:
 
 1. Record receipt date and scope.
 2. Verify identity proportionately through the authenticated account/email;
@@ -94,18 +107,25 @@ marketing.
 4. Respond within the GDPR deadline and explain any lawful limitation.
 5. Record completion without keeping the exported/deleted content itself.
 
-This is not yet an end-to-end tested automated runbook. The UI therefore does
-not display fake “download my data” or “delete account” rows. Account management
+The recommendation-only grant, slate, export, reset and deletion workflow was
+exercised in a rollback-only production test on 2026-08-14. Account management
 continues through Clerk, while broader GDPR requests use the contact email.
 
 ## Party balance and editorial claims (F0-13)
 
 - Pleni does not claim political neutrality or equal party exposure.
 - `Senaste` is chronological by published time.
-- The current `För dig` surface must not be described publicly as a behavioural
-  server recommender while it does not collect/use such a profile.
-- Before a real recommender launches, approve repetition caps, balance metrics,
-  user controls and an explanation of the parameters/relative importance.
+- `För dig` is described as an explicit-choice rule feed, never as politically
+  neutral or as a behavioural/ML profile.
+- The approved V1 mix targets 5 fresh interest, 2 fresh general and 2 older
+  interest positions per first ten, with the remaining planned adjacency slot
+  falling back transparently because topic adjacency is disabled.
+- Per ten, the ranker initially caps one speech at one clip, a preferred party
+  at five clips (other parties at three), one speaker at two clips and adjacent
+  speaker repetition. Soft caps relax deterministically only when inventory is
+  too sparse; the served item records each relaxation.
+- Profile exposes the input controls, every recommended clip carries a reason,
+  and `Senaste` remains a full chronological alternative.
 - No party or advertiser may buy placement through the recommendation system.
 
 ## Security and incidents (F0-11)
@@ -113,7 +133,9 @@ continues through Clerk, while broader GDPR requests use the contact email.
 Current controls include publishable browser keys only, server/local secret
 separation, Clerk JWT authentication, Supabase RLS/no direct private-table
 grants, narrow security-definer RPCs, rate limits and private reporter/author
-identifiers.
+identifiers. The 2026-08-14 production check confirmed that `anon` and
+`authenticated` have no `private` schema usage and cannot execute profile or
+slate RPCs; only Edge Functions use the service role.
 
 Incident minimum:
 

@@ -233,7 +233,9 @@ export function Onboarding({
 
               <p className="onboarding-fineprint">
                 Du kan stänga av personalisering när som helst under Profil. Då används Senaste
-                direkt och sparade rekommendationsval tas bort från Plenis server.
+                direkt och sparade rekommendationsval tas bort från Plenis server. Där kan du
+                också exportera, återställa eller radera rekommendationsdata. Tidigare visade
+                rekommendationslistor sparas i högst 30 dagar för att undvika upprepningar.
               </p>
             </div>
           )}

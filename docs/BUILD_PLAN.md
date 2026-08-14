@@ -1389,6 +1389,47 @@ speaker/party caps, and relaxes them deterministically for sparse inventory.
 Random exploration remains disabled because no selection propensity is sampled
 in this slice.
 
+### F2b — Recommendation launch controls
+
+**Approved 2026-08-14. Depends on:** F2a/F3a. **Size:** medium.
+
+**Objective.** Close the technical production-activation gaps around the
+explicit-interest V1 without adding playback telemetry or inferred interests:
+fixed retention, subject export/reset/deletion, current notice copy and a
+tested cleanup schedule.
+
+**Scope — may create or modify:**
+
+```
+migrations/020_recommendation_launch_controls.{up,down}.sql
+supabase/functions/_shared/consent.ts
+supabase/functions/consent/index.ts
+supabase/functions/tests/*.test.ts
+web/src/{account,consent}.ts
+web/src/{App,onboarding}.tsx
+web/src/legal.ts
+web/src/styles.css
+web/tests/recommendation-api.test.mjs
+tests/unit/test_recommendation_migrations.py
+.env.example
+web/.env.example
+docs/privacy/*
+docs/RECOMMENDATION_PREREQUISITES.md   (status only)
+PROGRESS.md                            (handoff only)
+```
+
+No pipeline file, shared pipeline contract, playback event, inferred-interest
+state or already-applied migration is in scope. Migration 020 may extend the
+service-only RPC surface created by 018/019; the browser still reaches it only
+through a Clerk-verified Edge Function.
+
+**Acceptance.** Served slates expire automatically after the documented fixed
+period; a signed-in viewer can export, reset and delete recommendation data;
+withdrawal/reset applies before the next feed request; browser roles cannot
+execute lifecycle RPCs; the public notice accurately describes the active V1;
+and TypeScript, the Vite production build, Edge tests and the default Python
+acceptance command are green.
+
 ## F4 — Frontend integration & controlled launch
 ## F5 — Content understanding & exploration
 ## F6 — Learned ranking

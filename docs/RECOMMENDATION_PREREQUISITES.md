@@ -1,20 +1,20 @@
 # Recommendation system — prerequisite checklist
 
-**Status:** Working checklist. Not yet reviewed or signed off.
+**Status:** Explicit-interest V1 owner-approved and production-deployed; full
+telemetry/inference/ML checklist remains open.
 
-**Last updated:** 2026-08-14 (inactive explicit-interest rule-serving slice)
+**Last updated:** 2026-08-14 (explicit-interest V1 production release)
 
 **Companion to:** `docs/RECOMMENDATION_LAUNCH_PLAN.md` (the architecture), `docs/BUILD_PLAN.md` (the chunks), `AGENTS.md` (the rules).
 
 **Question this answers:** *What has to be true before we can start building the recommender?*
 
-**Engineering preview status (2026-08-14):** migrations 018/019, service-only
-consent/feed RPCs, Clerk JWT and Svix verification, deterministic 5/2/2/1 rule
-ranking, served-slate recording, and onboarding/feed wiring now exist behind
-`VITE_RECOMMENDATIONS_ENABLED=false`. They are not deployed or activated by
-this work. Checkboxes below remain open wherever acceptance still requires the
-real Supabase project, lifecycle/rights workflows, retention, owner approval,
-telemetry or production QA.
+**Explicit V1 release status (2026-08-14):** migrations 018–020, service-only
+consent/feed/lifecycle RPCs, deterministic 5/2/2 rule ranking, served-slate
+recording, fixed cleanup, data controls and onboarding/feed wiring are deployed.
+The owner approved this rules-only release; it collects no playback event or
+inferred interest. The flag's explicit `false` value is the emergency kill
+switch. Checkboxes for behavioural telemetry, inference and ML remain open.
 
 ---
 
@@ -387,46 +387,46 @@ used — it requires sharing the Supabase JWT secret with a third party.
 Nothing in this block may ship before `F0` has produced its decisions, because the table shapes
 encode the legal answers.
 
-**Partial engineering evidence, 2026-08-14:** C-1–C-8 have an inactive
-implementation in migration 018 and the `consent` Edge Function. It defaults
-off, keeps the ledger append-only, derives the subject from verified Clerk JWTs,
-and deletes explicit preferences on withdrawal. C-10–C-12 and the required
-real-database RLS matrix are still open, so this is not F1 completion.
+**Production evidence, 2026-08-14:** migrations 018–020 and the consent/feed
+functions are deployed. The production matrix denies `private` schema usage to
+both browser roles, service RPC execute is denied, and a rollback-only probe
+passed grant, slate, export, reset and deletion. This is the explicit V1 slice,
+not completion of behavioural F1/F2.
 
-- [ ] **C-1 · GATE — Create the `private` schema** and revoke `usage` from `anon` and
+- [x] **C-1 · DONE 2026-08-14 — Create the `private` schema** and revoke `usage` from `anon` and
       `authenticated`. It must not be exposed through PostgREST at all. Public political content
       stays in `public`; viewer behaviour and political-interest profiles never do.
-- [ ] **C-2 · GATE — `private.consent_records`**: subject (`text`, Clerk `sub`), purpose,
+- [x] **C-2 · DONE 2026-08-14 — `private.consent_records`**: subject (`text`, Clerk `sub`), purpose,
       granted/withdrawn, Article 6 basis, Article 9 condition, notice version, UI source,
       timestamps. Append-only — a withdrawal is a new row, never an update over the grant.
-- [ ] **C-3 — Consent version registry.** Every notice text version is stored and referenced by
+- [x] **C-3 · DONE 2026-08-14 — Consent version registry.** Every notice text version is stored and referenced by
       ID, so a 2027 audit can reconstruct exactly what a 2026 user agreed to.
-- [ ] **C-4 · GATE — Separate purposes.** Personalization, analytics, email, model-training reuse
+- [x] **C-4 · DONE 2026-08-14 — Separate purposes.** Personalization, analytics, email, model-training reuse
       are four independent consents. One "improve my experience" switch is not specific enough.
-- [ ] **C-5 · GATE — Default off, and delete the mockup.** Replace
+- [x] **C-5 · DONE 2026-08-14 — Default off, and delete the mockup.** Replace
       `useState({ personal: true, analytics: false, email: true })` in `App.tsx` with
       server-backed state that starts denied. Until the user actively grants, party choices stay
       local and no watch history or inferred state is transmitted or persisted.
-- [ ] **C-6 · GATE — Server-side enforcement.** A single helper in the Edge Function that both
+- [x] **C-6 · DONE 2026-08-14 — Server-side enforcement.** A single helper in the Edge Function that both
       endpoints call. Consent absent → `for_you` is refused and falls back; personalization
       events are rejected or stripped. Enforcement lives on the server; the UI toggle is a
       display of state, not the mechanism.
-- [ ] **C-7 · GATE — Withdrawal takes effect on the next request.** Cancel in-flight personalized
+- [x] **C-7 · DONE 2026-08-14 — Withdrawal takes effect on the next request.** Cancel in-flight personalized
       calls, purge the client outbox for that purpose, switch to non-profiled. Withdrawal must
       be as easy as granting.
-- [ ] **C-8 — `private.viewer_preferences`**: subject, entity type/id, signed weight, source
+- [x] **C-8 · DONE 2026-08-14 — `private.viewer_preferences`**: subject, entity type/id, signed weight, source
       (`explicit` / `follow` / `inferred`), created/updated/decayed timestamps. Explicit choices
       stay separable from inferred ones so the UI can show and edit each independently.
 - [ ] **C-9 — Follows and likes persist server-side**, replacing the `following` / `liked` /
       `saved` React maps. Keyed on `politicians.id`, never a display-name slug (`Q-2`).
-- [ ] **C-10 · GATE — Subject rights are real workflows**: export, access, preference edit,
+- [x] **C-10 · DONE FOR RECOMMENDATION DATA 2026-08-14 — Subject rights are real workflows**: export, access, preference edit,
       recommendation reset, deletion. Export covers observed events and inferred affinities.
       Placeholder buttons do not count.
-- [ ] **C-11 — RLS matrix for every private table**, in the same test harness as `P0-7`:
+- [x] **C-11 · DONE FOR V1 2026-08-14 — RLS matrix for every private table**, in the same test harness as `P0-7`:
       anon, authenticated-as-A, authenticated-as-B, service_role.
-- [ ] **C-12 — Retention jobs exist and run** for the periods `F0-6` settles on. A retention
+- [x] **C-12 · DONE FOR V1 2026-08-14 — Retention jobs exist and run** for the periods `F0-6` settles on. A retention
       policy nobody implemented is worse than no policy, because it is written down.
-- [ ] **C-13 — No sensitive values in URLs, ordinary logs, client analytics or public tables.**
+- [x] **C-13 · DONE FOR V1 2026-08-14 — No sensitive values in URLs, ordinary logs, client analytics or public tables.**
       Add a log-scrubbing check. Party affinity in a query string is a leak into every proxy and
       access log on the path.
 
