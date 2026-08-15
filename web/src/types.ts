@@ -152,9 +152,6 @@ export interface ClipItem {
    * them only when a real count exists behind them.
    */
   isSample: boolean;
-  /** Present only when the server placed this clip in a consented `För dig` slate. */
-  recommendationReason?: string;
-  recommendationReasonCode?: string;
   feedRequestId?: string;
   feedItemId?: string;
   feedPosition?: number;

@@ -4676,3 +4676,22 @@ could not run because this desktop runtime has no `python` executable.
 **Contracts touched:** none.
 
 **Blocked / needs a decision:** none.
+
+## F2b follow-up — recommendation reasons are internal-only — DONE 2026-08-15
+
+**Built:** the scrolling video overlay no longer renders algorithm reason tags
+such as `Eftersom du följer …` or `För variation i ditt flöde`. The frontend
+adapter now discards `reason` and `reasonCode` instead of copying them into the
+display `ClipItem`, and the unused pill styling is removed. The Edge response
+and private served-slate records retain pool/reason data for internal auditing;
+ranking behavior and collection remain unchanged.
+
+**Tests:** 16 frontend Node tests, strict TypeScript and the Vite/PWA production
+build are green with nine precache entries. A built-asset check confirms the
+reason tag class and tooltip text are absent; `git diff --check` green. The
+default project acceptance command remains unavailable because this desktop
+runtime has no `python` executable.
+
+**Contracts touched:** none.
+
+**Blocked / needs a decision:** none.

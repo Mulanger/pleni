@@ -190,8 +190,6 @@ export async function loadRuleBasedFeed(
   );
   const clips = response.items.map((item): ClipItem => ({
     ...item.clip,
-    recommendationReason: item.reason,
-    recommendationReasonCode: item.reasonCode,
     feedRequestId: response.feedRequestId,
     feedItemId: item.feedItemId,
     feedPosition: item.position

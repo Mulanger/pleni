@@ -3021,11 +3021,6 @@ function ClipMeta({
           {following ? "Följer" : "Följ"}
         </button>
       </div>
-      {clip.recommendationReason && (
-        <div className="recommendation-reason" title="Varför visas klippet?">
-          {clip.recommendationReason}
-        </div>
-      )}
       <div className="clip-title">{clip.title}</div>
       <div className="clip-subtitle">
         {clip.sourceTitle} · {formatDate(clip.debateDate)}
