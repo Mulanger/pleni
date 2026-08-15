@@ -30,6 +30,19 @@ export interface ManagedMediaElement {
 }
 
 /**
+ * A browser-enforced autoplay mute belongs only to the clip whose sound-on
+ * attempt was rejected. A mute chosen by the viewer is the only mute that
+ * follows them to the next clip.
+ */
+export function isFeedAudioMuted(
+  viewerMuted: boolean,
+  autoplayMutedClipId: string | null,
+  activeClipId: string
+): boolean {
+  return viewerMuted || autoplayMutedClipId === activeClipId;
+}
+
+/**
  * Missing network information is normal on Samsung Internet, Safari and many
  * WebViews. Only an explicit constrained-network signal disables the second
  * look-ahead; lack of a hint must not quietly turn fast Wi-Fi into metadata-only.

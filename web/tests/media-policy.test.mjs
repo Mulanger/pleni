@@ -4,9 +4,18 @@ import test from "node:test";
 import {
   allowsSecondLookahead,
   attachMediaSource,
+  isFeedAudioMuted,
   planMediaWindow,
   releaseMediaSource
 } from "../src/feed/media-policy.ts";
+
+test("only a viewer-chosen mute follows playback to the next clip", () => {
+  assert.equal(isFeedAudioMuted(false, null, "clip-a"), false);
+  assert.equal(isFeedAudioMuted(false, "clip-a", "clip-a"), true);
+  assert.equal(isFeedAudioMuted(false, "clip-a", "clip-b"), false);
+  assert.equal(isFeedAudioMuted(true, null, "clip-b"), true);
+  assert.equal(isFeedAudioMuted(true, "clip-a", "clip-b"), true);
+});
 
 test("forward scheduling stages the second destination only after the first is playable", () => {
   assert.deepEqual(

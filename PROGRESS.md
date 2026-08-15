@@ -4695,3 +4695,25 @@ runtime has no `python` executable.
 **Contracts touched:** none.
 
 **Blocked / needs a decision:** none.
+
+## UI14 follow-up — sound-on feed playback — DONE 2026-08-15
+
+**Built:** feed playback still requests unmuted autoplay first, but a browser's
+muted fallback is now scoped to only the clip whose sound-on attempt was
+rejected. It no longer changes the viewer's app-wide mute choice. Every newly
+active clip retries sound, while an explicit tap on the mute control remains
+persistent across clips. Tapping the video or sound control after a
+browser-enforced fallback enables audio within that same user gesture.
+
+**Tests:** 17 frontend Node tests green, including the distinction between a
+clip-local autoplay fallback and a viewer mute; strict frontend TypeScript and
+the Vite/PWA production build are green with nine precache entries;
+`git diff --check` green. The default project acceptance command remains
+unavailable because this desktop runtime has no `python` executable.
+
+**Contracts touched:** none.
+
+**Blocked / needs a decision:** browser autoplay policy can still reject sound
+on a true cold load before any user gesture. In that case Pleni keeps the video
+moving muted, shows the sound-off control, and retries sound on the next clip or
+enables it immediately on the viewer's first tap.

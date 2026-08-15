@@ -66,6 +66,7 @@ import { initials, PARTIES, partyInk, partyTint, TRENDING } from "./data";
 import { EMPTY_RECOMMENDATION_PROFILE, PERSONALIZATION_NOTICE_VERSION } from "./consent";
 import {
   attachMediaSource,
+  isFeedAudioMuted,
   planMediaWindow,
   releaseMediaSource
 } from "./feed/media-policy";
@@ -1719,6 +1720,7 @@ function FeedScreen({
   const [playableGeneration, setPlayableGeneration] = useState<string | null>(null);
   const [pullDistance, setPullDistance] = useState(0);
   const [pulling, setPulling] = useState(false);
+  const [autoplayMutedClipId, setAutoplayMutedClipId] = useState<string | null>(null);
   const secondLookaheadAllowed = useSecondLookahead();
   const feedScrollRef = useRef<HTMLDivElement | null>(null);
   const pullStartY = useRef<number | null>(null);
@@ -1752,7 +1754,8 @@ function FeedScreen({
    * forced a muted fallback. Two things depend on knowing the difference: the
    * next tap may undo our mute, and it must never undo theirs.
    */
-  const autoMutedRef = useRef(false);
+  const autoplayMutedClipIdRef = useRef<string | null>(null);
+  const effectiveMuted = isFeedAudioMuted(muted, autoplayMutedClipId, activeId);
 
   useEffect(() => {
     // A collection opened from a grid starts on the clip that was tapped, not
@@ -1767,6 +1770,8 @@ function FeedScreen({
     setShareFeedback(null);
     setPredictedDirection(1);
     setPlayableGeneration(null);
+    autoplayMutedClipIdRef.current = null;
+    setAutoplayMutedClipId(null);
     loopCounts.current = {};
   }, [clips, initialClipId]);
 
@@ -1972,8 +1977,8 @@ function FeedScreen({
           return;
         }
         video.muted = true;
-        autoMutedRef.current = true;
-        setMuted(true);
+        autoplayMutedClipIdRef.current = clipId;
+        setAutoplayMutedClipId(clipId);
         void video.play().then(succeeded).catch(refused);
       });
   };
@@ -2170,7 +2175,7 @@ function FeedScreen({
       if (!video) {
         return;
       }
-      video.muted = muted;
+      video.muted = isFeedAudioMuted(muted, autoplayMutedClipIdRef.current, clipId);
       if (clipId === activeId) {
         playWithMutedFallback(clipId, video);
       } else {
@@ -2183,10 +2188,10 @@ function FeedScreen({
   useEffect(() => {
     Object.values(videoRefs.current).forEach((video) => {
       if (video) {
-        video.muted = muted;
+        video.muted = effectiveMuted;
       }
     });
-  }, [muted]);
+  }, [effectiveMuted]);
 
   const flashPlayback = (clipId: string, icon: PlaybackFlash["icon"]) => {
     if (flashTimer.current !== null) {
@@ -2219,6 +2224,34 @@ function FeedScreen({
     });
   };
 
+  const chooseMuted = (nextMuted: boolean) => {
+    // Only this control creates a persistent viewer mute. Clearing the
+    // autoplay fallback here lets an explicit unmute take effect immediately
+    // inside the same user gesture, which satisfies mobile autoplay policy.
+    autoplayMutedClipIdRef.current = null;
+    setAutoplayMutedClipId(null);
+    setMuted(nextMuted);
+
+    const clipId = activeIdRef.current;
+    const video = videoRefs.current[clipId];
+    if (!video) {
+      return;
+    }
+    video.muted = nextMuted;
+    if (!nextMuted && video.paused) {
+      void video
+        .play()
+        .then(() => {
+          setPaused((state) => ({ ...state, [clipId]: false }));
+          setBlocked((state) => ({ ...state, [clipId]: false }));
+        })
+        .catch(() => {
+          setPaused((state) => ({ ...state, [clipId]: true }));
+          setBlocked((state) => ({ ...state, [clipId]: true }));
+        });
+    }
+  };
+
   const toggleClipPlayback = (clipId: string) => {
     const video = videoRefs.current[clipId];
     if (!video || clipId !== activeId) {
@@ -2228,9 +2261,8 @@ function FeedScreen({
     // On a feed like this it means "let me hear it" far more often than "stop",
     // so spend it on turning sound on. Only ever undoes a mute we applied — an
     // explicit mute from the control below is the viewer's and stays put.
-    if (autoMutedRef.current && !video.paused) {
-      autoMutedRef.current = false;
-      setMuted(false);
+    if (autoplayMutedClipIdRef.current === clipId) {
+      chooseMuted(false);
       return;
     }
     if (video.paused) {
@@ -2381,7 +2413,7 @@ function FeedScreen({
               posterSrc={withinPosterWindow ? clip.thumbUrl : undefined}
               preload={preload}
               mediaMounted={mediaMounted}
-              muted={muted}
+              muted={effectiveMuted}
               active={clip.id === activeId}
               blocked={!!blocked[clip.id]}
               liked={isLiked}
@@ -2392,10 +2424,7 @@ function FeedScreen({
               shareFeedback={shareFeedback?.clipId === clip.id ? shareFeedback : null}
               onTogglePlayback={() => toggleClipPlayback(clip.id)}
               onToggleMuted={() => {
-                // Whatever the viewer chooses here is theirs, so the
-                // tap-to-unmute shortcut must not second-guess it later.
-                autoMutedRef.current = false;
-                setMuted(!muted);
+                chooseMuted(!effectiveMuted);
               }}
               onLike={() => onLike(clip.id)}
               onComments={() => openComments(clip)}
