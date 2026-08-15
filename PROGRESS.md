@@ -4655,3 +4655,24 @@ Python command remains unavailable because this desktop runtime has no
 **Contracts touched:** none.
 
 **Blocked / needs a decision:** none.
+
+## UI13 follow-up — newest-first profile clip grids — DONE 2026-08-15
+
+**Built:** politician and party profile grids now read from the flattened public
+clip catalogue and order by the speech's `debate_date` descending. Upload time
+only breaks ties within one debate date, followed by clip id for stable reloads.
+This replaces the previous `published_at`-only queries, which allowed a newly
+encoded backfill from an older debate to appear above newer parliamentary
+material. A shared non-mutating comparator protects the rendered order even if
+the API response order regresses.
+
+**Tests:** 16 frontend Node tests green, including a regression where an old
+debate uploaded today must remain below a newer debate; strict frontend
+TypeScript and the Vite/PWA production build are green with nine precache
+entries; real public politician and KD catalogue reads returned descending
+debate dates; `git diff --check` green. The default project acceptance command
+could not run because this desktop runtime has no `python` executable.
+
+**Contracts touched:** none.
+
+**Blocked / needs a decision:** none.

@@ -1,5 +1,6 @@
 import { normalizeParty, SAMPLE_CLIPS } from "./data";
 import { recommendationsEnabled } from "./account";
+import { newestProfileClipsFirst } from "./profile-clip-order";
 import type { ClipFeed, ClipItem, PartyCode, PartyProfile, Politician } from "./types";
 
 interface RawSource {
@@ -293,26 +294,6 @@ function clipSelect(): string {
   ].join(",");
 }
 
-/** Clip projection whose politician join can constrain the catalogue by party. */
-function partyClipSelect(): string {
-  return [
-    "id",
-    "speech_id",
-    "rank_in_speech",
-    "duration_s",
-    "title",
-    "transcript",
-    "topic",
-    "archetype",
-    "url_540x960",
-    "thumb_url",
-    "published_at",
-    "speeches!inner(speaker_name,party,anforandetyp,politician_id," +
-      "politicians!inner(id,name,party,role,constituency,avatar_url)," +
-      "sources(title,debate_date,source_url))"
-  ].join(",");
-}
-
 /** Run a clip query and map the rows, returning `[]` on any failure. */
 async function readClips(query: URLSearchParams): Promise<ClipItem[]> {
   const response = await supabaseRest(`clips?${query.toString()}`);
@@ -321,6 +302,18 @@ async function readClips(query: URLSearchParams): Promise<ClipItem[]> {
   }
   const rows = (await response.json()) as RawClip[];
   return rows.map(mapClip).filter((clip) => clip.videoUrl.length > 0);
+}
+
+/** Read profile-grid clips from the flattened catalogue's sortable date columns. */
+async function readProfileClips(query: URLSearchParams): Promise<ClipItem[]> {
+  const response = await supabaseRest(`feed_clip_catalogue?${query.toString()}`);
+  if (!response.ok) {
+    return [];
+  }
+  const rows = (await response.json()) as RawFeedCatalogueClip[];
+  return newestProfileClipsFirst(
+    rows.map(mapFeedCatalogueClip).filter((clip) => clip.videoUrl.length > 0)
+  );
 }
 
 /**
@@ -669,13 +662,11 @@ export async function loadClipsForPolitician(
   if (!supabaseConfigured) {
     return [];
   }
-  return readClips(
+  return readProfileClips(
     new URLSearchParams({
-      select: clipSelect(),
-      "speeches.politician_id": `eq.${politicianId}`,
-      published_at: "not.is.null",
-      moderation: "neq.rejected",
-      order: "published_at.desc",
+      select: "*",
+      politician_id: `eq.${politicianId}`,
+      order: "debate_date.desc,published_at.desc,id.asc",
       limit: String(limit)
     })
   );
@@ -692,13 +683,12 @@ export async function loadClipsForParty(code: PartyCode, limit = 60): Promise<Cl
   if (!supabaseConfigured || code === "NONE") {
     return [];
   }
-  return readClips(
+  return readProfileClips(
     new URLSearchParams({
-      select: partyClipSelect(),
-      "speeches.politicians.party": `eq.${code}`,
-      published_at: "not.is.null",
-      moderation: "neq.rejected",
-      order: "published_at.desc",
+      select: "*",
+      party: `eq.${code}`,
+      politician_id: "not.is.null",
+      order: "debate_date.desc,published_at.desc,id.asc",
       limit: String(limit)
     })
   );
