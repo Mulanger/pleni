@@ -30,6 +30,15 @@ export interface ManagedMediaElement {
 }
 
 /**
+ * `loadeddata` corresponds to HAVE_CURRENT_DATA: the current playback position
+ * has a decoded frame that can replace the thumbnail without exposing an empty
+ * video surface. Keep this numeric so the policy stays DOM-independent in tests.
+ */
+export function hasDecodedVideoFrame(readyState: number): boolean {
+  return readyState >= 2;
+}
+
+/**
  * A browser-enforced autoplay mute belongs only to the clip whose sound-on
  * attempt was rejected. A mute chosen by the viewer is the only mute that
  * follows them to the next clip.

@@ -202,9 +202,11 @@ Last updated: 2026-08-11.
   destinations use explicit `load()` with `preload="auto"`; the second look-ahead
   is disabled only by an explicit Save-Data, 2G or slow-2G signal. Missing network
   hints are normal (including Samsung Internet) and no longer suppress preparation.
-  The poster stays visible until a decoded frame is presented. Video remains owned
-  by the media element/browser HTTP cache, never the service worker or a manual blob
-  fetch.
+  The bounded thumbnail stays visible only until `loadeddata` confirms that the
+  media element has a decoded current frame. Preloaded destinations expose that
+  frame before they enter view; do not add a second native video poster that can
+  flash again on activation. Video remains owned by the media element/browser HTTP
+  cache, never the service worker or a manual blob fetch.
 - Bunny sends no `Timing-Allow-Origin`, so `transferSize` is 0 for every CDN
   resource — request counts and timings are measurable from the page, byte totals
   are not.

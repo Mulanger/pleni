@@ -4,10 +4,19 @@ import test from "node:test";
 import {
   allowsSecondLookahead,
   attachMediaSource,
+  hasDecodedVideoFrame,
   isFeedAudioMuted,
   planMediaWindow,
   releaseMediaSource
 } from "../src/feed/media-policy.ts";
+
+test("a thumbnail yields only after the video has a decoded current frame", () => {
+  assert.equal(hasDecodedVideoFrame(0), false);
+  assert.equal(hasDecodedVideoFrame(1), false);
+  assert.equal(hasDecodedVideoFrame(2), true);
+  assert.equal(hasDecodedVideoFrame(3), true);
+  assert.equal(hasDecodedVideoFrame(4), true);
+});
 
 test("only a viewer-chosen mute follows playback to the next clip", () => {
   assert.equal(isFeedAudioMuted(false, null, "clip-a"), false);

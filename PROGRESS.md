@@ -4762,3 +4762,34 @@ pinch zoom and pull-to-refresh on the live phone build.
 **Next agent should know:** do not replace the controller with native smooth
 scrolling; CSS cannot tune user momentum. Keep `scroll-snap-stop: always` for the
 native fallback and keep the media scheduler as the only source-window owner.
+
+## UI15.1 — decoded-frame poster handoff — DONE 2026-08-18
+
+**Built:** removed the video element's duplicate native poster and made the
+bounded thumbnail overlay yield as soon as `loadeddata` confirms a decoded
+current frame. Immediate and staged destinations now expose their prepared frame
+before entering view, while cold or unmounted clips retain the existing bounded
+thumbnail fallback. Source scheduling, autoplay, mute behavior and the four-video
+ceiling are unchanged.
+
+**Tests:** added a media-policy regression for HTML media ready states; all 26
+dependency-free frontend tests green; strict frontend TypeScript green; Vite/PWA
+production build green with exactly 9 app-shell entries and no video/private
+data; `python tasks.py test lint typecheck` green through Python 3.12: **397
+passed, 68 deselected**, one existing `audioop` warning; `git diff --check`
+green.
+
+**Contracts touched:** none.
+
+**Decisions made:** the explicit overlay remains the only thumbnail layer. It is
+removed at `HAVE_CURRENT_DATA`, when a frame is decoded beneath it, rather than
+waiting for a compositor callback after playback starts. This avoids both a
+thumbnail flash and a black frame without widening the preload window.
+
+**Observations (not fixed, out of scope):** physical device confirmation remains
+with the owner on the live release.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** do not restore a `poster` attribute on the mounted
+feed `<video>`; the bounded overlay already owns the cold-load fallback.

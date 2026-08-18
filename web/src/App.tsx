@@ -66,6 +66,7 @@ import { initials, PARTIES, partyInk, partyTint, TRENDING } from "./data";
 import { EMPTY_RECOMMENDATION_PROFILE, PERSONALIZATION_NOTICE_VERSION } from "./consent";
 import {
   attachMediaSource,
+  hasDecodedVideoFrame,
   isFeedAudioMuted,
   planMediaWindow,
   releaseMediaSource
@@ -1455,7 +1456,6 @@ function FeedItemRow({
   const [frameReady, setFrameReady] = useState(false);
   const [buffering, setBuffering] = useState(false);
   const mediaRef = useRef<HTMLVideoElement | null>(null);
-  const firstFrameCancelRef = useRef<(() => void) | null>(null);
   const bindMediaRef = useCallback(
     (node: HTMLVideoElement | null) => {
       mediaRef.current = node;
@@ -1486,8 +1486,6 @@ function FeedItemRow({
     setBuffering(false);
     attachMediaSource(video, videoSrc, preload);
     return () => {
-      firstFrameCancelRef.current?.();
-      firstFrameCancelRef.current = null;
       releaseMediaSource(video);
     };
   }, [videoSrc]);
@@ -1502,34 +1500,10 @@ function FeedItemRow({
     video.setAttribute("preload", preload);
   }, [preload, videoSrc]);
 
-  const revealFirstFrame = (video: HTMLVideoElement) => {
-    firstFrameCancelRef.current?.();
-    const candidate = video as HTMLVideoElement & {
-      requestVideoFrameCallback?: (callback: () => void) => number;
-      cancelVideoFrameCallback?: (handle: number) => void;
-    };
-    if (candidate.requestVideoFrameCallback) {
-      const handle = candidate.requestVideoFrameCallback(() => {
-        if (mediaRef.current === video) {
-          setFrameReady(true);
-        }
-      });
-      firstFrameCancelRef.current = () => candidate.cancelVideoFrameCallback?.(handle);
-      return;
+  const revealDecodedFrame = (video: HTMLVideoElement) => {
+    if (mediaRef.current === video && hasDecodedVideoFrame(video.readyState)) {
+      setFrameReady(true);
     }
-    let firstFrame = 0;
-    let secondFrame = 0;
-    firstFrame = window.requestAnimationFrame(() => {
-      secondFrame = window.requestAnimationFrame(() => {
-        if (mediaRef.current === video) {
-          setFrameReady(true);
-        }
-      });
-    });
-    firstFrameCancelRef.current = () => {
-      window.cancelAnimationFrame(firstFrame);
-      window.cancelAnimationFrame(secondFrame);
-    };
   };
 
   return (
@@ -1545,9 +1519,10 @@ function FeedItemRow({
     >
       {posterSrc && !frameReady && <img className="feed-poster" src={posterSrc} alt="" />}
       {mediaMounted && (
+        /* The overlay owns the cold-load fallback. A native `poster` would sit
+           above this decoded preload again and flash when playback activates. */
         <video
           ref={bindMediaRef}
-          poster={posterSrc}
           playsInline
           controls={false}
           controlsList="nodownload nofullscreen noremoteplayback"
@@ -1567,16 +1542,16 @@ function FeedItemRow({
           }}
           onLoadedData={(event) => {
             setBuffering(false);
-            revealFirstFrame(event.currentTarget);
+            revealDecodedFrame(event.currentTarget);
           }}
           onCanPlay={(event) => {
             setBuffering(false);
-            revealFirstFrame(event.currentTarget);
+            revealDecodedFrame(event.currentTarget);
             onPlayable();
           }}
           onPlaying={(event) => {
             setBuffering(false);
-            revealFirstFrame(event.currentTarget);
+            revealDecodedFrame(event.currentTarget);
           }}
           onWaiting={(event) => {
             if (

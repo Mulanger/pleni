@@ -1221,7 +1221,9 @@ one-clip gesture: the card follows the finger, settles to the adjacent clip in
 ```
 web/src/App.tsx
 web/src/styles.css
+web/src/feed/media-policy.ts
 web/src/feed/snap-policy.ts
+web/tests/media-policy.test.mjs
 web/tests/snap-policy.test.mjs
 docs/BUILD_PLAN.md
 AGENTS.md
@@ -1241,8 +1243,10 @@ drags return to the current clip; reduced motion aligns instantly; taps, seeking
 pinch zoom, pull-to-refresh, wheel/keyboard navigation and the existing playback
 lifecycle remain correct. Snap-policy tests, TypeScript, the production build,
 PWA verification, the full project acceptance command and `git diff --check` are
-green. Physical iPhone Safari/Home Screen and Android Chrome or Samsung Internet
-remain required before release.
+green. A preloaded destination must expose its decoded first frame before it
+enters view, while an actually unready clip retains its bounded thumbnail rather
+than flashing black. Physical iPhone Safari/Home Screen and Android Chrome or
+Samsung Internet remain required before release.
 
 ---
 
