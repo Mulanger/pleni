@@ -206,6 +206,22 @@ a {
   -webkit-user-select: none;
 }
 
+/* UI15: Pointer Events own one-finger vertical movement so the browser cannot
+   append a long, platform-specific momentum tail. Horizontal direct movement
+   and pinch zoom remain browser-owned. Native snap stays available whenever
+   the controller is unsupported or the viewer uses wheel/keyboard scrolling. */
+.feed-scroll--controlled,
+.feed-scroll--controlled .feed-item,
+.feed-scroll--controlled .feed-item video {
+  touch-action: pan-x pinch-zoom;
+}
+
+/* Do not let mandatory native snap compete with the 140 ms pointer settlement.
+   The controller restores the exact item boundary before removing this flag. */
+.feed-scroll[data-swipe-active="true"] {
+  scroll-snap-type: none;
+}
+
 .feed-poster {
   position: absolute;
   inset: 0;

@@ -167,12 +167,16 @@ Last updated: 2026-08-11.
   versions, iPhone Safari/Home Screen, normal Android Chrome and Samsung Internet
   remain explicitly unverified, owner-accepted coverage gaps. Do not treat those
   rows as passes; see the UI14.6 closeout record in the detailed plan.
-- The feed is a TikTok-style vertical scroll over published Bunny MP4s. Snapping is
-  pure CSS — there is no swipe library and no JS scroll handler. `.feed-item` carries
-  `scroll-snap-stop: always`, which is what limits a fling to one clip; without it the
-  browser is allowed to sail past snap points and a hard swipe jumps two or three.
-  Item height is `100%` of `.feed-scroll` on purpose, never a viewport unit: `dvh`
-  changes mid-scroll as the mobile URL bar collapses, which moves every snap point.
+- The feed is a TikTok-style vertical scroll over published Bunny MP4s. UI15 owns
+  primary touch/pen vertical gestures with Pointer Events: the card follows the
+  pointer, advances at most one clip, activates the destination on release and
+  settles to the exact boundary in 140 ms. Native wheel, keyboard, deep-link and
+  unsupported-browser scrolling still use CSS snap; `scroll-snap-stop: always`
+  remains load-bearing for that fallback. `web/src/feed/snap-policy.ts` is the
+  gesture-policy source of truth. Preserve pinch zoom, pull-to-refresh, progress
+  scrubbing and the four-source media ceiling when changing it. Item height is
+  `100%` of `.feed-scroll` on purpose, never a viewport unit: `dvh` changes
+  mid-scroll as the mobile URL bar collapses, which moves every snap point.
 - Current player behavior:
   - the active clip autoplays; audio starts unmuted where browser policy allows it,
     and falls back to **muted playback** where it does not, rather than not playing;

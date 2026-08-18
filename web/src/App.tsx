@@ -71,6 +71,14 @@ import {
   releaseMediaSource
 } from "./feed/media-policy";
 import { useSecondLookahead } from "./feed/network";
+import {
+  decideSnapTarget,
+  dragScrollTop,
+  isVerticalSwipeIntent,
+  snapDuration,
+  snapEaseOut,
+  snapScrollTop
+} from "./feed/snap-policy";
 import { Onboarding } from "./onboarding";
 import { EMPTY_ONBOARDING, readOnboarding, writeOnboarding } from "./onboarding-store";
 import { EMPTY_LIBRARY, readLibrary, toggleInList, writeLibrary } from "./library-store";
@@ -263,6 +271,23 @@ const ACTIVATION_DWELL_MS = 180;
  */
 const POSTER_WINDOW = 3;
 const PULL_REFRESH_TRIGGER = 64;
+
+type FeedSwipeGesture = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  velocitySampleY: number;
+  velocitySampleTime: number;
+  velocityY: number;
+  currentIndex: number;
+  itemHeight: number;
+  vertical: boolean;
+};
+
+type FeedSnapAnimation = {
+  frameId: number;
+  targetIndex: number;
+};
 
 function App() {
   const { route, navigate, backTo } = useAppNavigation();
@@ -1723,6 +1748,10 @@ function FeedScreen({
   const [autoplayMutedClipId, setAutoplayMutedClipId] = useState<string | null>(null);
   const secondLookaheadAllowed = useSecondLookahead();
   const feedScrollRef = useRef<HTMLDivElement | null>(null);
+  const swipeGestureRef = useRef<FeedSwipeGesture | null>(null);
+  const snapAnimationRef = useRef<FeedSnapAnimation | null>(null);
+  const controlledSnapActiveRef = useRef(false);
+  const suppressFeedClickUntilRef = useRef(0);
   const pullStartY = useRef<number | null>(null);
   const pullDistanceRef = useRef(0);
   const wasRefreshingRef = useRef(false);
@@ -1742,6 +1771,27 @@ function FeedScreen({
   activeIdRef.current = activeId;
   playbackSuspendedRef.current = playbackSuspended;
   commentClipRef.current = commentClip;
+
+  const activateClip = useCallback(
+    (clipId: string) => {
+      if (!clipId || clipId === activeIdRef.current) {
+        return;
+      }
+      const previousIndex = clips.findIndex((clip) => clip.id === activeIdRef.current);
+      const nextIndex = clips.findIndex((clip) => clip.id === clipId);
+      if (nextIndex < 0) {
+        return;
+      }
+      if (previousIndex >= 0) {
+        setPredictedDirection(nextIndex > previousIndex ? 1 : -1);
+      }
+      // Keep imperative gesture and observer work on the same current value
+      // before React renders the state update.
+      activeIdRef.current = clipId;
+      setActiveId(clipId);
+    },
+    [clips]
+  );
   /**
    * FE-3. Loop boundaries per clip. A completion is the first `ended`; every
    * later one is a deliberate replay of a clip the viewer chose not to scroll
@@ -2084,6 +2134,229 @@ function FeedScreen({
     };
   }, []);
 
+  const controlledSwipeSupported =
+    typeof window !== "undefined" && "PointerEvent" in window;
+
+  const finishControlledSnap = useCallback((targetIndex: number) => {
+    const animation = snapAnimationRef.current;
+    if (animation !== null) {
+      window.cancelAnimationFrame(animation.frameId);
+      snapAnimationRef.current = null;
+    }
+    const scroll = feedScrollRef.current;
+    if (scroll) {
+      scroll.scrollTop = snapScrollTop(targetIndex, clips.length, scroll.clientHeight);
+      delete scroll.dataset.swipeActive;
+    }
+    swipeGestureRef.current = null;
+    controlledSnapActiveRef.current = false;
+  }, [clips.length]);
+
+  const settleControlledSnap = useCallback(
+    (targetIndex: number) => {
+      const scroll = feedScrollRef.current;
+      if (!scroll) {
+        controlledSnapActiveRef.current = false;
+        return;
+      }
+      if (snapAnimationRef.current !== null) {
+        finishControlledSnap(snapAnimationRef.current.targetIndex);
+      }
+
+      const startTop = scroll.scrollTop;
+      const targetTop = snapScrollTop(targetIndex, clips.length, scroll.clientHeight);
+      const duration = snapDuration(
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      );
+      if (duration === 0 || Math.abs(targetTop - startTop) < 0.5) {
+        finishControlledSnap(targetIndex);
+        return;
+      }
+
+      scroll.dataset.swipeActive = "true";
+      controlledSnapActiveRef.current = true;
+      const startedAt = performance.now();
+      const animation: FeedSnapAnimation = { frameId: 0, targetIndex };
+      snapAnimationRef.current = animation;
+
+      const step = (now: number) => {
+        if (snapAnimationRef.current !== animation) {
+          return;
+        }
+        const progress = Math.min((now - startedAt) / duration, 1);
+        scroll.scrollTop = startTop + (targetTop - startTop) * snapEaseOut(progress);
+        if (progress >= 1) {
+          finishControlledSnap(targetIndex);
+          return;
+        }
+        animation.frameId = window.requestAnimationFrame(step);
+      };
+      animation.frameId = window.requestAnimationFrame(step);
+    },
+    [clips.length, finishControlledSnap]
+  );
+
+  const cancelControlledGesture = useCallback(() => {
+    const gesture = swipeGestureRef.current;
+    if (gesture?.vertical) {
+      finishControlledSnap(gesture.currentIndex);
+      return;
+    }
+    swipeGestureRef.current = null;
+    controlledSnapActiveRef.current = false;
+  }, [finishControlledSnap]);
+
+  useLayoutEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        return;
+      }
+      if (snapAnimationRef.current !== null) {
+        finishControlledSnap(snapAnimationRef.current.targetIndex);
+      } else {
+        cancelControlledGesture();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (snapAnimationRef.current !== null) {
+        finishControlledSnap(snapAnimationRef.current.targetIndex);
+      } else {
+        cancelControlledGesture();
+      }
+    };
+  }, [cancelControlledGesture, finishControlledSnap]);
+
+  const handleFeedPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!controlledSwipeSupported || event.pointerType === "mouse") {
+      return;
+    }
+    if (!event.isPrimary) {
+      cancelControlledGesture();
+      return;
+    }
+    if ((event.target as Element).closest(".progress-track")) {
+      return;
+    }
+    if (snapAnimationRef.current !== null) {
+      // A fast second swipe starts from a fully aligned card, not halfway
+      // through the prior 140 ms settlement.
+      finishControlledSnap(snapAnimationRef.current.targetIndex);
+    }
+
+    const scroll = event.currentTarget;
+    const itemHeight = scroll.clientHeight;
+    if (itemHeight <= 0 || clips.length === 0) {
+      return;
+    }
+    const currentIndex = Math.min(
+      Math.max(Math.round(scroll.scrollTop / itemHeight), 0),
+      clips.length - 1
+    );
+    scroll.scrollTop = currentIndex * itemHeight;
+    swipeGestureRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      velocitySampleY: event.clientY,
+      velocitySampleTime: event.timeStamp,
+      velocityY: 0,
+      currentIndex,
+      itemHeight,
+      vertical: false
+    };
+  };
+
+  const handleFeedPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = swipeGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) {
+      return;
+    }
+    const deltaX = event.clientX - gesture.startX;
+    const deltaY = event.clientY - gesture.startY;
+    if (!gesture.vertical) {
+      // The current production feed owns a downward gesture at the first item
+      // as pull-to-refresh. Leave that established interaction to its touch
+      // handler instead of turning it into a rejected previous-card swipe.
+      if (gesture.currentIndex === 0 && deltaY > 0 && onRefresh) {
+        swipeGestureRef.current = null;
+        return;
+      }
+      if (!isVerticalSwipeIntent(deltaX, deltaY)) {
+        if (Math.abs(deltaX) >= 8 && Math.abs(deltaX) >= Math.abs(deltaY)) {
+          swipeGestureRef.current = null;
+        }
+        return;
+      }
+      gesture.vertical = true;
+      controlledSnapActiveRef.current = true;
+      event.currentTarget.dataset.swipeActive = "true";
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+
+    event.preventDefault();
+    const sampleDuration = event.timeStamp - gesture.velocitySampleTime;
+    if (sampleDuration >= 40) {
+      gesture.velocityY = (event.clientY - gesture.velocitySampleY) / sampleDuration;
+      gesture.velocitySampleY = event.clientY;
+      gesture.velocitySampleTime = event.timeStamp;
+    }
+    event.currentTarget.scrollTop = dragScrollTop({
+      currentIndex: gesture.currentIndex,
+      itemCount: clips.length,
+      itemHeight: gesture.itemHeight,
+      dragDeltaY: deltaY
+    });
+  };
+
+  const handleFeedPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = swipeGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) {
+      return;
+    }
+    swipeGestureRef.current = null;
+    if (!gesture.vertical) {
+      return;
+    }
+    event.preventDefault();
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    const velocityDuration = event.timeStamp - gesture.velocitySampleTime;
+    const releaseDeltaY = event.clientY - gesture.velocitySampleY;
+    const velocityY = velocityDuration > 0 && velocityDuration <= 120
+      ? Math.abs(releaseDeltaY) >= 0.5
+        ? releaseDeltaY / velocityDuration
+        : gesture.velocityY
+      : 0;
+    const targetIndex = decideSnapTarget({
+      currentIndex: gesture.currentIndex,
+      itemCount: clips.length,
+      itemHeight: gesture.itemHeight,
+      dragDeltaY: event.clientY - gesture.startY,
+      velocityY
+    });
+    const targetClipId = clips[targetIndex]?.id;
+    if (targetClipId) {
+      // The target is guaranteed to become the settled card, so it is safe to
+      // begin its already-preloaded video while the last 140 ms completes.
+      activateClip(targetClipId);
+    }
+    suppressFeedClickUntilRef.current = performance.now() + 450;
+    settleControlledSnap(targetIndex);
+  };
+
+  const handleFeedPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = swipeGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) {
+      return;
+    }
+    cancelControlledGesture();
+  };
+
   /**
    * FE-4 (GATE). Activation used to be `if (entry.isIntersecting) setActiveId(...)`
    * at a single 0.72 threshold, which had two problems:
@@ -2108,6 +2381,9 @@ function FeedScreen({
     let pendingWinner: string | null = null;
 
     const commitWinner = () => {
+      if (controlledSnapActiveRef.current) {
+        return;
+      }
       let best: string | null = null;
       let bestRatio = IMPRESSION_VISIBLE_FRACTION;
       ratios.forEach((ratio, clipId) => {
@@ -2127,13 +2403,8 @@ function FeedScreen({
       }
       dwellTimer = window.setTimeout(() => {
         dwellTimer = null;
-        if (pendingWinner !== null) {
-          const previousIndex = clips.findIndex((clip) => clip.id === activeIdRef.current);
-          const nextIndex = clips.findIndex((clip) => clip.id === pendingWinner);
-          if (previousIndex >= 0 && nextIndex >= 0 && previousIndex !== nextIndex) {
-            setPredictedDirection(nextIndex > previousIndex ? 1 : -1);
-          }
-          setActiveId(pendingWinner);
+        if (pendingWinner !== null && !controlledSnapActiveRef.current) {
+          activateClip(pendingWinner);
         }
       }, ACTIVATION_DWELL_MS);
     };
@@ -2160,7 +2431,7 @@ function FeedScreen({
         window.clearTimeout(dwellTimer);
       }
     };
-  }, [clips]);
+  }, [activateClip, clips]);
 
   useEffect(() => {
     pauseAllPlayback();
@@ -2383,9 +2654,24 @@ function FeedScreen({
       )}
 
       <div
-        className={pulling ? "feed-scroll feed-scroll--pulling" : "feed-scroll"}
+        className={[
+          "feed-scroll",
+          pulling ? "feed-scroll--pulling" : "",
+          controlledSwipeSupported ? "feed-scroll--controlled" : ""
+        ].filter(Boolean).join(" ")}
         ref={feedScrollRef}
         style={{ transform: `translate3d(0, ${pullOffset}px, 0)` }}
+        onPointerDown={handleFeedPointerDown}
+        onPointerMove={handleFeedPointerMove}
+        onPointerUp={handleFeedPointerUp}
+        onPointerCancel={handleFeedPointerCancel}
+        onClickCapture={(event) => {
+          if (performance.now() <= suppressFeedClickUntilRef.current) {
+            suppressFeedClickUntilRef.current = 0;
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
       >
         {clips.map((clip, index) => {
           const distanceFromActive = Math.abs(index - windowCentre);

@@ -4717,3 +4717,48 @@ unavailable because this desktop runtime has no `python` executable.
 on a true cold load before any user gesture. In that case Pleni keeps the video
 moving muted, shows the sound-off control, and retries sound on the next clip or
 enables it immediately on the viewer's first tap.
+
+## UI15 — fast feed snapping — IMPLEMENTED 2026-08-18
+
+**Built:** added a dependency-free Pointer Events controller and pure snap policy
+for primary touch/pen gestures; kept one-to-one finger tracking within one
+adjacent item; committed on 8%/48 px distance or 0.35 px/ms release velocity;
+activated the guaranteed destination on release; settled to its exact boundary
+in 140 ms; and made reduced motion immediate. Native wheel, keyboard, deep-link
+and unsupported-browser scrolling still use the existing CSS snap fallback. The
+first item's downward pull remains owned by the existing refresh interaction.
+
+**Tests:** 8 new snap-policy tests and all dependency-free web tests green;
+direct TypeScript check green; Vite production build green; PWA verifier green
+with exactly 9 same-origin app-shell entries and no video/private data;
+`python tasks.py test lint typecheck` green through the configured Python 3.12
+runtime: **397 passed, 68 deselected**, one existing `audioop` warning; lint and
+strict typing clean on 82 source files; `git diff --check` green.
+
+**Contracts touched:** none.
+
+**Decisions made:**
+- `web/src/feed/snap-policy.ts` owns the thresholds, one-item clamp, exact
+  alignment, 140 ms duration and easing. No gesture or animation dependency was
+  added.
+- CSS disables only browser-owned one-finger vertical panning while the
+  controller is supported. Horizontal direct movement and pinch zoom remain
+  browser-owned; pull-to-refresh and the progress slider retain their existing
+  gesture ownership.
+- A committed controlled swipe bypasses the 180 ms observer dwell because its
+  destination is guaranteed. The observer remains the activation path for
+  wheel, keyboard and programmatic scrolling and cannot race a controlled snap.
+- The full-bleed visual hierarchy, controls, sound-on behavior and media
+  presentation are unchanged.
+
+**Observations (not fixed, out of scope):** physical iPhone and Android devices
+were unavailable in this desktop session, so the live deployment still needs a
+real-device feel check by the owner.
+
+**Blocked / needs a decision:** none for deployment. Confirm release-to-alignment
+speed, zero residual drift, one clip per gesture, rapid reversal, taps, scrubbing,
+pinch zoom and pull-to-refresh on the live phone build.
+
+**Next agent should know:** do not replace the controller with native smooth
+scrolling; CSS cannot tune user momentum. Keep `scroll-snap-stop: always` for the
+native fallback and keep the media scheduler as the only source-window owner.

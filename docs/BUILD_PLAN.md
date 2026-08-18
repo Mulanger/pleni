@@ -1208,6 +1208,44 @@ build, the PWA build verifier and the full Python acceptance command are green.
 
 ---
 
+## UI15 — Fast feed snapping
+
+**Depends on:** UI2, UI5 and UI14.5. **Size:** small.
+
+**Objective.** Replace slow, browser-defined touch momentum with a controlled
+one-clip gesture: the card follows the finger, settles to the adjacent clip in
+140 ms, and starts the already-preloaded destination when the swipe commits.
+
+**Scope — may create or modify:**
+
+```
+web/src/App.tsx
+web/src/styles.css
+web/src/feed/snap-policy.ts
+web/tests/snap-policy.test.mjs
+docs/BUILD_PLAN.md
+AGENTS.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** `src/contracts.py`, numbered pipeline stages,
+migrations, feed ranking/order, media-window breadth, service-worker caching,
+comments, authentication, camera/framing/rendering, or generated media. Preserve
+pinch zoom, progress scrubbing, pull-to-refresh, native wheel/keyboard scrolling,
+deep-link positioning, one playing video and the four-source media ceiling.
+
+**Acceptance:** a primary touch or pen gesture follows the pointer, advances at
+most one clip and reaches the exact item boundary within 160 ms of release with
+no residual drift; the committed destination becomes active immediately; short
+drags return to the current clip; reduced motion aligns instantly; taps, seeking,
+pinch zoom, pull-to-refresh, wheel/keyboard navigation and the existing playback
+lifecycle remain correct. Snap-policy tests, TypeScript, the production build,
+PWA verification, the full project acceptance command and `git diff --check` are
+green. Physical iPhone Safari/Home Screen and Android Chrome or Samsung Internet
+remain required before release.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.
