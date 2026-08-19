@@ -961,12 +961,7 @@ a {
 }
 
 .party-logo img.is-ready {
-  animation: party-logo-in 140ms ease-out both;
-}
-
-@keyframes party-logo-in {
-  from { opacity: 0; transform: scale(0.94); }
-  to { opacity: 1; transform: scale(1); }
+  opacity: 1;
 }
 
 .avatar-fallback {

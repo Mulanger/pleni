@@ -4838,3 +4838,38 @@ remains with the owner after the main deployment.
 **Next agent should know:** run `scripts/sync_party_logos.py --dry-run` before a
 refresh. Never expose `logo_source_url` to the browser or seed `logo_url` before
 Bunny verification; keep the letter fallback for transient delivery failures.
+
+## UI16.1 — persistent party-logo handoff — DONE 2026-08-19
+
+**Built:** removed the letter-first transition for verified party logos. A valid
+CDN URL now suppresses the letter while its image decodes, successful immutable
+URLs are remembered for the page lifetime, and cached images are confirmed
+synchronously before paint when navigating between party surfaces. The letter
+returns only when no verified URL exists or the current CDN image genuinely
+fails.
+
+**Tests:** added 3 party-logo lifecycle regressions; all 32 dependency-free
+frontend tests green; direct TypeScript check green; Vite/PWA production build
+green with exactly 9 app-shell entries and no video/private data; `python
+tasks.py test lint typecheck` green through Python 3.12: **416 passed, 68
+deselected**, one existing `audioop` warning; lint and strict typing clean on 83
+source files; `git diff --check` green.
+
+**Contracts touched:** none.
+
+**Decisions made:**
+
+- A pending verified logo renders the stable party medallion without the legacy
+  letter; this avoids replacing one identity mark with another during decode.
+- Successful content-addressed URLs stay in memory only for the current page.
+  No viewing state or image bytes are persisted.
+- The ornamental logo entrance animation was removed so a remounted cached mark
+  appears immediately instead of replaying a fade.
+
+**Observations (not fixed, out of scope):** physical-phone confirmation remains
+with the owner on the live release.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** keep `shouldShowPartyLogoFallback()` failure-driven;
+do not make readiness alone reveal the letter again.

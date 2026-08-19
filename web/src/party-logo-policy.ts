@@ -24,3 +24,39 @@ export function normalizePartyLogoUrl(value: string | null | undefined): string 
     return null;
   }
 }
+
+interface CompletePartyLogoImage {
+  complete: boolean;
+  naturalWidth: number;
+}
+
+/*
+ * Party logos are immutable, content-addressed CDN objects. Remembering a URL
+ * that decoded successfully for this page lifetime lets the same mark move
+ * between search, following and profile surfaces without replaying its loading
+ * state after each component remount.
+ */
+const successfulPartyLogoUrls = new Set<string>();
+
+export function rememberPartyLogoSuccess(url: string): void {
+  successfulPartyLogoUrls.add(url);
+}
+
+export function forgetPartyLogoSuccess(url: string): void {
+  successfulPartyLogoUrls.delete(url);
+}
+
+export function hasPartyLogoSuccess(url: string): boolean {
+  return successfulPartyLogoUrls.has(url);
+}
+
+export function isCompletePartyLogoImage(image: CompletePartyLogoImage): boolean {
+  return image.complete && image.naturalWidth > 0;
+}
+
+export function shouldShowPartyLogoFallback(
+  displayUrl: string | null,
+  failedUrl: string | null
+): boolean {
+  return displayUrl === null || failedUrl === displayUrl;
+}

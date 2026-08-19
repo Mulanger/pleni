@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { PARTIES } from "../src/data.ts";
-import { normalizePartyLogoUrl } from "../src/party-logo-policy.ts";
+import {
+  forgetPartyLogoSuccess,
+  hasPartyLogoSuccess,
+  isCompletePartyLogoImage,
+  normalizePartyLogoUrl,
+  rememberPartyLogoSuccess,
+  shouldShowPartyLogoFallback
+} from "../src/party-logo-policy.ts";
 
 test("verified HTTPS party-logo mirrors are accepted and normalized", () => {
   assert.equal(
@@ -32,4 +39,31 @@ test("unsafe or absent logo values retain the local party fallback", () => {
   for (const code of ["S", "M", "SD", "C", "V", "KD", "MP", "L"]) {
     assert.equal(PARTIES[code].logoUrl, null);
   }
+});
+
+test("a valid logo suppresses the letter throughout loading and navigation", () => {
+  const url = "https://cdn.example/party-logos/s/immutable.png";
+
+  assert.equal(shouldShowPartyLogoFallback(url, null), false);
+  assert.equal(hasPartyLogoSuccess(url), false);
+  rememberPartyLogoSuccess(url);
+  assert.equal(hasPartyLogoSuccess(url), true);
+  assert.equal(shouldShowPartyLogoFallback(url, null), false);
+
+  forgetPartyLogoSuccess(url);
+  assert.equal(hasPartyLogoSuccess(url), false);
+});
+
+test("the letter returns only for absent or genuinely failed delivery", () => {
+  const url = "https://cdn.example/party-logos/m/immutable.png";
+
+  assert.equal(shouldShowPartyLogoFallback(null, null), true);
+  assert.equal(shouldShowPartyLogoFallback(url, url), true);
+  assert.equal(shouldShowPartyLogoFallback(url, "https://cdn.example/old.png"), false);
+});
+
+test("an already-decoded logo is recognized synchronously", () => {
+  assert.equal(isCompletePartyLogoImage({ complete: true, naturalWidth: 500 }), true);
+  assert.equal(isCompletePartyLogoImage({ complete: false, naturalWidth: 500 }), false);
+  assert.equal(isCompletePartyLogoImage({ complete: true, naturalWidth: 0 }), false);
 });
