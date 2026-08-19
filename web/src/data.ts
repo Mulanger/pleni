@@ -1,15 +1,15 @@
 import type { ClipItem, PartyCode, PartySummary, PersonProfile } from "./types";
 
 export const PARTIES: Record<PartyCode, PartySummary> = {
-  S: { abbr: "S", name: "Socialdemokraterna", short: "Socialdemokraterna", color: "#E8112D" },
-  M: { abbr: "M", name: "Moderaterna", short: "Moderaterna", color: "#3E9FD1" },
-  SD: { abbr: "SD", name: "Sverigedemokraterna", short: "Sverigedemokr.", color: "#B99A00" },
-  C: { abbr: "C", name: "Centerpartiet", short: "Centerpartiet", color: "#009933" },
-  V: { abbr: "V", name: "Vänsterpartiet", short: "Vänsterpartiet", color: "#AF0000" },
-  KD: { abbr: "KD", name: "Kristdemokraterna", short: "Kristdemokr.", color: "#005CA9" },
-  MP: { abbr: "MP", name: "Miljöpartiet", short: "Miljöpartiet", color: "#4F9B2E" },
-  L: { abbr: "L", name: "Liberalerna", short: "Liberalerna", color: "#006AB3" },
-  NONE: { abbr: "NONE", name: "Partilös", short: "Partilös", color: "#8f8f87" }
+  S: { abbr: "S", name: "Socialdemokraterna", short: "Socialdemokraterna", color: "#E8112D", logoUrl: null },
+  M: { abbr: "M", name: "Moderaterna", short: "Moderaterna", color: "#3E9FD1", logoUrl: null },
+  SD: { abbr: "SD", name: "Sverigedemokraterna", short: "Sverigedemokr.", color: "#B99A00", logoUrl: null },
+  C: { abbr: "C", name: "Centerpartiet", short: "Centerpartiet", color: "#009933", logoUrl: null },
+  V: { abbr: "V", name: "Vänsterpartiet", short: "Vänsterpartiet", color: "#AF0000", logoUrl: null },
+  KD: { abbr: "KD", name: "Kristdemokraterna", short: "Kristdemokr.", color: "#005CA9", logoUrl: null },
+  MP: { abbr: "MP", name: "Miljöpartiet", short: "Miljöpartiet", color: "#4F9B2E", logoUrl: null },
+  L: { abbr: "L", name: "Liberalerna", short: "Liberalerna", color: "#006AB3", logoUrl: null },
+  NONE: { abbr: "NONE", name: "Partilös", short: "Partilös", color: "#8f8f87", logoUrl: null }
 };
 
 /**

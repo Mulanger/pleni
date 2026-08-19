@@ -217,6 +217,12 @@ Last updated: 2026-08-11.
   later app pages on initials. Riksdagen's explicit no-photo records correctly
   remain initials and complete without dead-lettering. The full profile-sync
   script remains the periodic metadata/portrait refresh.
+- Party marks follow the same verified-mirror boundary. The eight canonical
+  official PNGs are content-addressed under `party-logos/<code>/<sha256>.png`;
+  `scripts/sync_party_logos.py` exposes their `party_profiles.logo_url` values
+  only after the complete set verifies. `logo_source_url` is provenance and the
+  frontend must never request it. A missing or failed CDN logo keeps the existing
+  party-coloured letter fallback.
 - The frontend data layer is `web/src/supabase.ts`; do not bypass it with hardcoded Bunny URLs except for the fallback sample data.
 - In this Codex desktop environment, `npm run ...` scripts have previously failed due a local Bun remap issue. Prefer direct Node commands:
   - Typecheck: `node .\node_modules\typescript\bin\tsc --noEmit -p tsconfig.json`

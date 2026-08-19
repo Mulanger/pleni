@@ -56,6 +56,7 @@ interface RawPartyProfile {
   name: string | null;
   short_name: string | null;
   color: string | null;
+  logo_url: string | null;
   display_order: number | null;
 }
 
@@ -419,7 +420,7 @@ function mapFeedCatalogueClip(row: RawFeedCatalogueClip): ClipItem {
  * ------------------------------------------------------------------ */
 
 const POLITICIAN_SELECT = "id,name,party,role,constituency,avatar_url";
-const PARTY_PROFILE_SELECT = "code,name,short_name,color,display_order";
+const PARTY_PROFILE_SELECT = "code,name,short_name,color,logo_url,display_order";
 
 function isPublicPartyCode(value: string): value is Exclude<PartyCode, "NONE"> {
   return value === "S" || value === "M" || value === "SD" || value === "C" ||
@@ -439,6 +440,7 @@ function mapPartyProfile(
     name: row.name?.trim() || row.code,
     short: row.short_name?.trim() || row.name?.trim() || row.code,
     color: row.color?.trim() || "#8F8F87",
+    logoUrl: row.logo_url?.trim() || null,
     displayOrder: row.display_order ?? 99,
     clipCount,
     politicianCount

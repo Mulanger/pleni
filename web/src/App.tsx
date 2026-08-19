@@ -86,6 +86,7 @@ import { EMPTY_LIBRARY, readLibrary, toggleInList, writeLibrary } from "./librar
 import { LEGAL_PAGE_ORDER, LEGAL_PAGES, LEGAL_VERSION } from "./legal";
 import type { LegalPageId } from "./legal";
 import { useAppNavigation } from "./navigation";
+import { PartyLogo } from "./party-logo";
 import {
   createPortraitDelivery,
   forgetPortraitSuccess,
@@ -329,6 +330,8 @@ function App() {
   const [personClips, setPersonClips] = useState<ClipItem[]>([]);
   const [personLoading, setPersonLoading] = useState(false);
   const [party, setParty] = useState<PartyProfile | null>(null);
+  const [partyProfiles, setPartyProfiles] = useState<PartyProfile[]>([]);
+  const [partyProfilesLoading, setPartyProfilesLoading] = useState(true);
   const [partyClips, setPartyClips] = useState<ClipItem[]>([]);
   const [partyPoliticians, setPartyPoliticians] = useState<Politician[]>([]);
   const [partyLoading, setPartyLoading] = useState(false);
@@ -368,6 +371,27 @@ function App() {
   useLayoutEffect(() => {
     applyBrowserTheme(darkSurface ? "dark" : "light");
   }, [darkSurface]);
+
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    loadPartyProfiles(controller.signal)
+      .then((profiles) => {
+        if (active) {
+          setPartyProfiles(profiles);
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) {
+          setPartyProfilesLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, []);
 
   useEffect(() => {
     if (!viewer.signedIn || !viewer.userId) {
@@ -1063,6 +1087,7 @@ function App() {
       {viewer.signedIn && showOnboarding && (
         <Onboarding
           initial={onboarding}
+          partyProfiles={partyProfiles}
           mode={onboardingMode}
           recommendationsConnected={recommendationsEnabled}
           onComplete={async (next) => {
@@ -1202,6 +1227,7 @@ function App() {
               <FollowingScreen
                 followedPoliticians={library.followedPoliticians}
                 followedParties={library.followedParties}
+                partyProfiles={partyProfiles}
                 onOpenPerson={openPerson}
                 onOpenParty={openParty}
                 onTogglePerson={toggleFollowPolitician}
@@ -1214,6 +1240,8 @@ function App() {
                 setQuery={setQuery}
                 partyFilter={partyFilter}
                 setPartyFilter={setPartyFilter}
+                partyProfiles={partyProfiles}
+                partyProfilesLoading={partyProfilesLoading}
                 onOpenPerson={openPerson}
                 onOpenParty={openParty}
               />
@@ -3389,6 +3417,7 @@ function ProgressRow({
 function FollowingScreen({
   followedPoliticians,
   followedParties,
+  partyProfiles,
   onOpenPerson,
   onOpenParty,
   onTogglePerson,
@@ -3396,6 +3425,7 @@ function FollowingScreen({
 }: {
   followedPoliticians: string[];
   followedParties: PartyCode[];
+  partyProfiles: PartyProfile[];
   onOpenPerson: (personId: string) => void;
   onOpenParty: (party: PartyCode) => void;
   onTogglePerson: (personId: string) => void;
@@ -3443,10 +3473,13 @@ function FollowingScreen({
           <Group title="Partier">
             {followedParties.map((partyCode) => {
               const party = PARTIES[partyCode];
+              const logoUrl = partyProfiles.find(
+                (profile) => profile.abbr === partyCode
+              )?.logoUrl;
               return (
                 <ListRow
                   key={partyCode}
-                  avatar={<PartyAvatar party={partyCode} />}
+                  avatar={<PartyAvatar party={partyCode} logoUrl={logoUrl} />}
                   title={party.name}
                   onClick={() => onOpenParty(partyCode)}
                   action={
@@ -3519,6 +3552,8 @@ function SearchScreen({
   setQuery,
   partyFilter,
   setPartyFilter,
+  partyProfiles,
+  partyProfilesLoading,
   onOpenPerson,
   onOpenParty
 }: {
@@ -3526,12 +3561,12 @@ function SearchScreen({
   setQuery: (query: string) => void;
   partyFilter: PartyCode | null;
   setPartyFilter: (party: PartyCode | null) => void;
+  partyProfiles: PartyProfile[];
+  partyProfilesLoading: boolean;
   onOpenPerson: (personId: string) => void;
   onOpenParty: (party: PartyCode) => void;
 }) {
   const [results, setResults] = useState<Politician[]>([]);
-  const [partyProfiles, setPartyProfiles] = useState<PartyProfile[]>([]);
-  const [partyProfilesLoading, setPartyProfilesLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [resolvedSearchKey, setResolvedSearchKey] = useState<string | null>(null);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
@@ -3569,28 +3604,6 @@ function SearchScreen({
     rememberSearch(cleanName(politician.name) || politician.name);
     onOpenPerson(politician.id);
   };
-
-  useEffect(() => {
-    let active = true;
-    const controller = new AbortController();
-    setPartyProfilesLoading(true);
-    loadPartyProfiles(controller.signal)
-      .then((profiles) => {
-        if (active) {
-          setPartyProfiles(profiles);
-        }
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (active) {
-          setPartyProfilesLoading(false);
-        }
-      });
-    return () => {
-      active = false;
-      controller.abort();
-    };
-  }, []);
 
   const matchingParties = useMemo(() => {
     if (partyFilter && partyFilter !== "NONE") {
@@ -3719,7 +3732,11 @@ function SearchScreen({
                       onClick={() => openParty(profile)}
                       style={{ "--party-color": profile.color } as React.CSSProperties}
                     >
-                      <PartyAvatar party={profile.abbr} color={profile.color} />
+                      <PartyAvatar
+                        party={profile.abbr}
+                        color={profile.color}
+                        logoUrl={profile.logoUrl}
+                      />
                       <span className="search-party-copy">
                         <small>Riksdagsparti</small>
                         <strong>{profile.name}</strong>
@@ -4357,7 +4374,12 @@ function PartyScreen({
               className="party-hero"
               style={{ "--party-color": party.color } as React.CSSProperties}
             >
-              <PartyAvatar party={party.abbr} color={party.color} size="xl" />
+              <PartyAvatar
+                party={party.abbr}
+                color={party.color}
+                logoUrl={party.logoUrl}
+                size="xl"
+              />
               <div className="party-identity">
                 <span>Riksdagsparti · {party.abbr}</span>
                 <h1>{party.name}</h1>
@@ -4878,21 +4900,21 @@ function AvatarImage({ imageUrl, priority }: { imageUrl: string; priority: boole
 function PartyAvatar({
   party,
   color,
+  logoUrl,
   size = "md"
 }: {
   party: PartyCode;
   color?: string;
+  logoUrl?: string | null;
   size?: "md" | "xl";
 }) {
-  const profile = PARTIES[party];
-  const partyColor = color ?? profile.color;
   return (
-    <span
+    <PartyLogo
+      party={party}
+      color={color}
+      logoUrl={logoUrl}
       className={`party-avatar ${size}`}
-      style={{ background: partyTint(partyColor), color: partyInk(partyColor) }}
-    >
-      {profile.abbr}
-    </span>
+    />
   );
 }
 

@@ -472,6 +472,37 @@ put either Bunny credential in a Vite environment variable.
 
 ---
 
+## Party logo mirror
+
+The app also serves all eight current Riksdag party marks from Pleni's Bunny
+CDN. Migration 021 records each official Riksdagen PNG as provenance but leaves
+the public URL empty until its mirror has been verified.
+
+After applying migrations, validate the complete source set and then publish it:
+
+```bash
+python scripts/sync_party_logos.py --dry-run
+python scripts/sync_party_logos.py
+```
+
+The command validates all eight HTTPS sources before uploading anything. Each
+exact PNG is stored at `party-logos/<party-code>/<sha256>.png` and verified at
+its public Bunny URL. Only after every object verifies does one atomic database
+statement expose the eight URLs. The command checks that exactly eight rows were
+updated; a source, upload, verification or row-count failure leaves the previous
+complete public logo set in place. Re-running the command is safe because paths
+are content-addressed.
+
+The frontend must read only `party_profiles.logo_url`. It deliberately rejects
+official `riksdagen.se` image hosts as a browser fallback; if a CDN image fails,
+the existing party-coloured letter remains visible. `logo_source_url` is
+provenance for the sync process, not a public rendering URL.
+
+The command uses the same local Supabase Management API and Bunny storage
+credentials as the portrait mirror. Those credentials never belong in Vite.
+
+---
+
 ## Database and migrations
 
 ```bash

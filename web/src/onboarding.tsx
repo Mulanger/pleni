@@ -2,7 +2,8 @@ import { useState } from "react";
 import { ArrowLeft, ArrowRight, Check, Fingerprint, ShieldCheck, Sparkles, X } from "lucide-react";
 
 import { PARTIES } from "./data";
-import type { OnboardingState, PartyCode } from "./types";
+import { PartyLogo } from "./party-logo";
+import type { OnboardingState, PartyCode, PartyProfile } from "./types";
 
 /**
  * Two-step consent onboarding, shown once per signed-in account. Profil opens
@@ -34,12 +35,14 @@ const PARTY_ORDER: PartyCode[] = ["V", "S", "MP", "C", "L", "KD", "M", "SD"];
 
 export function Onboarding({
   initial,
+  partyProfiles,
   onComplete,
   onSkip,
   mode = "consent",
   recommendationsConnected = false
 }: {
   initial: OnboardingState;
+  partyProfiles: PartyProfile[];
   onComplete: (state: OnboardingState) => void | Promise<void>;
   onSkip: () => void;
   mode?: "consent" | "interests";
@@ -186,6 +189,9 @@ export function Onboarding({
               <div className="party-grid">
                 {PARTY_ORDER.map((code) => {
                   const party = PARTIES[code];
+                  const logoUrl = partyProfiles.find(
+                    (profile) => profile.abbr === code
+                  )?.logoUrl;
                   const selected = parties.includes(code);
                   return (
                     <button
@@ -195,9 +201,12 @@ export function Onboarding({
                       className={selected ? "party-tile party-tile--on" : "party-tile"}
                       onClick={() => toggleParty(code)}
                     >
-                      <span className="party-chip" style={{ background: party.color }}>
-                        {code}
-                      </span>
+                      <PartyLogo
+                        party={code}
+                        color={party.color}
+                        logoUrl={logoUrl}
+                        className="party-chip"
+                      />
                       <span className="party-tile-name">{party.name}</span>
                       <span className="party-tile-check">
                         {selected && <Check size={14} />}

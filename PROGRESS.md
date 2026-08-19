@@ -4793,3 +4793,48 @@ with the owner on the live release.
 
 **Next agent should know:** do not restore a `poster` attribute on the mounted
 feed `<video>`; the bounded overlay already owns the cold-load fallback.
+
+## UI16 — verified party logos — DONE 2026-08-19
+
+**Built:** added migration 021, an eight-party official-source registry, strict
+PNG validation, exact-byte content hashing, verified content-addressed Bunny
+uploads and a repeatable `scripts/sync_party_logos.py` release command. The
+frontend now reads `party_profiles.logo_url` and shows the real marks in search,
+party profiles, followed-party rows and onboarding. A failed or absent mirror
+retains the existing party-coloured letter with no layout shift.
+
+**Tests:** 19 focused mirror/migration tests and all 29 dependency-free frontend
+tests green; direct frontend TypeScript check green; Vite production build and
+PWA verification green with exactly 9 app-shell entries and no video/private
+data; `python tasks.py test lint typecheck` green through Python 3.12: **416
+passed, 68 deselected**, one existing `audioop` warning; lint clean and strict
+typing clean on 83 source files; `git diff --check` green.
+
+**Contracts touched:** none. `src/contracts.py` is unchanged. Migration 021 adds
+nullable delivery/hash/timestamp fields plus non-null official provenance to
+the existing `public.party_profiles` table.
+
+**Decisions made:**
+- Riksdagen's official transparent PNG bytes are kept unchanged and mirrored to
+  `party-logos/<code>/<sha256>.png`; Pleni does not hotlink source images.
+- All eight sources validate before upload, all eight public Bunny objects
+  verify before one atomic database update, and the command requires exactly
+  eight updated rows before reporting success.
+- `logo_source_url` is provenance only. The browser rejects Riksdagen hosts as a
+  fallback and uses only a safe HTTPS delivery URL from `logo_url`.
+- The fallback letter stays rendered until the transparent PNG decodes, then is
+  removed so it cannot show through transparent regions of the real mark.
+
+**Production evidence:** migration 021 applied to Supabase project
+`nlooigmwuqqhhnontlgp`; S, M, SD, C, V, KD, MP and L were mirrored and persisted.
+An independent anonymous REST read returned exactly eight valid CDN/hash pairs,
+and HEAD verification returned HTTP 200 with `image/png` for every public URL.
+
+**Observations (not fixed, out of scope):** physical-phone visual confirmation
+remains with the owner after the main deployment.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** run `scripts/sync_party_logos.py --dry-run` before a
+refresh. Never expose `logo_source_url` to the browser or seed `logo_url` before
+Bunny verification; keep the letter fallback for transient delivery failures.

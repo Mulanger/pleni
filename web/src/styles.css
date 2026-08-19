@@ -939,6 +939,36 @@ a {
   font-weight: 750;
 }
 
+.party-logo {
+  position: relative;
+  isolation: isolate;
+}
+
+.party-logo-fallback {
+  position: relative;
+  z-index: 0;
+}
+
+.party-logo img {
+  position: absolute;
+  z-index: 1;
+  inset: 12%;
+  width: 76%;
+  height: 76%;
+  object-fit: contain;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.party-logo img.is-ready {
+  animation: party-logo-in 140ms ease-out both;
+}
+
+@keyframes party-logo-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 .avatar-fallback {
   position: relative;
   z-index: 0;
@@ -3473,6 +3503,8 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--party-logo-color) 20%, transparent);
 }
 
 .terms-row,
@@ -3748,6 +3780,7 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .party-logo img,
   .onboarding-backdrop,
   .onboarding-card,
   .onboarding-pane,

@@ -74,6 +74,8 @@ export interface PartySummary {
   name: string;
   short: string;
   color: string;
+  /** Verified Pleni CDN mark, or null while canonical metadata is unavailable. */
+  logoUrl: string | null;
 }
 
 /** A canonical row from `public.party_profiles`, enriched with live catalogue totals. */

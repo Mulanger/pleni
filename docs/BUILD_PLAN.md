@@ -1250,6 +1250,59 @@ Samsung Internet remain required before release.
 
 ---
 
+## UI16 — Self-hosted party logos
+
+**Depends on:** UI8 and UI11's verified Bunny upload path. **Size:** medium.
+
+**Objective.** Replace letter-only party badges with the current official marks
+for all eight Riksdag parties, mirrored byte-for-byte from Riksdagen into Pleni's
+existing Bunny Storage/CDN and exposed through canonical `party_profiles` rows.
+
+**Scope — may create or modify:**
+
+```
+migrations/021_party_logos.{up,down}.sql
+src/riksdagen/party_logos.py
+scripts/sync_party_logos.py
+tests/unit/test_party_logo_{migration,mirror}.py
+web/src/types.ts
+web/src/data.ts
+web/src/supabase.ts
+web/src/party-logo.tsx
+web/src/party-logo-policy.ts
+web/src/App.tsx
+web/src/onboarding.tsx
+web/src/styles.css
+web/tests/party-logo-policy.test.mjs
+docs/BUILD_PLAN.md
+docs/RUNBOOK.md
+AGENTS.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** `src/contracts.py`, numbered pipeline stages, clip or
+thumbnail publishing paths, feed ordering/playback, private user data, comments,
+generated video, politician portrait paths, or already-applied migrations.
+
+**Build.** Add source URL, verified public URL, SHA-256 and mirror timestamp to
+`party_profiles`. The operator sync accepts only HTTPS PNGs from
+`bilder.riksdagen.se`, bounds and validates the exact bytes, uploads them to an
+immutable content-addressed `party-logos/<code>/<sha256>.png` Bunny path, verifies
+public delivery, then updates all eight database rows together. The frontend
+reads `logo_url` through `web/src/supabase.ts`; it never falls back to a live
+Riksdagen image. Search, party pages, followed-party rows and onboarding show the
+mark without layout shift and retain the existing party-letter/color fallback on
+absence or image failure.
+
+**Acceptance:** all eight official sources validate and all eight CDN objects are
+public before database URLs change; browser roles remain read-only; frontend code
+contains no hardcoded Bunny or Riksdagen logo URL; failed mirrors preserve the
+last verified rows; logos render with meaningful party identity at every existing
+party-avatar surface; Python unit/integration acceptance, frontend policy tests,
+strict TypeScript, Vite/PWA build and `git diff --check` are green.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.
