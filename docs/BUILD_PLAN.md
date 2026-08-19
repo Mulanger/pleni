@@ -1303,6 +1303,35 @@ strict TypeScript, Vite/PWA build and `git diff --check` are green.
 
 ---
 
+## UI17 — Compact politician clip count
+
+**Depends on:** UI1 and UI3. **Size:** small.
+
+**Objective.** Remove the two-column `Klipp` / `Visas här` statistic strip from
+politician profiles and place the exact published total in the quiet label above
+the clip grid as `Antal klipp: <count>`.
+
+**Scope — may modify:**
+
+```
+web/src/App.tsx
+docs/BUILD_PLAN.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** party profiles, Supabase count queries, politician
+DTOs, clip loading limits/order/playback, shared stat styling, numbered pipeline
+stages, contracts, migrations, private user data or generated media.
+
+**Acceptance:** politician profiles render no statistic strip and no `Visas här`
+field; the grid label uses the exact `Politician.clipCount` when available and
+does not invent a zero when it is unknown; the person loading skeleton reserves
+no space for the removed strip; party profiles remain unchanged; TypeScript,
+frontend tests, Vite/PWA build, full repository acceptance and `git diff --check`
+are green.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.

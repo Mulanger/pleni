@@ -4873,3 +4873,39 @@ with the owner on the live release.
 
 **Next agent should know:** keep `shouldShowPartyLogoFallback()` failure-driven;
 do not make readiness alone reveal the letter again.
+
+## UI17 — compact politician clip count — DONE 2026-08-19
+
+**Built:** removed the two-column `Klipp` / `Visas här` statistic strip from
+politician profiles and moved the exact published total into the quiet grid
+label as `Antal klipp: <count>`. When the exact count is unavailable the label
+stays `Antal klipp` rather than inventing a number. The person loading skeleton
+also stops reserving space for the removed strip; party profile stats are
+unchanged.
+
+**Tests:** all 32 dependency-free frontend tests green; direct source acceptance
+confirmed the person stats are absent, the exact-count label is present, the
+person skeleton is compact and party stats remain; direct TypeScript check
+green; Vite/PWA production build green with exactly 9 app-shell entries and no
+video/private data; `python tasks.py test lint typecheck` green through Python
+3.12: **416 passed, 68 deselected**, one existing `audioop` warning; lint and
+strict typing clean on 83 source files; `git diff --check` green.
+
+**Contracts touched:** none.
+
+**Decisions made:**
+
+- The exact `Politician.clipCount` remains the count authority; the loaded grid
+  length is no longer exposed as a competing `Visas här` statistic.
+- Shared stat styling stays because party profiles still use it.
+- No replacement card or motion was added; removing the strip is the spacing
+  improvement.
+
+**Observations (not fixed, out of scope):** physical-phone confirmation remains
+with the owner on the live release.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** do not replace an unavailable exact count with
+`clips.length`; the grid is bounded and that would present a partial page as a
+catalogue total.

@@ -4530,17 +4530,12 @@ function PersonScreen({
               </button>
             </section>
 
-            {/* Real, counted numbers only. "Följare 16 800" used to sit here,
-                taken from a hardcoded demo profile that real clips matched by
-                name. Nothing counts followers, so the stat is gone rather than
-                zeroed (FE-2). */}
-            <div className="stats">
-              {typeof total === "number" && <Stat label="Klipp" value={formatNumber(total)} />}
-              <Stat label="Visas här" value={formatNumber(clips.length)} />
-            </div>
-
             <section className="clip-grid-block">
-              <div className="section-label">Klipp</div>
+              <div className="section-label">
+                {typeof total === "number"
+                  ? `Antal klipp: ${formatNumber(total)}`
+                  : "Antal klipp"}
+              </div>
               {loading && clips.length === 0 && <ClipGridSkeleton />}
               {!loading && clips.length === 0 && (
                 <div className="panel-empty" role="status">
@@ -4657,10 +4652,12 @@ function ProfileSkeleton({ variant }: { variant: "person" | "party" }) {
           <span className="skeleton-shape" />
         </div>
       </div>
-      <div className="profile-skeleton-stats" aria-hidden="true">
-        <span className="skeleton-shape" />
-        <span className="skeleton-shape" />
-      </div>
+      {variant === "party" && (
+        <div className="profile-skeleton-stats" aria-hidden="true">
+          <span className="skeleton-shape" />
+          <span className="skeleton-shape" />
+        </div>
+      )}
       <span className="profile-skeleton-label skeleton-shape" aria-hidden="true" />
       <ClipGridSkeleton announce={false} />
     </div>
