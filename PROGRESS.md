@@ -4939,3 +4939,36 @@ clean, and strict typing clean across **83 source files**.
 **Next agent should know:** UI18 changes only the first Search filter's
 presentation; every party filter and the underlying null/all selection behavior
 remain unchanged.
+
+## UI19 — temporarily hide comments — DONE 2026-08-20
+
+**Built:** added a temporary in-app product switch that prevents both the feed
+comment action and the comment sheet from rendering. The comment implementation,
+data layer, moderation tooling, existing data and legal disclosures remain
+intact for later repair.
+
+**Tests:** added two dependency-free visibility regressions; all **35** frontend
+tests green; direct TypeScript check green; Vite/PWA production build green with
+exactly 9 app-shell entries and no video/private data. The built JavaScript
+contains no comment sheet or comment read/write RPC names. The repository-wide
+gate is green: **416 passed, 68 deselected**, lint clean, and strict typing clean
+across **83 source files**. `git diff --check` green.
+
+**Contracts touched:** none.
+
+**Decisions made:**
+
+- Used one local `COMMENTS_ENABLED = false` switch instead of deleting the feature
+  or hiding it with CSS, so viewers cannot open it and the production bundle can
+  remove its runtime and network code.
+- Kept legal disclosures unchanged because comment data and moderation records
+  may still exist while the user interface is temporarily unavailable.
+- Preserved likes, saves, sharing, playback, authentication and PWA behavior.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** re-enabling comments requires repairing and accepting
+the feature first, then changing the switch near the top of `web/src/App.tsx`;
+do not remove the guard before that acceptance work is complete.

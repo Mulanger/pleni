@@ -1361,6 +1361,36 @@ build, full repository acceptance and `git diff --check` are green.
 
 ---
 
+## UI19 — Temporarily hide comments
+
+**Depends on:** UI1 and UI4. **Size:** small.
+
+**Objective.** Make the incomplete comment experience unavailable and invisible
+to viewers without deleting its implementation, data layer or moderation work.
+
+**Scope — may create or modify:**
+
+```
+web/src/App.tsx
+web/tests/comments-hidden.test.mjs
+docs/BUILD_PLAN.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** comment RPCs, database tables or migrations,
+moderation tooling, existing comment data, legal disclosures, authentication,
+feed playback, other action-rail controls, numbered pipeline stages, contracts,
+private user data or generated media.
+
+**Acceptance:** the shipped product switch is off; neither the comment action nor
+comment sheet can render; no comment request starts during ordinary feed use;
+likes, saves, sharing, playback and PWA update behavior remain unchanged; the
+comment implementation stays available for later repair; frontend tests,
+TypeScript, Vite/PWA build, full repository acceptance and `git diff --check`
+are green.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.

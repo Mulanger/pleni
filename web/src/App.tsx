@@ -123,6 +123,9 @@ import type {
 } from "./types";
 
 const NEW_ACCOUNT_QUERY = "pleni_new_account";
+// Temporary product switch: keep the implementation intact while comments are
+// unavailable, but expose no trigger or sheet to viewers.
+const COMMENTS_ENABLED = false;
 
 type OnboardingMode = "consent" | "interests";
 
@@ -2751,7 +2754,7 @@ function FeedScreen({
           );
         })}
       </div>
-      {commentClip && <CommentSheet clip={commentClip} onClose={closeComments} />}
+      {COMMENTS_ENABLED && commentClip && <CommentSheet clip={commentClip} onClose={closeComments} />}
     </section>
   );
 }
@@ -2874,11 +2877,11 @@ function ActionRail({
       <ActionButton label="Gilla" active={liked} onClick={onLike}>
         <Heart size={21} fill={liked ? "currentColor" : "none"} />
       </ActionButton>
-      {/* Icon only: no Swedish word for this fits the 54px rail, and there is
-          no real count to put there. The accessible name still describes it. */}
-      <ActionButton label="Kommentarer" hideLabel onClick={onComments}>
-        <MessageCircle size={21} />
-      </ActionButton>
+      {COMMENTS_ENABLED && (
+        <ActionButton label="Kommentarer" hideLabel onClick={onComments}>
+          <MessageCircle size={21} />
+        </ActionButton>
+      )}
       <ActionButton label="Spara" active={saved} onClick={onSave}>
         <Bookmark size={21} fill={saved ? "currentColor" : "none"} />
       </ActionButton>
