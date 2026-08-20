@@ -4909,3 +4909,33 @@ with the owner on the live release.
 **Next agent should know:** do not replace an unavailable exact count with
 `clips.length`; the grid is bounded and that would present a partial page as a
 catalogue total.
+
+## UI18 — search all-parties home icon — DONE 2026-08-20
+
+**Built:** replaced the Search page's first party-filter grey dot and visible
+`Alla` text with a centered home icon. The control remains first, retains the
+same null/all filter behavior and selected styling, and now has the accessible
+label `Visa alla partier`.
+
+**Tests:** added one dependency-free source regression; all **33** frontend tests
+green; direct TypeScript check green; Vite/PWA production build green with
+exactly 9 app-shell entries and no video/private data; `git diff --check` green.
+The required repository-wide gate is green: **416 passed, 68 deselected**, lint
+clean, and strict typing clean across **83 source files**.
+
+**Contracts touched:** none.
+
+**Decisions made:**
+
+- Reused the existing Lucide `Home` icon and existing filter state; no dependency
+  or behavior change was introduced.
+- The icon-only control is 34 px wide, matching the filter row height, and keeps
+  its purpose available to assistive technology through a Swedish label.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** UI18 changes only the first Search filter's
+presentation; every party filter and the underlying null/all selection behavior
+remain unchanged.

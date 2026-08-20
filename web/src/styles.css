@@ -1110,6 +1110,12 @@ a {
   box-shadow: 0 4px 12px -8px rgba(24, 24, 27, 0.7);
 }
 
+.chips button.chips-home {
+  width: 34px;
+  justify-content: center;
+  padding: 0;
+}
+
 .chips i {
   width: 7px;
   height: 7px;

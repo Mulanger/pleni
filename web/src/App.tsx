@@ -3691,11 +3691,11 @@ function SearchScreen({
         <div className="chips" aria-label="Filtrera på parti">
           <button
             type="button"
-            className={partyFilter === null ? "active" : ""}
+            className={partyFilter === null ? "chips-home active" : "chips-home"}
             onClick={() => setPartyFilter(null)}
+            aria-label="Visa alla partier"
           >
-            <i />
-            Alla
+            <Home size={17} aria-hidden="true" />
           </button>
           {partyCodes.map((party) => (
             <button

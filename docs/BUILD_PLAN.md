@@ -1332,6 +1332,35 @@ are green.
 
 ---
 
+## UI18 — Search all-parties home icon
+
+**Depends on:** UI1 and UI8. **Size:** small.
+
+**Objective.** Make the first party filter in Search read as the neutral home
+state by replacing its grey dot and visible `Alla` text with a single home icon.
+
+**Scope — may create or modify:**
+
+```
+web/src/App.tsx
+web/src/styles.css
+web/tests/search-filter-layout.test.mjs
+docs/BUILD_PLAN.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** party filter state/query behavior, party order or
+colors, search requests/results, routing, bottom navigation, data contracts,
+numbered pipeline stages, migrations, private user data or generated media.
+
+**Acceptance:** the null/all filter remains the first 34 px tap target and keeps
+its selected styling and behavior; it renders one home icon with an accessible
+Swedish label and contains neither the grey-dot element nor visible `Alla` text;
+all eight party filters remain unchanged; frontend tests, TypeScript, Vite/PWA
+build, full repository acceptance and `git diff --check` are green.
+
+---
+
 ## F1 — Identity, consent & the private schema
 
 **Depends on:** F0 for the *values*; ADR 006 and ADR 007 for the *shape*.
