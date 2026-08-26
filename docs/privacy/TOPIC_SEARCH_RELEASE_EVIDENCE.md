@@ -138,3 +138,19 @@ an invented result.
 The limited owner beta therefore has **GO**. A general viewer release remains
 **NO-GO** until account retention/region evidence, manual judgments, latency
 policy and physical-device acceptance are closed or separately accepted.
+
+## Public Search-tab release decision — 2026-08-26
+
+The owner clarified that topic/video search is intended to be a normal part of
+the Search tab for every visitor and explicitly instructed the implementation to
+remove the sign-in/beta-only behavior and deploy to `main`. UI16.11 therefore
+enables the existing anonymous search client by default in production, removes
+the URL and Clerk gates, and removes the per-page confirmation dialog. The
+concise inline OpenAI/private-information disclosure remains visible, queries
+remain transient, and an explicit `VITE_TOPIC_SEARCH_ENABLED=false` remains the
+frontend emergency stop.
+
+This is an explicit product release decision. It does not rewrite the historical
+UI16.8 evidence: ungraded relevance pools, the former latency target and
+unverified provider account controls remain documented limitations rather than
+being relabelled as passing evidence.

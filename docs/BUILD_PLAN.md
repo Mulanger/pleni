@@ -1651,6 +1651,26 @@ the owner's Android findings are recorded. Known beta exceptions are p95 2.027 s
 versus the former 1.5 s target, ungraded 36-query pools and unverified OpenAI
 account retention/region controls.
 
+## UI16.11 — Public integrated Search tab — DONE 2026-08-26
+
+**Owner approval:** the 2026-08-26 clarification requires the video/topic
+results to be part of the normal Search tab for every visitor, without sign-in
+or a special beta URL.
+
+**Scope — may modify:** `web/src/search/feature.ts`, `web/src/App.tsx`, focused
+frontend tests, release/privacy documentation and `PROGRESS.md`.
+**Must not modify:** search ranking, embeddings, database state, Edge behavior,
+secrets, the feed/player/PWA media policy, pipeline stages or `src/contracts.py`.
+
+**Acceptance:** a production build enables topic search by default for signed-out
+and signed-in visitors; an explicit `VITE_TOPIC_SEARCH_ENABLED=false` remains the
+emergency kill switch. The current Search tab keeps person and party discovery
+and adds submitted video results, “Tolkat som”, empty/error states and the
+existing result-feed handoff. There is no URL marker, Clerk gate or confirmation
+dialog. The concise provider disclosure remains inline. Focused frontend,
+TypeScript, production build, PWA and Edge regression checks pass before `main`
+is deployed.
+
 ---
 
 ## Phase 2 backlog (not chunked yet)

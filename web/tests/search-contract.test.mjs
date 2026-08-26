@@ -85,7 +85,7 @@ test("an HTML excerpt is rejected by both response parsers", () => {
   assert.throws(() => parseEdgeResponse(response), { name: "SearchContractError" });
 });
 
-test("topic search is default-off, supports the owner beta marker, and keeps an explicit kill switch", () => {
+test("topic search is production-on and keeps an explicit kill switch", () => {
   assert.equal(topicSearchEnabled, false);
   assert.equal(topicSearchEnabledFrom(undefined), false);
   assert.equal(topicSearchEnabledFrom(undefined, true), true);

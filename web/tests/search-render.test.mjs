@@ -11,12 +11,14 @@ const searchStart = app.indexOf("function SearchScreen");
 const searchEnd = app.indexOf("function LegalScreen", searchStart);
 const searchSource = app.slice(searchStart, searchEnd);
 
-test("submitted topic search stays behind the signed-in owner beta gate", () => {
+test("submitted topic search is available in the normal public Search tab", () => {
+  assert.ok(app.includes("const topicSearchAvailable = topicSearchEnabled;"));
+  assert.equal(app.includes("topicSearchEnabled && viewer.signedIn"), false);
   assert.ok(searchSource.includes("topicSearchAvailable"));
   assert.ok(searchSource.includes("searchPublishedTopics"));
   assert.ok(searchSource.includes('className="search-submit"'));
   assert.ok(searchSource.includes('aria-label="Sök i klippen"'));
-  assert.ok(searchSource.includes("window.confirm"));
+  assert.equal(searchSource.includes("window.confirm"), false);
   assert.ok(searchSource.includes("onSubmit"));
 });
 

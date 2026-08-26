@@ -5020,3 +5020,40 @@ blocked on the UI16.8 evidence listed in
 behavior for the signed-in gate, warning, positive/topic, negative/empty,
 result-feed autoplay/order, Back restoration and observed cold latency. Do not
 turn the URL beta into a public flag without a separate owner decision.
+
+## UI16.11 — public integrated Search tab — DEPLOY READY 2026-08-26
+
+**Built:** removed the signed-in owner-beta gate from the completed topic-search
+experience. Production now enables topic/video search by default for every
+visitor on the normal Search tab. Person and party lookup remain intact; a
+submitted query can additionally render “Tolkat som”, relevant video rows,
+empty/error states and the existing exact-order result feed. The special URL
+marker and confirmation dialog are gone. A concise inline disclosure remains,
+and explicit `VITE_TOPIC_SEARCH_ENABLED=false` is still the emergency kill
+switch.
+
+**Tests:** all **67 frontend tests** pass; focused topic-search suite **33 passed**;
+TypeScript passes; the production Vite build passes; PWA verification reports
+exactly nine app-shell entries with no video/private data; all **99 Edge tests**
+pass. `git diff --check` passes. The Python repository gate could not be rerun
+because this workstation currently exposes no installed project Python runtime
+(the desktop-bundled Python has no `pytest`); the immediately preceding release
+commit remains green at **446 passed, 78 deselected**, and UI16.11 changes no
+Python file.
+
+**Contracts touched:** none. `src/contracts.py`, `clip-search-v1`, ranking,
+embedding/index versions, database state and player/PWA media behavior are
+unchanged.
+
+**Decisions made:** public production availability follows the owner's explicit
+clarification. Non-production builds remain opt-in unless the environment flag
+is true, while an explicit false overrides the production default.
+
+**Observations (not fixed, out of scope):** no new catalogue content was added;
+queries still reflect the dates and speakers currently backfilled.
+
+**Blocked / needs a decision:** none for deployment.
+
+**Next agent should know:** the normal URL `https://pleni.se/` is now the only URL
+needed for search testing, and sign-in is not required. Verify the first public
+Android search with `elsparkcyklar`, then verify an absent topic stays empty.

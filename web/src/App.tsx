@@ -413,9 +413,7 @@ function App() {
   );
   const [newAccountRedirect, setNewAccountRedirect] = useState(hasNewAccountRedirect);
   const viewer = useViewer();
-  // The production beta is deliberately narrower than the deployed anonymous
-  // endpoint: only a signed-in viewer who opened the owner test URL sees it.
-  const topicSearchAvailable = topicSearchEnabled && viewer.signedIn;
+  const topicSearchAvailable = topicSearchEnabled;
   const consent = {
     ...onboarding.consent,
     personal: recommendationsEnabled
@@ -3711,7 +3709,6 @@ function SearchScreen({
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const topicControllerRef = useRef<AbortController | null>(null);
   const topicRequestIdRef = useRef(0);
-  const topicBetaAcceptedRef = useRef(false);
   const panelScrollRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollRestoreRef = useRef<number | null>(topicState.scrollTop);
   const normalizedQuery = query.trim();
@@ -3781,17 +3778,6 @@ function SearchScreen({
     if (!topicSearchAvailable) {
       rememberSearch(input);
       return;
-    }
-
-    if (!topicBetaAcceptedRef.current) {
-      const accepted = window.confirm(
-        "Testversion: ämnestexten skickas till OpenAI för att hitta relevanta klipp. " +
-          "Skriv inte personuppgifter eller privat information. Vill du fortsätta?",
-      );
-      if (!accepted) {
-        return;
-      }
-      topicBetaAcceptedRef.current = true;
     }
 
     const normalizedInput = input.trim();
@@ -3999,8 +3985,7 @@ function SearchScreen({
         </form>
         {topicSearchAvailable && (
           <p className="topic-search-privacy-note">
-            Testversion: OpenAI hjälper oss att tolka ämnessökningar. Skriv inte personuppgifter
-            eller privat information.
+            Ämnessökningar tolkas med hjälp av OpenAI. Skriv inte privat information.
           </p>
         )}
         <div className="chips" aria-label="Filtrera på parti">
