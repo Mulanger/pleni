@@ -1,6 +1,6 @@
 # Data protection impact assessment
 
-Draft for owner approval, updated 2026-08-25. Scope: current Pleni web app plus the
+Draft for owner approval, updated 2026-08-26. Scope: current Pleni web app plus the
 planned personalised political-video recommender described in
 `docs/RECOMMENDATION_LAUNCH_PLAN.md`.
 
@@ -20,12 +20,13 @@ approved and deployed it stores selected/followed parties, followed politicians
 and served slates, but still no watch history or inferred state. The former
 left/right self-placement question has been removed.
 
-The topic-search backend is deployed for evaluation but remains hidden behind
-`VITE_TOPIC_SEARCH_ENABLED=false`. Search text is transient and is not used to
-build a viewer profile, but a free-text query can itself contain personal or
-special-category data and the residual topic is sent to OpenAI for an
-embedding. This DPIA therefore treats the provider path as a launch gate even
-though Pleni does not persist a query history.
+The topic-search backend is deployed and remains hidden from ordinary visitors.
+The owner approved a signed-in, explicit-URL Android beta on 2026-08-26; the
+first search requires a per-session provider warning. Search text is transient
+and is not used to build a viewer profile, but a free-text query can itself
+contain personal or special-category data and the residual topic is sent to
+OpenAI for an embedding. This limited beta does not close the provider/account
+gates for a general viewer launch.
 
 ## 2. Proposed processing
 

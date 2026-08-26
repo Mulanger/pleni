@@ -40,8 +40,8 @@ says what it says and what remains incomplete.
   moderation, party balance, rights and incident handling.
 - `PROCESSORS.md` — provider roles, transfer mechanisms and outstanding DPA
   checks.
-- `TOPIC_SEARCH_NOTICE.md` — Swedish copy proposed for the topic-search launch;
-  it is a draft and is not live while the feature flag remains off.
+- `TOPIC_SEARCH_NOTICE.md` — Swedish beta warning and the longer copy proposed
+  for a future general topic-search launch.
 - `TOPIC_SEARCH_RELEASE_EVIDENCE.md` — account, privilege, quality and release
   evidence for UI16.8, including every unresolved gate.
 
@@ -66,14 +66,16 @@ says what it says and what remains incomplete.
 
 ## Topic-search status
 
-The server-side topic-search backend and semantic catalogue exist, but the
-viewer feature remains inactive behind `VITE_TOPIC_SEARCH_ENABLED=false`.
-UI16.8 has verified full keyword/semantic catalogue coverage and the private
-Postgres privilege matrix. It has **not** verified the actual OpenAI project's
-regional processing or retention controls, completed manual relevance review,
-passed the latency/no-filler gates, completed physical-device acceptance or
-received owner release approval. `TOPIC_SEARCH_RELEASE_EVIDENCE.md` is the
-source of truth for this release boundary.
+The server-side topic-search backend and semantic catalogue exist. Ordinary
+visitors remain on the default-off app; the owner approved a signed-in,
+explicit-URL Android beta on 2026-08-26 with a visible provider warning and
+per-session confirmation. UI16 has verified full keyword/semantic catalogue
+coverage, the private Postgres privilege matrix and no-filler negatives. It has
+**not** verified the actual OpenAI project's regional processing or retention
+controls, completed manual relevance review, passed the former latency target
+or completed the owner's physical-device acceptance. The beta approval does
+not approve a general viewer launch. `TOPIC_SEARCH_RELEASE_EVIDENCE.md` remains
+the source of truth.
 
 This pack records product decisions and engineering evidence. It is not a claim
 that the unregistered operator information, provider contracts or future

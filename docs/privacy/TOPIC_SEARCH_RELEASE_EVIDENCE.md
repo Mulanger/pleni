@@ -115,5 +115,26 @@ denominator.
 | Owner go/no-go | not requested while prerequisite gates fail | pending |
 
 Production migrations 027/028 and `clip-search` v2 are deployed and verified.
-No OpenAI account setting/secret, semantic backfill, InstaPods setting or viewer
-flag changed; topic search remains hidden from viewers.
+
+## Signed-in owner Android beta — 2026-08-26
+
+The owner explicitly approved publishing the candidate to `main` for testing in
+the real app and reported that Pleni has no current users. This approval is
+implemented more narrowly than a public flag-on release: ordinary visitors stay
+default-off, while `?topic-search-beta=android` enables the UI only for a
+signed-in viewer. A visible warning names OpenAI, asks the viewer not to enter
+personal/private information and requires confirmation before the first query
+in each page session. No opt-in or query is persisted.
+
+Commit `2a4773f` was pushed to `origin/main`; InstaPods served the matching
+bundle on 2026-08-26. Post-deploy probes returned a relevant elsparkcykel result
+first and an empty nonsense result. Six measured calls were 7,350, 1,010, 798,
+2,038, 754 and 998 ms: the cold tail can still exceed the former launch target.
+The 2017 mockup query is empty because the current published catalogue has no
+2017 backfill and no published Magdalena Andersson speech/person row; current
+catalogue person/topic examples work. This is a beta catalogue limitation, not
+an invented result.
+
+The limited owner beta therefore has **GO**. A general viewer release remains
+**NO-GO** until account retention/region evidence, manual judgments, latency
+policy and physical-device acceptance are closed or separately accepted.

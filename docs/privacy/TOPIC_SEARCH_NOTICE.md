@@ -1,8 +1,9 @@
-# Topic-search privacy copy — draft, not live
+# Topic-search privacy copy — gated beta
 
-Prepared 2026-08-25 for the controlled topic-search release. Owner approval is
-pending. Do not copy this into the live app or increment the public notice
-version until every UI16.8 release gate passes.
+Prepared 2026-08-25 and updated 2026-08-26. The short warning is live only in
+the signed-in owner Android beta and requires confirmation before the first
+submitted search in each page session. The longer public-notice section remains
+a draft for a future general launch.
 
 ## Short copy beside the search action
 
@@ -40,4 +41,5 @@ sökfältet. Kontakta `kontakt@pleni.se` om du har frågor om behandlingen.
 - Actual OpenAI project region/retention evidence: **pending**.
 - Controller identity/public legal notice blocker: **pending**, unchanged from
   the main privacy pack.
-- Owner approval and live notice version: **pending**.
+- Owner approval: limited signed-in Android beta approved 2026-08-26; general
+  viewer launch remains pending.

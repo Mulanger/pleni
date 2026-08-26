@@ -1,14 +1,17 @@
 # Privacy, safety and legal operating policy
 
-Decision record for the current release, updated 2026-08-14.
+Decision record for the current release, updated 2026-08-26.
 
 Implementation note, 2026-08-14: the owner approved the explicit-choice V1
 policy and its production release. It excludes playback history, inference and
 exploration. `VITE_RECOMMENDATIONS_ENABLED=false` is now an emergency kill
 switch rather than the normal release state.
 
-Topic search is separately present behind `VITE_TOPIC_SEARCH_ENABLED=false`.
-Its backend evaluation does not authorise a viewer release.
+Topic search remains default-off for ordinary visitors. The owner approved a
+signed-in Android beta reached through an explicit production URL marker. It
+shows the OpenAI/private-information warning and requires confirmation before
+the first submitted query in each page session. This is not approval for a
+general viewer release.
 
 ## Topic-search query handling
 

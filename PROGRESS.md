@@ -4102,7 +4102,7 @@ video/private data; `python tasks.py test lint typecheck` green: 379 passed,
 - Recent searches work within the current app session and can be cleared, but are
   not persisted. Political search terms can reveal sensitive interests, so a visual
   redesign does not silently create a new durable local data store.
-- `Popul�ra debatter` remains explicitly labelled as example data because Pleni does
+- `Populära debatter` remains explicitly labelled as example data because Pleni does
   not yet measure search popularity. The supplied invented trend figures were not
   relabelled as product telemetry.
 - The frontend skill shaped the result toward restrained editorial hierarchy:
@@ -4972,3 +4972,51 @@ across **83 source files**. `git diff --check` green.
 **Next agent should know:** re-enabling comments requires repairing and accepting
 the feature first, then changing the switch near the top of `web/src/App.tsx`;
 do not remove the guard before that acceptance work is complete.
+
+## UI16.10 — signed-in owner Android beta — DEPLOYED 2026-08-26
+
+**Built:** integrated UI16.0–UI16.9 onto the latest `origin/main` without the
+unrelated dirty workstation changes. Ordinary visitors remain default-off. The
+special production URL marker `?topic-search-beta=android` enables topic search
+only for a signed-in viewer; the page shows a Swedish OpenAI/private-information
+warning and requires explicit confirmation before the first submitted query in
+each page session. The opt-in and query are not persisted. An explicit
+`VITE_TOPIC_SEARCH_ENABLED=false` remains the emergency kill switch.
+
+**Tests:** repository acceptance green: **446 passed, 78 deselected**, one
+existing `audioop` warning; Ruff and strict typing clean on 83 source files.
+Frontend: **67 passed**, TypeScript green, production Vite build green and PWA
+verification green with exactly nine app-shell entries and no video/private
+data. Edge: **99 passed** under Node 24 TypeScript stripping; only typeless
+package warnings. `git diff --check` green.
+
+**Production:** release commit `2a4773f` was pushed to `origin/main` and the
+InstaPods HTML/bundle was verified at `pleni.se`; the deployed JavaScript
+contains the beta marker, consent warning and `clip-search` client. A positive
+elsparkcykel probe returned ten results with “6 500 skadades i olyckor med
+elsparkcyklar” first. The nonsense probe returned zero results. Six post-deploy
+calls measured 7,350, 1,010, 798, 2,038, 754 and 998 ms, so cold latency remains
+visible in the beta.
+
+**Contracts touched:** none. `src/contracts.py`, the browser/Edge
+`clip-search-v1` transport contract, ranking/index versions, feed player,
+gesture policy and PWA media ceiling are unchanged.
+
+**Decisions made:** the owner's instruction is accepted as GO for a limited
+real-app Android test, not a general viewer launch. The narrower signed-in URL
+gate and per-session warning avoid exposing anonymous visitors while OpenAI
+account retention/region and the former 1.5 s latency target remain unresolved.
+
+**Observations (not fixed, out of scope):** the mockup query “Magdalena Andersson
+skatter 2017” returns no clip result because the current catalogue has no 2017
+backfill and no published Magdalena Andersson speech/person row. It must not be
+made to look successful through aliases or unrelated semantic filler.
+
+**Blocked / needs a decision:** none for the owner beta. General release remains
+blocked on the UI16.8 evidence listed in
+`docs/privacy/TOPIC_SEARCH_RELEASE_EVIDENCE.md`.
+
+**Next agent should know:** give the owner the exact beta URL and collect Android
+behavior for the signed-in gate, warning, positive/topic, negative/empty,
+result-feed autoplay/order, Back restoration and observed cold latency. Do not
+turn the URL beta into a public flag without a separate owner decision.

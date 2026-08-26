@@ -1,6 +1,6 @@
 # Data-flow inventory
 
-Current release inventory, updated 2026-08-25. “Basis” is the project's in-house GDPR
+Current release inventory, updated 2026-08-26. “Basis” is the project's in-house GDPR
 analysis under the F0-2 risk acceptance; it has not been reviewed by counsel.
 
 The rule-based recommender is implemented but inactive behind
@@ -8,13 +8,13 @@ The rule-based recommender is implemented but inactive behind
 not been applied/deployed by this change, so the current production data flows
 below remain unchanged.
 
-Topic search is also inactive in the viewer build behind
-`VITE_TOPIC_SEARCH_ENABLED=false`. Its database, Edge Function and semantic
-index are deployed for controlled evaluation. The following rows therefore
-describe an **inactive launch boundary**, not a claim that viewers are already
-using the feature.
+Topic search remains off for ordinary visitors. A production URL marker exposes
+an owner-only Android beta to a signed-in viewer, and the first submitted search
+requires an explicit per-session OpenAI warning confirmation. The database,
+Edge Function and semantic index are deployed. The following rows describe that
+limited beta boundary, not a general viewer launch.
 
-## Inactive topic-search boundary
+## Limited topic-search beta boundary
 
 | Data | Source → destination | Purpose | Basis / special-category position | Retention criterion |
 |---|---|---|---|---|

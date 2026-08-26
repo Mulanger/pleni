@@ -1,14 +1,14 @@
 # UI16 — Interpretable Hybrid Topic and Event Search
 
-**Status:** UI16.0–UI16.7 complete; UI16.8 release evidence remains NO-GO;
-UI16.9 backend relevance/latency remediation is deployed with the viewer flag
-off.  
-**Last updated:** 2026-08-25.  
+**Status:** UI16.0–UI16.9 complete; UI16.10 is deployed as a signed-in,
+explicit-URL owner Android beta. Ordinary visitors remain default-off and the
+general release evidence remains NO-GO.
+**Last updated:** 2026-08-26.
 **Owner-approved direction:** preserve the current live party/politician search and
 add contextual search over published clips, including the visible **“Tolkat som”**
 interpretation shown in the mockup below.
 
-This document is the detailed implementation source of truth for UI16; all ten
+This document is the detailed implementation source of truth for UI16; all eleven
 bounded scopes are also registered in `docs/BUILD_PLAN.md`. It is intentionally
 detailed because future coding agents implement one chunk at a time and do not
 share conversation memory.
