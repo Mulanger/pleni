@@ -69,6 +69,31 @@ test("runs a contextual query as hybrid search and returns the exact public cont
   assert.equal(fake.logs[0].resultCount, 1);
 });
 
+test("uses the request year for an unqualified Swedish day-month filter", async () => {
+  const fake = fakeDependencies();
+  const dependencies: ClipSearchDependencies = {
+    ...fake.dependencies,
+    now: () => new Date("2026-08-26T12:00:00Z"),
+  };
+  const response = await handler(dependencies)(request("elsparkcyklar 30 mars"));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(
+    body.interpretation.facets.map((facet: { kind: string; label: string }) => [
+      facet.kind,
+      facet.label,
+    ]),
+    [
+      ["date", "30 mars 2026"],
+      ["topic", "elsparkcyklar"],
+    ],
+  );
+  assert.equal(fake.searches[0].topic, "elsparkcyklar");
+  assert.equal(fake.searches[0].dateFrom, "2026-03-30");
+  assert.equal(fake.searches[0].dateTo, "2026-03-30");
+});
+
 test("person-only search uses filtered mode without calling OpenAI", async () => {
   const fake = fakeDependencies();
   const response = await handler(fake.dependencies)(request("Magdalena Andersson"));

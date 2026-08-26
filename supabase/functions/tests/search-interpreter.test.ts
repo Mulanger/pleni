@@ -45,7 +45,7 @@ for (const scenario of FIXTURE.cases) {
           },
         })
       : FIXTURE.catalog;
-    const result = interpretSearchQuery(scenario.request, catalog);
+    const result = interpretSearchQuery(scenario.request, catalog, 2026);
     assert.deepEqual(summarize(result), scenario.expect);
   });
 }
@@ -101,6 +101,19 @@ test("ambiguous output is independent of catalogue row order", () => {
       interpretSearchQuery({ query }, reversed),
     );
   }
+});
+
+test("an invalid Swedish calendar date remains searchable topic text", () => {
+  const result = interpretSearchQuery(
+    { query: "elsparkcyklar 31 februari" },
+    FIXTURE.catalog,
+    2026,
+  );
+  assert.deepEqual(result.facets, [
+    { kind: "topic", key: "topic", label: "elsparkcyklar 31 februari", removable: true },
+  ]);
+  assert.equal(result.plan.dateFrom, null);
+  assert.equal(result.plan.dateTo, null);
 });
 
 test("migration 023 derives only verified official aliases and preserves curated rollback data", () => {

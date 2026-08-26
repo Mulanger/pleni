@@ -1851,10 +1851,25 @@ a {
   padding-top: 6px;
 }
 
-.topic-skeleton-heading {
-  width: 46%;
-  height: 12px;
-  border-radius: 999px;
+.topic-search-loading {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 9px;
+  color: #555852;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: -0.005em;
+}
+
+.topic-search-spinner {
+  flex: 0 0 auto;
+  color: var(--ink);
+  animation: topic-search-spin 780ms linear infinite;
+}
+
+@keyframes topic-search-spin {
+  to { transform: rotate(360deg); }
 }
 
 .topic-skeleton-row {
@@ -4236,6 +4251,7 @@ a {
   .onboarding-pane,
   .pwa-notice,
   .pwa-spinner,
+  .topic-search-spinner,
   .search-results,
   .skeleton-shape,
   .feed-skeleton-video::after,

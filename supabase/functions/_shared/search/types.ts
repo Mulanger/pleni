@@ -5,7 +5,7 @@ import type {
   SearchFacet,
 } from "../search-types.ts";
 
-export const SEARCH_INTERPRETER_VERSION = "search-interpret-v1" as const;
+export const SEARCH_INTERPRETER_VERSION = "search-interpret-v2" as const;
 export const PERSON_FUZZY_MIN_SCORE = 0.88;
 export const PERSON_FUZZY_MIN_MARGIN = 0.08;
 

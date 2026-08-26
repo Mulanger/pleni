@@ -171,6 +171,32 @@
       }
     },
     {
+      "label": "topic and Swedish day month use the reference year",
+      "request": { "query": "elsparkcyklar 30 mars" },
+      "expect": {
+        "facets": [
+          { "kind": "date", "label": "30 mars 2026", "from": "2026-03-30", "to": "2026-03-30" },
+          { "kind": "topic", "label": "elsparkcyklar" }
+        ],
+        "ambiguity": null,
+        "consumed": ["30 mars"],
+        "plan": { "topic": "elsparkcyklar", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": "2026-03-30", "dateTo": "2026-03-30", "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "topic and Swedish day month keep an explicit year",
+      "request": { "query": "elsparkcyklar 30 maj 2025" },
+      "expect": {
+        "facets": [
+          { "kind": "date", "label": "30 maj 2025", "from": "2025-05-30", "to": "2025-05-30" },
+          { "kind": "topic", "label": "elsparkcyklar" }
+        ],
+        "ambiguity": null,
+        "consumed": ["30 maj 2025"],
+        "plan": { "topic": "elsparkcyklar", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": "2025-05-30", "dateTo": "2025-05-30", "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
       "label": "year disambiguates a recurring verified event",
       "request": { "query": "budgetdebatten 2022" },
       "expect": {

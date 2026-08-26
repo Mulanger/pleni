@@ -61,13 +61,43 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DATE_RANGE = /(?<!\d)([12]\d{3})\s*[-–—]\s*([12]\d{3})(?!\d)/gu;
 const DATE_FROM = /(?<![\p{L}\p{N}])(från|sedan)\s+([12]\d{3})(?!\d)/giu;
 const SINGLE_YEAR = /(?<!\d)([12]\d{3})(?!\d)/gu;
+const DAY_MONTH = /(?<![\p{L}\p{N}])([0-3]?\d)\s+(jan(?:uari)?|feb(?:ruari)?|mars|apr(?:il)?|maj|jun(?:i)?|jul(?:i)?|aug(?:usti)?|sep(?:tember)?|okt(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+([12]\d{3}))?(?![\p{L}\p{N}])/giu;
+const SWEDISH_MONTHS = [
+  "januari",
+  "februari",
+  "mars",
+  "april",
+  "maj",
+  "juni",
+  "juli",
+  "augusti",
+  "september",
+  "oktober",
+  "november",
+  "december",
+] as const;
+const SWEDISH_MONTH_NUMBER = new Map<string, number>([
+  ["jan", 1], ["januari", 1],
+  ["feb", 2], ["februari", 2],
+  ["mars", 3],
+  ["apr", 4], ["april", 4],
+  ["maj", 5],
+  ["jun", 6], ["juni", 6],
+  ["jul", 7], ["juli", 7],
+  ["aug", 8], ["augusti", 8],
+  ["sep", 9], ["september", 9],
+  ["okt", 10], ["oktober", 10],
+  ["nov", 11], ["november", 11],
+  ["dec", 12], ["december", 12],
+]);
 
 export function interpretSearchQuery(
   request: SearchInterpretationRequest,
   catalog: SearchEntityCatalog,
+  referenceYear = new Date().getUTCFullYear(),
 ): SearchInterpretationResult {
   try {
-    return interpretSearchQueryUnsafe(request, catalog);
+    return interpretSearchQueryUnsafe(request, catalog, referenceYear);
   } catch {
     return wholeQueryFallback(request);
   }
@@ -76,13 +106,14 @@ export function interpretSearchQuery(
 function interpretSearchQueryUnsafe(
   request: SearchInterpretationRequest,
   catalog: SearchEntityCatalog,
+  referenceYear: number,
 ): SearchInterpretationResult {
   const displayQuery = normalizeSearchDisplay(request.query);
   const tokens = tokenizeSearchText(displayQuery);
   const disabled = new Set(request.disabledFacets ?? []);
   const consumed: ConsumedSearchSpan[] = [];
 
-  const detectedDate = extractSearchDate(displayQuery);
+  const detectedDate = extractSearchDate(displayQuery, referenceYear);
   const activeDate = detectedDate && !disabled.has("date") ? detectedDate : null;
   if (activeDate) consumed.push(consumedSpan("date", activeDate, displayQuery));
 
@@ -171,7 +202,10 @@ function interpretSearchQueryUnsafe(
   };
 }
 
-export function extractSearchDate(displayQuery: string): DateInterpretation | null {
+export function extractSearchDate(
+  displayQuery: string,
+  referenceYear = new Date().getUTCFullYear(),
+): DateInterpretation | null {
   const candidates: Array<DateInterpretation & { priority: number }> = [];
   for (const match of displayQuery.matchAll(DATE_RANGE)) {
     const fromYear = Number(match[1]);
@@ -211,11 +245,34 @@ export function extractSearchDate(displayQuery: string): DateInterpretation | nu
       priority: 2,
     });
   }
+  for (const match of displayQuery.matchAll(DAY_MONTH)) {
+    const day = Number(match[1]);
+    const month = SWEDISH_MONTH_NUMBER.get(match[2].toLocaleLowerCase("sv-SE"));
+    const year = match[3] ? Number(match[3]) : referenceYear;
+    if (!month || !validCalendarDate(year, month, day)) continue;
+    const start = match.index ?? 0;
+    const isoDate = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    candidates.push({
+      start,
+      end: start + match[0].length,
+      label: `${day} ${SWEDISH_MONTHS[month - 1]} ${year}`,
+      from: isoDate,
+      to: isoDate,
+      priority: match[3] ? 0 : 3,
+    });
+  }
   candidates.sort((left, right) => left.start - right.start || left.priority - right.priority);
   const selected = candidates[0];
   if (!selected) return null;
   const { priority: _priority, ...date } = selected;
   return date;
+}
+
+function validCalendarDate(year: number, month: number, day: number): boolean {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day) || day < 1) {
+    return false;
+  }
+  return day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
 function resolvePerson(

@@ -32,6 +32,14 @@ test("identity lookup remains independent from submitted topic loading and error
   assert.ok(state.includes("Politiker och partier fungerar fortfarande"));
 });
 
+test("topic loading uses a visible restrained spinner with reduced-motion support", () => {
+  assert.ok(searchSource.includes('className="topic-search-loading"'));
+  assert.ok(searchSource.includes('className="topic-search-spinner"'));
+  assert.ok(searchSource.includes("Söker efter relevanta klipp…"));
+  assert.match(styles, /\.topic-search-spinner\s*\{[\s\S]*animation:\s*topic-search-spin 780ms linear infinite/u);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.topic-search-spinner/u);
+});
+
 test("interpretation chips and ambiguity choices have complete accessible labels", () => {
   assert.ok(searchSource.includes('aria-label="Tolkat som"'));
   assert.ok(searchSource.includes("Ta bort ${visibleFacetLabel(facet)} och bredda sökningen"));

@@ -175,7 +175,11 @@ export function createClipSearchHandler(
         catalogExpiresAtMs = requestNow.getTime() + catalogCacheTtlMs;
       }
       preflightMs = elapsedMs(preflightStarted);
-      const interpretation = interpretSearchQuery(searchRequest, catalog);
+      const interpretation = interpretSearchQuery(
+        searchRequest,
+        catalog,
+        requestNow.getUTCFullYear(),
+      );
       const limit = searchRequest.limit ?? 20;
 
       if (!interpretation.plan.hasRetrievalAnchor) {

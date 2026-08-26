@@ -1690,6 +1690,28 @@ database state, frontend layout, player/PWA behavior, pipeline stages or
 frontend regressions pass; the Function is deployed; the live preflight and a
 live public query both pass.
 
+## UI16.13 — Swedish day–month interpretation and search loading state — IN PROGRESS 2026-08-26
+
+**Depends on:** UI16.12. **Size:** small.
+
+**Objective:** interpret Swedish calendar phrases such as `30 mars` and
+`30 maj 2025` as exact date facets instead of residual topic text, and make the
+existing result-loading state visibly clear without changing the Search page's
+layout or hierarchy.
+
+**Scope — may modify:** the internal search interpreter/types and focused Edge
+fixtures/tests; `web/src/App.tsx`, `web/src/styles.css` and focused frontend
+tests; topic-search documentation and `PROGRESS.md`. **Must not modify:** the
+public `clip-search-v1` transport contract, ranking thresholds, embeddings,
+database state, player/PWA media behavior, pipeline stages or `src/contracts.py`.
+
+**Acceptance:** valid Swedish day–month expressions are consumed into a date
+facet using the current UTC year when no year is supplied; invalid dates stay
+as topic text; explicit years remain exact and existing year/range behavior is
+unchanged. Loading shows a compact visible spinner and status copy above the
+existing skeleton, with reduced-motion support. Edge/frontend tests,
+TypeScript, build/PWA checks, Function deployment and live interpretation pass.
+
 ---
 
 ## Phase 2 backlog (not chunked yet)

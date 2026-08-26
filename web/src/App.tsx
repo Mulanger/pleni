@@ -4392,8 +4392,10 @@ function TopicClipResultRow({
 function TopicSearchResultsSkeleton() {
   return (
     <div className="topic-results-skeleton" role="status" aria-label="Söker i klippen">
-      <span className="sr-only">Söker i klippen…</span>
-      <div className="topic-skeleton-heading skeleton-shape" aria-hidden="true" />
+      <div className="topic-search-loading">
+        <LoaderCircle className="topic-search-spinner" size={18} aria-hidden="true" />
+        <span>Söker efter relevanta klipp…</span>
+      </div>
       {Array.from({ length: 3 }, (_, index) => (
         <div className="topic-skeleton-row" aria-hidden="true" key={index}>
           <span className="skeleton-shape" />
