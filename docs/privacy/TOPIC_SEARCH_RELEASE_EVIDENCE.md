@@ -154,3 +154,8 @@ This is an explicit product release decision. It does not rewrite the historical
 UI16.8 evidence: ungraded relevance pools, the former latency target and
 unverified provider account controls remain documented limitations rather than
 being relabelled as passing evidence.
+
+Release commit `082fbb7` was pushed to `origin/main` and the resulting InstaPods
+bundle was verified at `https://pleni.se/`. The production bundle contains the
+public search UI and no longer contains the beta URL marker or confirmation
+dialog copy.

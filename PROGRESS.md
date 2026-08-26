@@ -5021,7 +5021,7 @@ behavior for the signed-in gate, warning, positive/topic, negative/empty,
 result-feed autoplay/order, Back restoration and observed cold latency. Do not
 turn the URL beta into a public flag without a separate owner decision.
 
-## UI16.11 — public integrated Search tab — DEPLOY READY 2026-08-26
+## UI16.11 — public integrated Search tab — DEPLOYED 2026-08-26
 
 **Built:** removed the signed-in owner-beta gate from the completed topic-search
 experience. Production now enables topic/video search by default for every
@@ -5044,6 +5044,12 @@ Python file.
 **Contracts touched:** none. `src/contracts.py`, `clip-search-v1`, ranking,
 embedding/index versions, database state and player/PWA media behavior are
 unchanged.
+
+**Production:** commit `082fbb7` was pushed to `origin/main`. InstaPods served
+the new `/assets/index-CEARHAzJ.js` bundle at `https://pleni.se/`; the deployed
+bundle contains the public search button, inline disclosure and `clip-search`
+client, and contains neither `topic-search-beta` nor the former confirmation
+copy.
 
 **Decisions made:** public production availability follows the owner's explicit
 clarification. Non-production builds remain opt-in unless the environment flag
