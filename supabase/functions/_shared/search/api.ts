@@ -26,6 +26,7 @@ import type { SearchEntityCatalog } from "./types.ts";
 
 export const MAX_CLIP_SEARCH_BODY_BYTES = 4096;
 export const SEARCH_CATALOG_CACHE_TTL_MS = 60_000;
+export const MAX_CLIP_SEARCH_RESULTS = 60;
 
 export interface SearchCandidateRequest {
   topic: string | null;
@@ -251,12 +252,20 @@ export function createClipSearchHandler(
         const broadened = parseCandidateEnvelope(
           await dependencies.searchCandidates({
             ...candidateRequest,
+            limit: MAX_CLIP_SEARCH_RESULTS,
             dateFrom: null,
             dateTo: null,
           }),
         );
-        if (broadened.results.length > 0) {
-          candidates = broadened;
+        const resultsFromOtherDates = broadened.results
+          .filter((result) => resultIsOutsideDateRange(
+            result,
+            interpretation.plan.dateFrom!,
+            interpretation.plan.dateTo!,
+          ))
+          .slice(0, limit);
+        if (resultsFromOtherDates.length > 0) {
+          candidates = { ...broadened, results: resultsFromOtherDates };
           const dateFacet = interpretation.facets.find(
             (facet): facet is Extract<SearchFacet, { kind: "date" }> => facet.kind === "date",
           );
@@ -331,6 +340,21 @@ function shouldBroadenDate(
     plan.dateFrom !== null &&
     plan.dateTo !== null
   );
+}
+
+function resultIsOutsideDateRange(result: unknown, dateFrom: string, dateTo: string): boolean {
+  if (!isRecord(result) || !isRecord(result.clip)) {
+    throw new Error("invalid_search_candidates");
+  }
+  const debateDate = result.clip.debateDate;
+  if (typeof debateDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(debateDate)) {
+    throw new Error("invalid_search_candidates");
+  }
+  const timestamp = Date.parse(`${debateDate}T00:00:00Z`);
+  if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== debateDate) {
+    throw new Error("invalid_search_candidates");
+  }
+  return debateDate < dateFrom || debateDate > dateTo;
 }
 
 function parsePreparedRequest(value: unknown): PreparedSearchRequestEnvelope {

@@ -1736,6 +1736,29 @@ notice and no extra user action is required. Exact matches and existing topic,
 identity and provider-fallback behavior remain unchanged. Edge/frontend tests,
 TypeScript, production build, deployment and live probes pass.
 
+## UI16.15 — Truthful other-date fallback results — DONE 2026-08-26
+
+**Depends on:** UI16.14. **Size:** small.
+
+**Objective:** ensure an automatically broadened date search never reintroduces
+weak candidates from the date range that the notice says had no relevant
+matches.
+
+**Scope — may modify:** the Edge search handler and focused tests;
+`web/src/App.tsx` and focused frontend tests; topic-search documentation and
+`PROGRESS.md`. **Must not modify:** the public `clip-search-v1` contract,
+database/RPC schema, ranking thresholds, embeddings, indexing, player/PWA media
+behavior, pipeline stages or `src/contracts.py`.
+
+**Acceptance:** the fallback candidate lookup over-fetches to the existing
+60-result ceiling, removes every clip whose debate date is inside the original
+inclusive date range, preserves the remaining relevance order and reapplies the
+requested limit. Broadening metadata and the relaxed facet appear only when an
+outside-range result remains. Exact dates, identity/event filters, date-only,
+disabled-date and provider-fallback behavior remain unchanged. The notice says
+`Inga relevanta klipp hittades`. Full Edge/frontend tests, TypeScript,
+production build, PWA verification, Function deployment and live probes pass.
+
 ---
 
 ## Phase 2 backlog (not chunked yet)

@@ -76,7 +76,7 @@ test("topic modules contain no query persistence, URL encoding, analytics, or lo
 test("rendering includes fallback, empty, retry, and 20-result reveal states", () => {
   assert.ok(searchSource.includes("keyword_fallback"));
   assert.ok(searchSource.includes("dateBroadening"));
-  assert.ok(searchSource.includes("Inga klipp hittades den"));
+  assert.ok(searchSource.includes("Inga relevanta klipp hittades den"));
   assert.ok(searchSource.includes("från andra datum"));
   assert.ok(searchSource.includes("Inga relevanta klipp hittades"));
   assert.ok(searchSource.includes("Försök igen"));

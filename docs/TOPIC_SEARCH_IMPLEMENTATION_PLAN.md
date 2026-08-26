@@ -1,6 +1,6 @@
 # UI16 — Interpretable Hybrid Topic and Event Search
 
-**Status:** UI16.0–UI16.14 are deployed. Topic/video results are part of the
+**Status:** UI16.0–UI16.15 are deployed. Topic/video results are part of the
 normal public Search tab; no sign-in or special URL is required.
 **Last updated:** 2026-08-26.
 **Owner-approved direction:** preserve the current live party/politician search and
@@ -726,6 +726,7 @@ checks and append the handoff template from this document.
 | UI16.8 | relevance evaluation, privacy gate and controlled release | all previous | large | IMPLEMENTED / RELEASE BLOCKED |
 | UI16.9 | no-filler relevance, latency and evaluation closeout | UI16.8 evidence | medium | BACKEND DEPLOYED / RELEASE BLOCKED |
 | UI16.14 | automatic date broadening for empty topic searches | UI16.13 | small | DONE 2026-08-26 |
+| UI16.15 | truthful other-date fallback results | UI16.14 | small | DONE 2026-08-26 |
 
 ### UI16.0 — Gate, file ownership and interface fixtures
 
@@ -1102,6 +1103,17 @@ inside the external embedding call at the p95 observation. OpenAI uses the
 global API endpoint; actual project retention controls remain admin/dashboard
 evidence. Manual judgments, future-index lag, privacy approval, rollback/device
 acceptance and owner GO remain pending. The viewer flag is still false.
+
+**UI16.15 execution record, 2026-08-26:** date broadening now over-fetches up to
+the existing 60-result contract ceiling, removes candidates inside the original
+inclusive date range, preserves the remaining server order and reapplies the
+request limit. If no outside-range candidate remains, the original date facet
+stays active and no broadening notice is emitted. The public contract, RPC,
+embeddings and ranking calibration are unchanged. The notice now distinguishes
+absence of relevant date-scoped matches from absence of catalogue clips. Live
+acceptance for `elsparkcykel 30 mars` returned 25 broader results, none dated
+2026-03-30; `elsparkcykel 22 juni` returned nine exact-date results with no
+notice; and the unqualified topic query remained at 28 results.
 
 ## Evaluation fixture clarification
 

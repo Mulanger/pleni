@@ -5188,3 +5188,50 @@ and empty by design.
 **Next agent should know:** test `elsparkcyklar 30 mars` for broad results with
 the notice, `elsparkcyklar 22 juni` for exact-date results without it, and
 `elsparkcyklar` for the unchanged all-date search.
+
+## UI16.15 — Truthful other-date fallback results — DEPLOYED 2026-08-26
+
+**Built:** The Edge date fallback now requests up to the existing 60-candidate
+ceiling, removes every result whose `clip.debateDate` lies inside the original
+inclusive date range, preserves the remaining relevance order and reapplies the
+client limit. If nothing outside the range remains, the original empty exact
+response and date facet are retained without `dateBroadening`. The existing
+cardless notice now says `Inga relevanta klipp hittades`.
+
+**Tests:** all **110 Edge tests** and **70 frontend tests** pass. Focused
+regressions cover mixed same/other dates, order and limit preservation,
+same-date-only fallback, full year-range exclusion, exact-date success,
+identity/event filter preservation, disabled dates and provider fallback. Edge
+and frontend TypeScript checks, the Vite production build, PWA verification
+(9 app-shell entries, no video/private data) and `git diff --check` pass. No
+Python files changed; the unavailable local project Python gate was not rerun.
+
+**Contracts touched:** none. `clip-search-v1` and `src/contracts.py` are
+unchanged.
+
+**Database state:** no migrations, tables, indexes, RPC signatures or ranking
+thresholds changed.
+
+**Deployment state:** `clip-search` was deployed with the existing
+JWT-verification setting. The frontend/docs commit was pushed to `origin/main`
+for InstaPods auto-deploy.
+
+**Index state:** unchanged from UI16.14: 3,188/3,188 keyword documents and
+3,188/3,188 current semantic documents, 4,160 current chunks, zero reviewed
+semantic exceptions, index version `openai:text-embedding-3-large:1024:v1`.
+
+**Decisions made:** “andra datum” is enforced as an inclusive exclusion of the
+original date range, not just removal of the SQL date constraint. Fallback
+over-fetching is bounded by the existing public ceiling and never creates a
+second embedding request.
+
+**Observations (not fixed, out of scope):** the global semantic admission and
+ranking thresholds remain unchanged; those require a separate evaluated search
+quality change.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** live `elsparkcykel 30 mars` returns 25 results with
+the broadening notice and zero `2026-03-30` dates. `elsparkcykel 22 juni`
+returns nine exact-date results with no notice, and `elsparkcykel` remains at 28
+results.

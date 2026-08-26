@@ -4271,7 +4271,7 @@ function TopicSearchResults({
 
       {response.dateBroadening && (
         <div className="topic-search-relaxation" role="status">
-          Inga klipp hittades den {response.dateBroadening.label}. Visar relevanta klipp från andra datum.
+          Inga relevanta klipp hittades den {response.dateBroadening.label}. Visar relevanta klipp från andra datum.
         </div>
       )}
 

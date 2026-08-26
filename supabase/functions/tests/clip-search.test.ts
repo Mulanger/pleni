@@ -70,7 +70,7 @@ test("runs a contextual query as hybrid search and returns the exact public cont
 });
 
 test("uses the request year for an unqualified Swedish day-month filter", async () => {
-  const fake = fakeDependencies();
+  const fake = fakeDependencies({ candidate: envelope(resultAt("exact", "2026-03-30"), true) });
   const dependencies: ClipSearchDependencies = {
     ...fake.dependencies,
     now: () => new Date("2026-08-26T12:00:00Z"),
@@ -96,19 +96,28 @@ test("uses the request year for an unqualified Swedish day-month filter", async 
 });
 
 test("automatically broadens an empty date filter without re-embedding", async () => {
+  const june = resultAt("june", "2026-06-22");
+  const march = resultAt("march", "2026-03-30");
+  const may = resultAt("may", "2026-05-08");
+  const july = resultAt("july", "2026-07-01");
   const fake = fakeDependencies({
     candidateFor: (search) =>
-      search.dateFrom === "2026-03-30" ? envelope(null, true) : envelope(RESULT, true),
+      search.dateFrom === "2026-03-30"
+        ? envelope(null, true)
+        : envelope([march, june, may, july], true),
   });
   const dependencies: ClipSearchDependencies = {
     ...fake.dependencies,
     now: () => new Date("2026-08-26T12:00:00Z"),
   };
-  const response = await handler(dependencies)(request("elsparkcyklar 30 mars"));
+  const response = await handler(dependencies)(requestWithLimit("elsparkcyklar 30 mars", 2));
   const body = await response.json();
 
   assert.equal(response.status, 200);
-  assert.equal(body.results.length, 1);
+  assert.deepEqual(
+    body.results.map((result: SearchClipResult) => result.clip.id),
+    [june.clip.id, may.clip.id],
+  );
   assert.deepEqual(body.interpretation.facets.map((facet: { kind: string }) => facet.kind), ["topic"]);
   assert.deepEqual(body.dateBroadening, {
     kind: "date",
@@ -120,11 +129,58 @@ test("automatically broadens an empty date filter without re-embedding", async (
   assert.equal(fake.searches[0].dateFrom, "2026-03-30");
   assert.equal(fake.searches[1].dateFrom, null);
   assert.equal(fake.searches[1].dateTo, null);
+  assert.equal(fake.searches[1].limit, 60);
   assert.equal(fake.searches[1].politicianId, null);
   assert.equal(fake.embeddedTopics.length, 1);
 });
 
-test("date broadening preserves person, party and verified event constraints", async () => {
+test("same-date-only fallback remains empty with its original date facet", async () => {
+  const sameDate = resultAt("same-date", "2026-03-30");
+  const fake = fakeDependencies({
+    candidateFor: (search) =>
+      search.dateFrom === "2026-03-30" ? envelope(null, true) : envelope(sameDate, true),
+  });
+  const dependencies: ClipSearchDependencies = {
+    ...fake.dependencies,
+    now: () => new Date("2026-08-26T12:00:00Z"),
+  };
+  const response = await handler(dependencies)(request("elsparkcyklar 30 mars"));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.results, []);
+  assert.equal(body.dateBroadening, null);
+  assert.deepEqual(
+    body.interpretation.facets.map((facet: { kind: string }) => facet.kind),
+    ["date", "topic"],
+  );
+  assert.equal(fake.searches.length, 2);
+});
+
+test("date-range broadening excludes the entire original interval", async () => {
+  const in2022 = resultAt("in-2022", "2022-03-01");
+  const in2023 = resultAt("in-2023", "2023-09-15");
+  const in2024 = resultAt("in-2024", "2024-01-12");
+  const fake = fakeDependencies({
+    candidateFor: (search) =>
+      search.dateFrom === "2022-01-01"
+        ? envelope(null, true)
+        : envelope([in2022, in2023, in2024], true),
+  });
+  const response = await handler(fake.dependencies)(request("elsparkcyklar 2022-2023"));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.results.map((result: SearchClipResult) => result.clip.id), [in2024.clip.id]);
+  assert.deepEqual(body.dateBroadening, {
+    kind: "date",
+    label: "2022–2023",
+    from: "2022-01-01",
+    to: "2023-12-31",
+  });
+});
+
+test("date fallback preserves person, party and verified event constraints", async () => {
   const fake = fakeDependencies({
     candidateFor: (search) =>
       search.dateFrom === "2022-01-01" ? envelope(null, true) : envelope(RESULT, true),
@@ -135,8 +191,9 @@ test("date broadening preserves person, party and verified event constraints", a
   const body = await response.json();
 
   assert.equal(response.status, 200);
-  assert.equal(body.dateBroadening.label, "2022");
-  assert.deepEqual(body.interpretation.facets.map((facet: { kind: string }) => facet.kind), ["person", "party", "event", "topic"]);
+  assert.deepEqual(body.results, []);
+  assert.equal(body.dateBroadening, null);
+  assert.deepEqual(body.interpretation.facets.map((facet: { kind: string }) => facet.kind), ["person", "party", "event", "date", "topic"]);
   assert.equal(fake.searches.length, 2);
   assert.equal(fake.searches[0].sourceIds?.[0], SOURCE_ID);
   assert.equal(fake.searches[1].sourceIds?.[0], SOURCE_ID);
@@ -478,6 +535,18 @@ function request(query: string, address = "198.51.100.10"): Request {
   return requestWithFacets(query, [], address);
 }
 
+function requestWithLimit(query: string, limit: number): Request {
+  return new Request("https://example.test/clip-search", {
+    method: "POST",
+    headers: {
+      Origin: ORIGIN,
+      "Content-Type": "application/json",
+      "X-Forwarded-For": "198.51.100.10",
+    },
+    body: JSON.stringify({ query, limit }),
+  });
+}
+
 function requestWithFacets(
   query: string,
   disabledFacets: string[],
@@ -576,11 +645,25 @@ function fakeDependencies(options: {
   };
 }
 
-function envelope(result: SearchClipResult | null, semanticAvailable: boolean) {
+function envelope(
+  result: SearchClipResult | readonly SearchClipResult[] | null,
+  semanticAvailable: boolean,
+) {
   return {
     indexVersion: "openai:text-embedding-3-large:1024:v1",
     semanticAvailable,
-    results: result ? [result] : [],
+    results: Array.isArray(result) ? result : result ? [result] : [],
+  };
+}
+
+function resultAt(id: string, debateDate: string): SearchClipResult {
+  return {
+    ...RESULT,
+    clip: {
+      ...RESULT.clip,
+      id: `HD10135_35_c02_${id}`,
+      debateDate,
+    },
   };
 }
 
