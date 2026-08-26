@@ -128,7 +128,7 @@ export function createClipSearchHandler(
     }
     const cors = new Headers({
       "Access-Control-Allow-Origin": origin,
-      "Access-Control-Allow-Headers": "content-type, x-client-info",
+      "Access-Control-Allow-Headers": "apikey, content-type, x-client-info",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Max-Age": "86400",
       Vary: "Origin",

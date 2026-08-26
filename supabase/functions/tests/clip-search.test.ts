@@ -205,6 +205,29 @@ test("reuses a valid catalogue for one minute without bypassing request budgets"
   assert.ok(fake.logs.every((log) => Object.values(log.phaseMs).every(Number.isFinite)));
 });
 
+test("browser preflight permits the public Supabase apikey header", async () => {
+  const response = await handler(fakeDependencies().dependencies)(
+    new Request("https://example.test/clip-search", {
+      method: "OPTIONS",
+      headers: {
+        Origin: ORIGIN,
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "apikey,content-type",
+      },
+    }),
+  );
+
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("Access-Control-Allow-Origin"), ORIGIN);
+  const allowedHeaders = new Set(
+    (response.headers.get("Access-Control-Allow-Headers") ?? "")
+      .split(",")
+      .map((header) => header.trim().toLowerCase()),
+  );
+  assert.equal(allowedHeaders.has("apikey"), true);
+  assert.equal(allowedHeaders.has("content-type"), true);
+});
+
 test("rejects invalid, oversized, non-POST and cross-origin requests", async () => {
   const fake = fakeDependencies();
   const search = handler(fake.dependencies);

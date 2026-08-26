@@ -1671,6 +1671,25 @@ dialog. The concise provider disclosure remains inline. Focused frontend,
 TypeScript, production build, PWA and Edge regression checks pass before `main`
 is deployed.
 
+## UI16.12 — Public browser preflight repair — IN PROGRESS 2026-08-26
+
+**Depends on:** UI16.11. **Size:** small.
+
+**Objective:** allow the public Search tab's required Supabase publishable-key
+header through the `clip-search` browser preflight. Direct server probes are not
+acceptance because they do not enforce browser CORS.
+
+**Scope — may modify:** `supabase/functions/_shared/search/api.ts`, the focused
+Edge regression test, topic-search release/runbook documentation and
+`PROGRESS.md`. **Must not modify:** the search contract, ranking, embeddings,
+database state, frontend layout, player/PWA behavior, pipeline stages or
+`src/contracts.py`.
+
+**Acceptance:** an allowed-origin `OPTIONS` response explicitly permits
+`apikey` and `content-type`; disallowed origins remain rejected; all Edge and
+frontend regressions pass; the Function is deployed; the live preflight and a
+live public query both pass.
+
 ---
 
 ## Phase 2 backlog (not chunked yet)
