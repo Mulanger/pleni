@@ -1690,7 +1690,7 @@ database state, frontend layout, player/PWA behavior, pipeline stages or
 frontend regressions pass; the Function is deployed; the live preflight and a
 live public query both pass.
 
-## UI16.13 — Swedish day–month interpretation and search loading state — IN PROGRESS 2026-08-26
+## UI16.13 — Swedish day–month interpretation and search loading state — DONE 2026-08-26
 
 **Depends on:** UI16.12. **Size:** small.
 

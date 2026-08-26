@@ -5096,3 +5096,47 @@ changing the browser client or bypassing the publishable-key header.
 **Next agent should know:** direct server probes do not enforce CORS. Any future
 public Function acceptance must include an actual preflight that requests every
 non-simple header used by the browser client.
+
+## UI16.13 — Swedish day–month interpretation and search loading state — DEPLOYED 2026-08-26
+
+**Built:** interpreter `search-interpret-v2` now consumes valid Swedish
+day–month phrases such as `30 mars`, common month abbreviations and explicit
+forms such as `30 maj 2025`. An omitted year uses the request's current UTC
+year; explicit dates filter `sources.debate_date` exactly. Impossible calendar
+dates remain residual topic text. The Search result-loading state now displays
+a compact Lucide spinner and visible `Söker efter relevanta klipp…` status above
+the existing cardless skeleton rows, with reduced-motion handling.
+
+**Tests:** all **104 Edge tests** and **68 frontend tests** pass. Focused
+interpreter/API fixtures cover `30 mars`, explicit `30 maj 2025`, request-year
+propagation and invalid `31 februari`. TypeScript, production Vite build and PWA
+verification pass; the PWA still precaches exactly nine app-shell entries and
+no video/private data. `git diff --check` passes. The unavailable workstation
+Python gate was not rerun; UI16.13 changes no Python file.
+
+**Contracts touched:** none. The public byte-identical `clip-search-v1`
+transport contract, ranking, embedding/index versions, database state,
+player/PWA media behavior and `src/contracts.py` are unchanged.
+
+**Production:** commit `2899e97` was pushed to `origin/main`; the updated
+`clip-search` Function was deployed with JWT verification disabled as before.
+The live query `elsparkcyklar 30 mars` returned HTTP 200 with separate
+`Datum · 30 mars 2026` and `Ämne · elsparkcyklar` facets and zero honest results.
+The known matching date `elsparkcyklar 22 juni` returned eight results with the
+expected scooter-safety clip first. InstaPods serves a bundle containing the
+visible spinner copy and its reduced-motion CSS.
+
+**Decisions made:** an unqualified day–month means that exact day in the current
+UTC year. It does not leak back into semantic topic text or broaden silently to
+another month. The loading indicator augments the existing skeleton instead of
+adding a card, modal or competing accent.
+
+**Observations (not fixed, out of scope):** `30 mars` must not return clips from
+May or June; use the actual debate date. Month-only ranges such as `maj 2026`
+remain outside this chunk.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** keep date filtering tied to `sources.debate_date`,
+not clip publication time. If month-only or relative dates are later added,
+version them with explicit fixtures instead of weakening the exact-day rule.

@@ -1,14 +1,13 @@
 # UI16 — Interpretable Hybrid Topic and Event Search
 
-**Status:** UI16.0–UI16.9 complete; UI16.10 is deployed as a signed-in,
-explicit-URL owner Android beta. Ordinary visitors remain default-off and the
-general release evidence remains NO-GO.
+**Status:** UI16.0–UI16.13 are deployed. Topic/video results are part of the
+normal public Search tab; no sign-in or special URL is required.
 **Last updated:** 2026-08-26.
 **Owner-approved direction:** preserve the current live party/politician search and
 add contextual search over published clips, including the visible **“Tolkat som”**
 interpretation shown in the mockup below.
 
-This document is the detailed implementation source of truth for UI16; all eleven
+This document is the detailed implementation source of truth for UI16; all fourteen
 bounded scopes are also registered in `docs/BUILD_PLAN.md`. It is intentionally
 detailed because future coding agents implement one chunk at a time and do not
 share conversation memory.
@@ -293,9 +292,11 @@ They belong in versioned evaluation output, not the UI.
 The interpreter is deterministic and executes in this order:
 
 1. Normalize Unicode and whitespace while preserving the submitted display text.
-2. Extract explicit four-digit years and supported year ranges. V1 accepts a
-   single year, `YYYY–YYYY`, `från YYYY` and `sedan YYYY`. Date bounds are
-   compared to `sources.debate_date`.
+2. Extract explicit four-digit years, supported year ranges and valid Swedish
+   day–month phrases. Interpreter V2 accepts a single year, `YYYY–YYYY`,
+   `från YYYY`, `sedan YYYY`, `30 mars` and `30 maj 2025`. A day–month without
+   a year uses the request's current UTC year. Date bounds are compared to
+   `sources.debate_date`.
 3. Match verified politician aliases against the longest token span first.
 4. Match party codes, current party names and verified party aliases.
 5. Match verified event aliases and normalized source titles, using the detected
@@ -318,6 +319,8 @@ lookup key, but never as the canonical name.
   second candidate. Both values are versioned and covered by fixtures.
 - A year is always a date facet, even when the current catalogue has no clips in
   that year. The result is then honestly empty.
+- A valid Swedish day–month is an exact date facet. Impossible dates such as
+  `31 februari` remain topic text; the interpreter must not silently repair them.
 - An event requires a verified event/source record. Semantic similarity to a
   title alone is insufficient to apply a strict event filter.
 - If an event alias has several occurrences and no date resolves it, return
@@ -333,6 +336,7 @@ lookup key, but never as the canonical name.
 | `magdalena andersson skatter 2017` | Person · Magdalena Andersson; Ämne · skatter; År · 2017 | strict person/year filters; hybrid rank by tax relevance |
 | `elsparkcyklar` | Ämne · elsparkcyklar | hybrid results across all people, parties and dates |
 | `elsparkcyklar 2021` | Ämne · elsparkcyklar; År · 2021 | hybrid topic retrieval inside 2021 |
+| `elsparkcyklar 30 mars` | Ämne · elsparkcyklar; Datum · 30 mars in the current UTC year | exact debate-date filter; honestly empty when no matching source exists |
 | `budgetdebatten 2022` | Händelse · Budgetdebatten; År · 2022 | verified event destination plus clips mapped to that event |
 | `Northvolt konkurs` | Ämne · Northvolt konkurs | topic search unless a verified Pleni event exists |
 | `S skatter` | Parti · Socialdemokraterna; Ämne · skatter | historical speech-party filter plus topic retrieval |
@@ -627,6 +631,9 @@ recommendations or profiling.
 - Preserve current party filter behavior; selected party becomes a strict search
   facet on submission.
 - A successful submission replaces the prior topic result set for the session.
+- While a submitted search is pending, show a compact visible spinner and
+  `Söker efter relevanta klipp…` above the existing result skeleton. Preserve a
+  static, understandable state when reduced motion is requested.
 - Back restores submitted text, response, revealed count and scroll position in
   page-session memory only.
 - A reload may forget the search.
