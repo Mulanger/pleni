@@ -99,6 +99,66 @@ test("uses the request year for an unqualified Swedish day-month filter", async 
   assert.equal(fake.searches[0].dateTo, "2026-03-30");
 });
 
+test("uses an explicit Swedish month-year as an inclusive calendar range", async () => {
+  const fake = fakeDependencies({ candidate: envelope(resultAt("march", "2026-03-12"), true) });
+  const response = await handler(fake.dependencies)(request("elsparkcykel mars 2026"));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(
+    body.interpretation.facets.map((facet: { kind: string; label: string }) => [
+      facet.kind,
+      facet.label,
+    ]),
+    [
+      ["date", "mars 2026"],
+      ["topic", "elsparkcykel"],
+    ],
+  );
+  assert.equal(body.dateBroadening, null);
+  assert.equal(fake.searches[0].topic, "elsparkcykel");
+  assert.equal(fake.searches[0].dateFrom, "2026-03-01");
+  assert.equal(fake.searches[0].dateTo, "2026-03-31");
+});
+
+test("empty month-year search broadens outside the whole month with one embedding", async () => {
+  const marchFirst = resultAt("march-first", "2026-03-01");
+  const february = resultAt("february", "2026-02-28");
+  const marchLast = resultAt("march-last", "2026-03-31");
+  const april = resultAt("april", "2026-04-01");
+  const fake = fakeDependencies({
+    candidateFor: (search) =>
+      search.dateFrom === "2026-03-01"
+        ? envelope(null, true)
+        : envelope([marchFirst, february, marchLast, april], true),
+  });
+  const response = await handler(fake.dependencies)(
+    requestWithLimit("elsparkcykel i mars 2026", 2),
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(
+    body.results.map((result: SearchClipResult) => result.clip.id),
+    [february.clip.id, april.clip.id],
+  );
+  assert.deepEqual(body.dateBroadening, {
+    kind: "date",
+    label: "mars 2026",
+    from: "2026-03-01",
+    to: "2026-03-31",
+  });
+  assert.deepEqual(
+    body.interpretation.facets.map((facet: { kind: string }) => facet.kind),
+    ["topic"],
+  );
+  assert.equal(fake.searches.length, 2);
+  assert.equal(fake.searches[1].limit, 60);
+  assert.equal(fake.searches[1].dateFrom, null);
+  assert.equal(fake.searches[1].dateTo, null);
+  assert.deepEqual(fake.embeddedTopics, ["elsparkcykel"]);
+});
+
 test("automatically broadens an empty date filter without re-embedding", async () => {
   const june = resultAt("june", "2026-06-22");
   const march = resultAt("march", "2026-03-30");
@@ -221,6 +281,29 @@ test("disabled date facets never trigger automatic broadening", async () => {
   assert.equal(fake.searches[0].dateFrom, null);
 });
 
+test("removing a month-year facet returns its exact words to the topic", async () => {
+  const fake = fakeDependencies({ candidate: envelope(null, true) });
+  const response = await handler(fake.dependencies)(
+    requestWithFacets("elsparkcykel i mars 2026", ["date"]),
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.dateBroadening, null);
+  assert.deepEqual(
+    body.interpretation.facets.map((facet: { kind: string; label: string }) => [
+      facet.kind,
+      facet.label,
+    ]),
+    [["topic", "elsparkcykel i mars 2026"]],
+  );
+  assert.equal(fake.searches.length, 1);
+  assert.equal(fake.searches[0].topic, "elsparkcykel i mars 2026");
+  assert.equal(fake.searches[0].dateFrom, null);
+  assert.equal(fake.searches[0].dateTo, null);
+  assert.deepEqual(fake.embeddedTopics, ["elsparkcykel i mars 2026"]);
+});
+
 test("provider failure still broadens with one keyword-only embedding attempt", async () => {
   const fake = fakeDependencies({
     embedError: new OpenAIEmbeddingError("provider_timeout", true),
@@ -315,6 +398,51 @@ test("date-only query is honestly empty and does not run retrieval", async () =>
   assert.equal(fake.embeddedTopics.length, 0);
 });
 
+test("month-year-only query is honestly empty while a bare month remains topic", async () => {
+  const dateOnly = fakeDependencies();
+  const dateResponse = await handler(dateOnly.dependencies)(request("mars 2026"));
+  const dateBody = await dateResponse.json();
+  assert.equal(dateResponse.status, 200);
+  assert.equal(dateBody.mode, "filtered");
+  assert.deepEqual(dateBody.results, []);
+  assert.deepEqual(
+    dateBody.interpretation.facets.map((facet: { kind: string }) => facet.kind),
+    ["date"],
+  );
+  assert.equal(dateOnly.searches.length, 0);
+  assert.equal(dateOnly.embeddedTopics.length, 0);
+
+  const bareMonth = fakeDependencies();
+  const topicResponse = await handler(bareMonth.dependencies)(request("mars"));
+  const topicBody = await topicResponse.json();
+  assert.equal(topicResponse.status, 200);
+  assert.deepEqual(
+    topicBody.interpretation.facets.map((facet: { kind: string; label: string }) => [
+      facet.kind,
+      facet.label,
+    ]),
+    [["topic", "mars"]],
+  );
+  assert.equal(bareMonth.searches[0].topic, "mars");
+  assert.deepEqual(bareMonth.embeddedTopics, ["mars"]);
+});
+
+for (const query of [
+  "elsparkcykel",
+  "elsparkcyklar",
+  "trafiksäkerhet för små elektriska hyrfordon",
+] as const) {
+  test(`preserves the OPT3 scooter topic exactly: ${query}`, async () => {
+    const fake = fakeDependencies();
+    const response = await handler(fake.dependencies)(request(query));
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.results.length, 1);
+    assert.equal(fake.searches[0].topic, query);
+    assert.deepEqual(fake.embeddedTopics, [query]);
+  });
+}
+
 test("returns ambiguity choices while continuing the unconsumed surname as topic", async () => {
   const fake = fakeDependencies({
     catalog: {
@@ -340,6 +468,39 @@ test("returns ambiguity choices while continuing the unconsumed surname as topic
   assert.equal(body.interpretation.ambiguity.options.length, 2);
   assert.equal(fake.searches[0].politicianId, null);
   assert.equal(fake.searches[0].topic, "Andersson");
+});
+
+test("ambiguous verified events never select a source or destination silently", async () => {
+  const fake = fakeDependencies({
+    catalog: {
+      ...CATALOG,
+      events: [
+        CATALOG.events[0],
+        {
+          ...CATALOG.events[0],
+          id: "55555555-5555-4555-8555-555555555555",
+          label: "Budgetdebatten 2023",
+          dateFrom: "2023-11-06",
+          dateTo: "2023-11-06",
+          dateLabel: "6 november 2023",
+          sourceIds: ["66666666-6666-4666-8666-666666666666"],
+        },
+      ],
+    },
+  });
+  const response = await handler(fake.dependencies)(request("budgetdebatten"));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.interpretation.ambiguity.kind, "event");
+  assert.deepEqual(
+    body.interpretation.ambiguity.options.map((option: { id: string }) => option.id),
+    [EVENT_ID, "55555555-5555-4555-8555-555555555555"],
+  );
+  assert.equal(body.event, null);
+  assert.equal(fake.searches[0].topic, "budgetdebatten");
+  assert.equal(fake.searches[0].sourceIds, null);
+  assert.equal(fake.eventIds.length, 0);
 });
 
 test("preserves an empty result set", async () => {

@@ -62,6 +62,7 @@ const DATE_RANGE = /(?<!\d)([12]\d{3})\s*[-–—]\s*([12]\d{3})(?!\d)/gu;
 const DATE_FROM = /(?<![\p{L}\p{N}])(från|sedan)\s+([12]\d{3})(?!\d)/giu;
 const SINGLE_YEAR = /(?<!\d)([12]\d{3})(?!\d)/gu;
 const DAY_MONTH = /(?<![\p{L}\p{N}])([0-3]?\d)\s+(jan(?:uari)?|feb(?:ruari)?|mars|apr(?:il)?|maj|jun(?:i)?|jul(?:i)?|aug(?:usti)?|sep(?:tember)?|okt(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+([12]\d{3}))?(?![\p{L}\p{N}])/giu;
+const MONTH_YEAR = /(?<![\p{L}\p{N}])(?:i\s+)?(jan(?:uari)?|feb(?:ruari)?|mars|apr(?:il)?|maj|jun(?:i)?|jul(?:i)?|aug(?:usti)?|sep(?:tember)?|okt(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+([12]\d{3})(?![\p{L}\p{N}])/giu;
 const SWEDISH_MONTHS = [
   "januari",
   "februari",
@@ -207,13 +208,24 @@ export function extractSearchDate(
   referenceYear = new Date().getUTCFullYear(),
 ): DateInterpretation | null {
   const candidates: Array<DateInterpretation & { priority: number }> = [];
+  const dayMonthMatches = [...displayQuery.matchAll(DAY_MONTH)];
+  const invalidCalendarSpans: TextSpan[] = dayMonthMatches.flatMap((match) => {
+    const day = Number(match[1]);
+    const month = SWEDISH_MONTH_NUMBER.get(match[2].toLocaleLowerCase("sv-SE"));
+    const year = match[3] ? Number(match[3]) : referenceYear;
+    if (month && validCalendarDate(year, month, day)) return [];
+    const start = match.index ?? 0;
+    return [{ start, end: start + match[0].length }];
+  });
   for (const match of displayQuery.matchAll(DATE_RANGE)) {
     const fromYear = Number(match[1]);
     const toYear = Number(match[2]);
     if (fromYear > toYear) continue;
+    const start = match.index ?? 0;
+    const span = { start, end: start + match[0].length };
+    if (invalidCalendarSpans.some((candidate) => spansOverlap(candidate, span))) continue;
     candidates.push({
-      start: match.index ?? 0,
-      end: (match.index ?? 0) + match[0].length,
+      ...span,
       label: `${fromYear}–${toYear}`,
       from: `${fromYear}-01-01`,
       to: `${toYear}-12-31`,
@@ -223,9 +235,11 @@ export function extractSearchDate(
   for (const match of displayQuery.matchAll(DATE_FROM)) {
     const year = Number(match[2]);
     const prefix = match[1].toLocaleLowerCase("sv-SE");
+    const start = match.index ?? 0;
+    const span = { start, end: start + match[0].length };
+    if (invalidCalendarSpans.some((candidate) => spansOverlap(candidate, span))) continue;
     candidates.push({
-      start: match.index ?? 0,
-      end: (match.index ?? 0) + match[0].length,
+      ...span,
       label: `${prefix} ${year}`,
       from: `${year}-01-01`,
       to: "9999-12-31",
@@ -236,6 +250,7 @@ export function extractSearchDate(
     const start = match.index ?? 0;
     const span = { start, end: start + match[0].length };
     if (candidates.some((candidate) => spansOverlap(candidate, span))) continue;
+    if (invalidCalendarSpans.some((candidate) => spansOverlap(candidate, span))) continue;
     const year = Number(match[1]);
     candidates.push({
       ...span,
@@ -245,7 +260,7 @@ export function extractSearchDate(
       priority: 2,
     });
   }
-  for (const match of displayQuery.matchAll(DAY_MONTH)) {
+  for (const match of dayMonthMatches) {
     const day = Number(match[1]);
     const month = SWEDISH_MONTH_NUMBER.get(match[2].toLocaleLowerCase("sv-SE"));
     const year = match[3] ? Number(match[3]) : referenceYear;
@@ -259,6 +274,22 @@ export function extractSearchDate(
       from: isoDate,
       to: isoDate,
       priority: match[3] ? 0 : 3,
+    });
+  }
+  for (const match of displayQuery.matchAll(MONTH_YEAR)) {
+    const month = SWEDISH_MONTH_NUMBER.get(match[1].toLocaleLowerCase("sv-SE"));
+    const year = Number(match[2]);
+    if (!month) continue;
+    const start = match.index ?? 0;
+    const span = { start, end: start + match[0].length };
+    if (invalidCalendarSpans.some((candidate) => spansOverlap(candidate, span))) continue;
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    candidates.push({
+      ...span,
+      label: `${SWEDISH_MONTHS[month - 1]} ${year}`,
+      from: `${year}-${String(month).padStart(2, "0")}-01`,
+      to: `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
+      priority: 1,
     });
   }
   candidates.sort((left, right) => left.start - right.start || left.priority - right.priority);

@@ -354,3 +354,22 @@ Operational rollback keeps 029 applied and redeploys `clip-search` from commit
 `16a4887`, which calls v2. The exact command is recorded in `PROGRESS.md`. The
 down migration is not part of incident rollback and would require separate
 review.
+
+## OPT3 offline intent/filter candidate (2026-08-26)
+
+OPT3 adds deterministic Swedish month/year interpretation and does not add a
+provider, log field, stored query, alias dictionary, embedding, database object
+or public response field. `search-interpret-v3` consumes only explicit
+month-plus-four-digit-year spans. Bare month names remain topic text, invalid
+calendar phrases remain topic text, and disabling the date facet returns the
+original phrase to topic retrieval.
+
+The browser's exact-day/range wording reads only the existing server-provided
+`dateBroadening.from`, `.to` and `.label`; it does not reinterpret the raw
+query. The public `clip-search-v1` contract, ranking/index versions, HMAC budget,
+redacted log schema and no-query-persistence boundary are unchanged.
+
+Automated evidence: 501 Python tests, 139 Edge tests and 71 frontend tests,
+including byte-identical browser/Edge contract fixtures, passed. TypeScript,
+production build and PWA verification also passed. No credential, live query,
+OpenAI request, deployment or database write occurred during OPT3.

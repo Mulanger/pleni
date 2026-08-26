@@ -474,7 +474,8 @@ is separately reviewed.
 
 ## OPT3 — Intent and filter correctness hardening
 
-**Status:** PLANNED. **Size:** medium. **Depends on:** OPT2 (deployed).
+**Status:** DONE 2026-08-26, offline release candidate. **Size:** medium.
+**Depends on:** OPT2 (deployed).
 
 ### Objective
 
@@ -524,6 +525,32 @@ strictly required; both copies and all fixtures must change byte-identically.
 
 Run mirrored contract fixtures, interpreter tests, Edge tests, frontend tests,
 TypeScript, production build and PWA verification.
+
+### Delivered 2026-08-26
+
+`search-interpret-v3` implements full Swedish month/year ranges for all twelve
+months and their abbreviations, including leap-year February and optional
+leading `i`. `mars 2026` and `i mars 2026` produce the inclusive range
+`2026-03-01`–`2026-03-31`; a bare `mars` remains topic text. A syntactically
+matched but impossible date such as `31 februari 2026` blocks overlapping
+month/year candidates so the entire phrase remains searchable topic text.
+
+Removing the month date facet disables server date consumption and sends the
+original words back through topic retrieval. A month/year-only query has no
+retrieval anchor and stays empty. Month fallback uses the existing bounded
+second candidate lookup, excludes every date inside the original inclusive
+month, preserves server order and reuses the same embedding.
+
+The public contract did not change. The browser now labels every date facet
+`Datum`; broadening copy uses the server's explicit `from`/`to` equality to say
+`den` for one day and `under` for a range. It never parses the query. Existing
+fuzzy thresholds (`0.88` score, `0.08` margin), close-person/event ambiguity,
+verified source filters, ranking v3, embeddings and index data are unchanged.
+
+All 501 Python tests, 139 Edge tests and 71 frontend tests passed. Frontend
+TypeScript, the production Vite build and PWA verification passed with exactly
+nine app-shell entries and no video/private data. No live or OpenAI call,
+database change, deploy or push was made; release remains a separate decision.
 
 ## OPT4 — Latency, cost and embedding/index decision
 

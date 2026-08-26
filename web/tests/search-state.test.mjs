@@ -9,6 +9,7 @@ import {
   beginTopicSearch,
   buildTopicRequestQuery,
   completeTopicSearch,
+  dateBroadeningNotice,
   identityQueryAfterTopicRemoval,
   partyAfterTopicRemoval,
   revealMoreTopicResults,
@@ -77,7 +78,29 @@ test("facets render in the locked person party event topic date order", () => {
     "date",
   ]);
   assert.equal(visibleFacetLabel(facets[4]), "Person · Magdalena Andersson");
+  assert.equal(visibleFacetLabel(facets[0]), "Datum · 2017");
   assert.equal(topicResultHeading(facets), "Klipp om skatter från 2017");
+});
+
+test("date broadening copy distinguishes an exact day from a server range", () => {
+  assert.equal(
+    dateBroadeningNotice({
+      kind: "date",
+      label: "30 mars 2026",
+      from: "2026-03-30",
+      to: "2026-03-30",
+    }),
+    "Inga relevanta klipp hittades den 30 mars 2026. Visar relevanta klipp från andra datum.",
+  );
+  assert.equal(
+    dateBroadeningNotice({
+      kind: "date",
+      label: "mars 2026",
+      from: "2026-03-01",
+      to: "2026-03-31",
+    }),
+    "Inga relevanta klipp hittades under mars 2026. Visar relevanta klipp från andra datum.",
+  );
 });
 
 test("the selected party becomes an explicit transient query facet", () => {

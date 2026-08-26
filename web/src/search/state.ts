@@ -2,6 +2,7 @@ import type {
   ClipSearchResponse,
   DisabledSearchFacet,
   PartyCode,
+  SearchDateBroadening,
   SearchFacet
 } from "./types";
 
@@ -45,7 +46,7 @@ const FACET_PREFIX: Record<SearchFacet["kind"], string> = {
   party: "Parti",
   event: "Händelse",
   topic: "Ämne",
-  date: "År"
+  date: "Datum"
 };
 
 export function beginTopicSearch(
@@ -163,6 +164,13 @@ export function topicResultHeading(facets: readonly SearchFacet[]): string {
     return `Klipp från ${date.label}`;
   }
   return "Relevanta klipp";
+}
+
+export function dateBroadeningNotice(broadening: SearchDateBroadening): string {
+  const requestedPeriod = broadening.from === broadening.to
+    ? `den ${broadening.label}`
+    : `under ${broadening.label}`;
+  return `Inga relevanta klipp hittades ${requestedPeriod}. Visar relevanta klipp från andra datum.`;
 }
 
 export function topicSearchErrorMessage(kind: string | null): string {

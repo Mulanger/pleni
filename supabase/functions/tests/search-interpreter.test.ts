@@ -3,7 +3,12 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import type { SearchFacet } from "../_shared/search-types.ts";
-import { interpretSearchQuery } from "../_shared/search/interpret.ts";
+import { extractSearchDate, interpretSearchQuery } from "../_shared/search/interpret.ts";
+import {
+  PERSON_FUZZY_MIN_MARGIN,
+  PERSON_FUZZY_MIN_SCORE,
+  SEARCH_INTERPRETER_VERSION,
+} from "../_shared/search/types.ts";
 import {
   foldSearchLookup,
   normalizeSearchDisplay,
@@ -114,6 +119,26 @@ test("an invalid Swedish calendar date remains searchable topic text", () => {
   ]);
   assert.equal(result.plan.dateFrom, null);
   assert.equal(result.plan.dateTo, null);
+});
+
+test("month-year ranges use every Swedish calendar month's real final day", () => {
+  for (const [query, expected] of [
+    ["januari 2026", ["2026-01-01", "2026-01-31"]],
+    ["februari 2024", ["2024-02-01", "2024-02-29"]],
+    ["februari 2025", ["2025-02-01", "2025-02-28"]],
+    ["apr 2026", ["2026-04-01", "2026-04-30"]],
+    ["december 2026", ["2026-12-01", "2026-12-31"]],
+  ] as const) {
+    const date = extractSearchDate(query, 2030);
+    assert.ok(date, query);
+    assert.deepEqual([date.from, date.to], expected, query);
+  }
+});
+
+test("OPT3 uses its own interpreter version without changing fuzzy thresholds", () => {
+  assert.equal(SEARCH_INTERPRETER_VERSION, "search-interpret-v3");
+  assert.equal(PERSON_FUZZY_MIN_SCORE, 0.88);
+  assert.equal(PERSON_FUZZY_MIN_MARGIN, 0.08);
 });
 
 test("migration 023 derives only verified official aliases and preserves curated rollback data", () => {

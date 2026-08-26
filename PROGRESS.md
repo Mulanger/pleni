@@ -5551,3 +5551,63 @@ keyword-matched candidate was ever dropped and both negatives stayed empty.
   happened; it can read v3's SQL as text.
 - `judgments.json` is untouched and still 0/36 manually complete. Do not grade
   it, and do not ask the owner to.
+
+## OPT3 — Intent and filter correctness hardening — DONE 2026-08-26
+
+**Built:** explicit Swedish month/year recognition in
+`supabase/functions/_shared/search/interpret.ts`; interpreter version
+`search-interpret-v3`; focused fixture/handler regressions; truthful date-facet
+and date-broadening copy in `web/src/search/state.ts` and `web/src/App.tsx`;
+the registered/completed chunk and evidence updates in `docs/BUILD_PLAN.md`,
+`docs/TOPIC_SEARCH_FINISHED_OPTIMIZATION_ROADMAP.md` and
+`docs/privacy/TOPIC_SEARCH_RELEASE_EVIDENCE.md`.
+
+**Tests:** `C:\WINDOWS\py.exe -3.12 tasks.py test lint typecheck` — **501
+passed**, 79 deselected, one pre-existing `audioop` warning; Ruff clean and mypy
+clean over 83 source files. All Edge tests — **139 passed, 0 failed**. All
+frontend tests — **71 passed, 0 failed**. Frontend TypeScript, Vite production
+build and `web/scripts/verify-pwa-build.mjs` passed; the PWA retains exactly nine
+same-origin app-shell entries with no video/private data. `git diff --check`
+passed.
+
+**Contracts touched:** none. `clip-search-v1` remains byte-identical between
+Edge and browser; `src/contracts.py`, RPC signatures, ranking/index versions,
+embeddings, database migrations and pipeline contracts are unchanged. The
+internal interpreter version moved from v2 to v3 because its deterministic
+date-language behavior changed.
+
+**Behavior delivered:**
+- `mars 2026` and `i mars 2026` become `2026-03-01`–`2026-03-31`; all Swedish
+  months/abbreviations use their actual final day, including leap years.
+- A bare `mars` stays topic text. A month/year-only query has no retrieval
+  anchor and returns empty without provider or candidate retrieval.
+- Impossible phrases such as `31 februari 2026` suppress overlapping
+  month/year candidates and remain entirely searchable topic text.
+- Removing a month date facet returns its exact original words to the topic and
+  triggers one new request through the existing frontend flow.
+- Empty constrained months broaden only after the exact range is empty, exclude
+  the whole original inclusive month, retain server order and reuse one
+  embedding.
+- `Tolkat som` now calls every date facet `Datum`. Broadening says `den` for an
+  exact day and `under` for a range, based only on server `from`/`to` metadata.
+- Person fuzzy score `0.88`, margin `0.08`, party matching, close-person/event
+  ambiguity, verified source filtering and the whole OPT2 ranking are preserved.
+
+**Decisions made:** no synonym/alias list or generic spell-correction was added.
+Month/year is a grammar rule backed by committed failures, not topic knowledge.
+The public search/ranking version remains `pleni-search-v3`; only the internal
+interpreter version changes.
+
+**Database/deployment state:** unchanged by OPT3. No live/OpenAI call, database
+write, Function deploy or push occurred. Production still runs the deployed
+OPT2 commit and does not understand month/year until this candidate is released.
+
+**Blocked / needs a decision:** production release requires a new explicit
+owner approval. If approved, deploy `clip-search` first, push the committed OPT3
+frontend/docs to `main`, then verify the roadmap matrix live. No migration is
+needed. Rollback is redeploying Function version 7/source commit `af8238a` and
+reverting the OPT3 frontend commit; migration 029 remains applied.
+
+**Next agent should know:** OPT4 is next and must measure before changing
+latency/cost architecture. Do not fold OPT4 into this release and do not create
+human grading work or topic aliases.

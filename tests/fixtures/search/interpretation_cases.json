@@ -197,6 +197,64 @@
       }
     },
     {
+      "label": "invalid explicit Swedish calendar date remains topic text",
+      "request": { "query": "elsparkcyklar 31 februari 2026" },
+      "expect": {
+        "facets": [{ "kind": "topic", "label": "elsparkcyklar 31 februari 2026" }],
+        "ambiguity": null,
+        "consumed": [],
+        "plan": { "topic": "elsparkcyklar 31 februari 2026", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "topic and Swedish month year use an inclusive month range",
+      "request": { "query": "elsparkcykel mars 2026" },
+      "expect": {
+        "facets": [
+          { "kind": "date", "label": "mars 2026", "from": "2026-03-01", "to": "2026-03-31" },
+          { "kind": "topic", "label": "elsparkcykel" }
+        ],
+        "ambiguity": null,
+        "consumed": ["mars 2026"],
+        "plan": { "topic": "elsparkcykel", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": "2026-03-01", "dateTo": "2026-03-31", "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "leading i is part of a Swedish month year date span",
+      "request": { "query": "elsparkcykel i mars 2026" },
+      "expect": {
+        "facets": [
+          { "kind": "date", "label": "mars 2026", "from": "2026-03-01", "to": "2026-03-31" },
+          { "kind": "topic", "label": "elsparkcykel" }
+        ],
+        "ambiguity": null,
+        "consumed": ["i mars 2026"],
+        "plan": { "topic": "elsparkcykel", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": "2026-03-01", "dateTo": "2026-03-31", "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "month year only has no retrieval anchor",
+      "request": { "query": "mars 2026" },
+      "expect": {
+        "facets": [
+          { "kind": "date", "label": "mars 2026", "from": "2026-03-01", "to": "2026-03-31" }
+        ],
+        "ambiguity": null,
+        "consumed": ["mars 2026"],
+        "plan": { "topic": null, "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": "2026-03-01", "dateTo": "2026-03-31", "hasRetrievalAnchor": false, "fallback": false }
+      }
+    },
+    {
+      "label": "bare Swedish month remains topic text",
+      "request": { "query": "mars" },
+      "expect": {
+        "facets": [{ "kind": "topic", "label": "mars" }],
+        "ambiguity": null,
+        "consumed": [],
+        "plan": { "topic": "mars", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
       "label": "year disambiguates a recurring verified event",
       "request": { "query": "budgetdebatten 2022" },
       "expect": {
@@ -342,6 +400,16 @@
         "ambiguity": null,
         "consumed": ["magdalena andersson"],
         "plan": { "topic": "skatter 2017", "politicianId": "person-magdalena", "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "disabled month year words return to topic",
+      "request": { "query": "elsparkcykel i mars 2026", "disabledFacets": ["date"] },
+      "expect": {
+        "facets": [{ "kind": "topic", "label": "elsparkcykel i mars 2026" }],
+        "ambiguity": null,
+        "consumed": [],
+        "plan": { "topic": "elsparkcykel i mars 2026", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
       }
     },
     {

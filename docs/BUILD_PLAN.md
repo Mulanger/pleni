@@ -1862,6 +1862,57 @@ require explicit owner authority at the time they are performed.
 
 ---
 
+## OPT3 — Intent and filter correctness hardening — DONE 2026-08-26
+
+**Depends on:** deployed OPT2 and
+`docs/TOPIC_SEARCH_FINISHED_OPTIMIZATION_ROADMAP.md`. **Size:** medium.
+
+**Objective:** close deterministic Swedish query-language gaps while keeping
+all interpretation server-owned and evidence-based. Add explicit month-and-year
+date ranges without aliases, topic dictionaries, generic spell correction or
+changes to ranking/index data.
+
+**Scope — may modify:** shared search interpreter/types; focused interpretation
+fixtures and Edge tests; `web/src/App.tsx`, `web/src/search/*` and focused
+frontend tests; search evidence docs, this file and `PROGRESS.md`. **Must not
+modify:** `src/contracts.py`, database migrations, RPC signatures, embeddings,
+index contents, ranking thresholds/order, pipeline stages, Bunny/player/PWA
+media behavior or prior migration files.
+
+**Behavior:** preserve exact day/month, explicit day/month/year, year,
+year-range and `från`/`sedan` behavior. Interpret `mars 2026` and
+`i mars 2026` as the inclusive range `2026-03-01`–`2026-03-31`; a bare month
+remains topic text and invalid calendar phrases remain searchable. Disabling a
+date facet returns its words to the topic. Person/party thresholds and ambiguity
+rules remain unchanged. Date-only searches stay bounded and empty. Existing
+keyword-fallback, empty-result and date-broadening behavior stays truthful.
+
+**Acceptance:** the roadmap's OPT3 query matrix is covered by committed
+interpreter/handler/frontend regressions. Month-range fallback excludes the
+whole original month, preserves order and reuses one embedding. `Tolkat som`
+labels the enforced filter as a date, and the broadening notice distinguishes
+an exact day from a range without browser-side query interpretation. Mirrored
+contract fixtures, all Edge/frontend tests, repository test/lint/typecheck,
+TypeScript, production Vite build, PWA verification and `git diff --check` pass.
+No live call, deploy or push is part of implementation without a separate
+release decision.
+
+**Delivered:** `search-interpret-v3` recognizes explicit Swedish month/year
+ranges, including the optional preposition `i`, using real calendar month ends.
+Invalid day/month/year phrases suppress overlapping year/month interpretations
+and remain topic text. Handler tests prove month fallback excludes the inclusive
+month, retains order and performs one embedding. Bare months remain topics;
+month/year-only queries perform no retrieval; disabled date facets return the
+original words. The browser labels the facet `Datum` and derives exact-day vs
+range notice grammar only from server-provided `from`/`to` metadata. Fuzzy
+thresholds, ambiguity behavior, ranking, index and public contract are unchanged.
+
+Full gates: 501 Python tests, 139 Edge tests, 71 frontend tests, frontend
+TypeScript, production Vite build and PWA verification with nine app-shell
+entries. No live/OpenAI call, deploy or push was made.
+
+---
+
 ## Phase 2 backlog (not chunked yet)
 
 Deliberately deferred. Do not pull these forward.
