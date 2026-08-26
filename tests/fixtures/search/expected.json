@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "thresholds": {
+    "hybridNdcgAt10": 0.75,
+    "relevantTopThreeQueries": 24,
+    "submittedSearchP95Ms": 1500,
+    "futureIndexLagP95Ms": 120000
+  },
+  "releaseEvidence": {
+    "privatePrivilegeMatrixPassed": true,
+    "actualOpenAIProjectRegionVerified": false,
+    "actualOpenAIProjectRetentionVerified": false,
+    "privacyCopyApproved": false,
+    "rollbackRehearsed": false,
+    "physicalDeviceAccepted": false,
+    "ownerGoNoGoApproved": false
+  },
+  "notes": [
+    "False means evidence is pending, not that the underlying control is known to have failed.",
+    "Only evidence from the actual production project and physical target devices may flip a release gate."
+  ]
+}

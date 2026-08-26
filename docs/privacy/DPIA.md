@@ -1,6 +1,6 @@
 # Data protection impact assessment
 
-Draft for owner approval, updated 2026-08-14. Scope: current Pleni web app plus the
+Draft for owner approval, updated 2026-08-25. Scope: current Pleni web app plus the
 planned personalised political-video recommender described in
 `docs/RECOMMENDATION_LAUNCH_PLAN.md`.
 
@@ -19,6 +19,13 @@ rule recommender now exists behind an inactive build flag. If separately
 approved and deployed it stores selected/followed parties, followed politicians
 and served slates, but still no watch history or inferred state. The former
 left/right self-placement question has been removed.
+
+The topic-search backend is deployed for evaluation but remains hidden behind
+`VITE_TOPIC_SEARCH_ENABLED=false`. Search text is transient and is not used to
+build a viewer profile, but a free-text query can itself contain personal or
+special-category data and the residual topic is sent to OpenAI for an
+embedding. This DPIA therefore treats the provider path as a launch gate even
+though Pleni does not persist a query history.
 
 ## 2. Proposed processing
 
@@ -74,6 +81,9 @@ not remove the Article 5, 6, 9, 12–15, 21, 25, 32 and 35 obligations.
 | Harmful/illegal comments remain public | Medium / high | In-context reporting, rate limits, moderation state, operator email, reasons and objection path. | Medium; response SLO and operator coverage need measurement. |
 | Account deletion leaves comments or processor copies | High / high | Tested deletion/export runbook and Clerk lifecycle integration before claiming automated deletion. | Open; public notice directs requests to email and does not claim automation. |
 | Staff or service credentials are over-privileged | Medium / high | Publishable keys only in browser, service secrets local/server only, revoked public table rights, narrow RPCs and operator audit. | Medium pending formal access review. |
+| A sensitive topic query is retained, logged or connected to a viewer | Medium / high | No query in URL/local storage/Clerk/database/log summary; no Authorization-dependent result; daily one-way HMAC rate key only; tell viewers not to enter personal data. | Low/medium, but only after provider/account retention and log behavior are verified. |
+| OpenAI receives topic text outside the intended region or for longer than disclosed | Medium / high | Server-only credential, embeddings endpoint only, no user id/address forwarded, verify actual project region/ZDR or retention setting, DPA and subprocessor terms before release. | **Open — release blocked.** Published provider defaults are not account evidence. |
+| Semantic similarity invents relevance for nonsense or absent topics | High / medium | Negative-query benchmark, a calibrated no-result rule and feature-flag rollback. | **Open — the 2026-08-25 live sample returned unrelated semantic-only filler for both negative probes.** |
 
 ## 6. Safeguards and launch gates
 
@@ -91,6 +101,10 @@ Server-side personalisation may not launch until:
    neutrality.
 7. Incident response, access review, export, deletion and takedown exercises
    have completed successfully.
+8. The actual OpenAI project region/retention controls are captured and the
+   topic-search notice is approved.
+9. Negative queries return no semantic filler, submitted-search latency passes
+   the agreed load gate, and physical-device acceptance is signed off.
 
 The inactive rule-based implementation is engineering evidence for controls
 1–2, not approval of them. Static migration tests and local Edge tests do not

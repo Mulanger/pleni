@@ -1,6 +1,13 @@
 import { normalizeParty, SAMPLE_CLIPS } from "./data";
 import { recommendationsEnabled } from "./account";
 import { newestProfileClipsFirst } from "./profile-clip-order";
+import { createTopicSearchClient } from "./search/api";
+import {
+  parseClipSearchRequest,
+  parseClipSearchResponse,
+  type ClipSearchRequest,
+  type ClipSearchResponse
+} from "./search/types";
 import type { ClipFeed, ClipItem, PartyCode, PartyProfile, Politician } from "./types";
 
 interface RawSource {
@@ -88,6 +95,21 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, "") ?? ""
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "";
 
 export const supabaseConfigured = SUPABASE_URL.length > 0 && SUPABASE_KEY.length > 0;
+
+const topicSearchClient = createTopicSearchClient({
+  supabaseUrl: SUPABASE_URL,
+  publishableKey: SUPABASE_KEY,
+  parseRequest: parseClipSearchRequest,
+  parseResponse: parseClipSearchResponse
+});
+
+/** Anonymous, transient search through the deployed `clip-search` Edge Function. */
+export function searchPublishedTopics(
+  request: ClipSearchRequest,
+  signal?: AbortSignal
+): Promise<ClipSearchResponse> {
+  return topicSearchClient(request, signal);
+}
 
 /**
  * Whether the built-in demo clips may stand in for real data.

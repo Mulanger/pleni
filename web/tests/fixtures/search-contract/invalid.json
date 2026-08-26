@@ -1,0 +1,93 @@
+{
+  "requests": [
+    {
+      "label": "query too short",
+      "value": { "query": "x" }
+    },
+    {
+      "label": "unknown disabled facet",
+      "value": { "query": "skatter", "disabledFacets": ["topic"] }
+    },
+    {
+      "label": "duplicate disabled facet",
+      "value": { "query": "skatter", "disabledFacets": ["date", "date"] }
+    },
+    {
+      "label": "unexpected trusted filter",
+      "value": { "query": "skatter", "politicianId": "not-client-controlled" }
+    }
+  ],
+  "responses": [
+    {
+      "label": "unknown mode",
+      "value": {
+        "mode": "semantic",
+        "searchVersion": "search-v1",
+        "indexVersion": "embedding-v1",
+        "interpretation": { "facets": [], "ambiguity": null },
+        "event": null,
+        "results": []
+      }
+    },
+    {
+      "label": "facet key does not match kind",
+      "value": {
+        "mode": "hybrid",
+        "searchVersion": "search-v1",
+        "indexVersion": "embedding-v1",
+        "interpretation": {
+          "facets": [
+            {
+              "kind": "topic",
+              "key": "person",
+              "label": "skatter",
+              "removable": true
+            }
+          ],
+          "ambiguity": null
+        },
+        "event": null,
+        "results": []
+      }
+    },
+    {
+      "label": "ambiguity needs real choices",
+      "value": {
+        "mode": "hybrid",
+        "searchVersion": "search-v1",
+        "indexVersion": "embedding-v1",
+        "interpretation": {
+          "facets": [],
+          "ambiguity": {
+            "kind": "person",
+            "message": "Vem menar du?",
+            "options": [
+              { "id": "one", "label": "En person", "detail": "S" }
+            ]
+          }
+        },
+        "event": null,
+        "results": []
+      }
+    },
+    {
+      "label": "malformed result clip",
+      "value": {
+        "mode": "hybrid",
+        "searchVersion": "search-v1",
+        "indexVersion": "embedding-v1",
+        "interpretation": { "facets": [], "ambiguity": null },
+        "event": null,
+        "results": [
+          {
+            "clip": {},
+            "speakerNameAtSpeech": "Talare",
+            "partyAtSpeech": "S",
+            "matchExcerpt": "Text",
+            "matchKind": "both"
+          }
+        ]
+      }
+    }
+  ]
+}

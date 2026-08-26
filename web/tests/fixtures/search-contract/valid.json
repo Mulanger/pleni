@@ -1,0 +1,208 @@
+{
+  "requests": [
+    {
+      "query": "magdalena andersson skatter 2017",
+      "limit": 20
+    },
+    {
+      "query": "elsparkcyklar"
+    },
+    {
+      "query": "budgetdebatten 2022",
+      "disabledFacets": ["person", "party"]
+    }
+  ],
+  "responses": [
+    {
+      "mode": "hybrid",
+      "searchVersion": "search-v1",
+      "indexVersion": "embedding-v1",
+      "interpretation": {
+        "facets": [
+          {
+            "kind": "person",
+            "key": "person",
+            "label": "Magdalena Andersson",
+            "politicianId": "11111111-1111-4111-8111-111111111111",
+            "removable": true
+          },
+          {
+            "kind": "date",
+            "key": "date",
+            "label": "2017",
+            "from": "2017-01-01",
+            "to": "2017-12-31",
+            "removable": true
+          },
+          {
+            "kind": "topic",
+            "key": "topic",
+            "label": "skatter",
+            "removable": true
+          }
+        ],
+        "ambiguity": null
+      },
+      "event": null,
+      "results": [
+        {
+          "clip": {
+            "id": "clip-tax-1",
+            "speechId": "speech-tax-1",
+            "politicianId": "11111111-1111-4111-8111-111111111111",
+            "politicianName": "Magdalena Andersson",
+            "politicianRole": "ledamot",
+            "politicianAvatarUrl": "https://cdn.example/magdalena.webp",
+            "speakerName": "Finansminister Magdalena Andersson",
+            "party": "S",
+            "anforandetyp": "Anförande",
+            "archetype": "argument",
+            "title": "Skatter och välfärd",
+            "transcript": "Skattesystemet ska finansiera en stark gemensam välfärd.",
+            "topic": "Skatter",
+            "durationS": 52.4,
+            "videoUrl": "https://cdn.example/clip-tax-1.mp4",
+            "thumbUrl": "https://cdn.example/clip-tax-1.webp",
+            "sourceTitle": "Debatt om vårändringsbudgeten",
+            "sourceUrl": "https://www.riksdagen.se/sv/webb-tv/video/debatt/fixture",
+            "debateDate": "2017-04-20",
+            "publishedAt": "2026-08-20T12:00:00Z",
+            "rank": 1,
+            "isSample": false
+          },
+          "speakerNameAtSpeech": "Finansminister Magdalena Andersson",
+          "partyAtSpeech": "S",
+          "matchExcerpt": "Skattesystemet ska finansiera en stark gemensam välfärd.",
+          "matchKind": "both"
+        }
+      ]
+    },
+    {
+      "mode": "keyword_fallback",
+      "searchVersion": "search-v1",
+      "indexVersion": "embedding-v1",
+      "interpretation": {
+        "facets": [
+          {
+            "kind": "topic",
+            "key": "topic",
+            "label": "elsparkcyklar",
+            "removable": true
+          }
+        ],
+        "ambiguity": null
+      },
+      "event": null,
+      "results": [
+        {
+          "clip": {
+            "id": "clip-scooter-1",
+            "speechId": "speech-scooter-1",
+            "politicianId": null,
+            "politicianName": null,
+            "politicianRole": null,
+            "politicianAvatarUrl": null,
+            "speakerName": "Statsrådet Exempelsson",
+            "party": "NONE",
+            "anforandetyp": "Svar",
+            "archetype": "explanation",
+            "title": "Säkrare trafik med elsparkcyklar",
+            "transcript": "Regler för elsparkcyklar behöver ge bättre trafiksäkerhet.",
+            "topic": null,
+            "durationS": 46,
+            "videoUrl": "https://cdn.example/clip-scooter-1.mp4",
+            "thumbUrl": "https://cdn.example/clip-scooter-1.webp",
+            "sourceTitle": "Frågestund",
+            "sourceUrl": "https://www.riksdagen.se/sv/webb-tv/video/fragestund/fixture",
+            "debateDate": "2021-05-06",
+            "publishedAt": null,
+            "rank": 2,
+            "isSample": false
+          },
+          "speakerNameAtSpeech": "Statsrådet Exempelsson",
+          "partyAtSpeech": "NONE",
+          "matchExcerpt": "Regler för elsparkcyklar behöver ge bättre trafiksäkerhet.",
+          "matchKind": "keyword"
+        }
+      ]
+    },
+    {
+      "mode": "filtered",
+      "searchVersion": "search-v1",
+      "indexVersion": "embedding-v1",
+      "interpretation": {
+        "facets": [
+          {
+            "kind": "party",
+            "key": "party",
+            "label": "Socialdemokraterna",
+            "party": "S",
+            "removable": true
+          }
+        ],
+        "ambiguity": null
+      },
+      "event": null,
+      "results": []
+    },
+    {
+      "mode": "hybrid",
+      "searchVersion": "search-v1",
+      "indexVersion": "embedding-v1",
+      "interpretation": {
+        "facets": [
+          {
+            "kind": "event",
+            "key": "event",
+            "label": "Budgetdebatten",
+            "eventId": "budget-2022",
+            "removable": true
+          },
+          {
+            "kind": "date",
+            "key": "date",
+            "label": "2022",
+            "from": "2022-01-01",
+            "to": "2022-12-31",
+            "removable": true
+          }
+        ],
+        "ambiguity": null
+      },
+      "event": {
+        "id": "budget-2022",
+        "label": "Budgetdebatten",
+        "dateLabel": "8 november 2022",
+        "sourceUrl": "https://www.riksdagen.se/sv/webb-tv/video/debatt/budget-2022",
+        "clipCount": 18
+      },
+      "results": []
+    },
+    {
+      "mode": "hybrid",
+      "searchVersion": "search-v1",
+      "indexVersion": "embedding-v1",
+      "interpretation": {
+        "facets": [],
+        "ambiguity": {
+          "kind": "person",
+          "message": "Vem menar du?",
+          "options": [
+            {
+              "id": "person-a",
+              "label": "Anna Andersson",
+              "detail": "Socialdemokraterna"
+            },
+            {
+              "id": "person-b",
+              "label": "Erik Andersson",
+              "detail": "Moderaterna"
+            }
+          ]
+        }
+      },
+      "event": null,
+      "results": []
+    }
+  ]
+}

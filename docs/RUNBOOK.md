@@ -528,6 +528,292 @@ failure here means something is reachable from a browser that should not be.
 
 ---
 
+## Topic-search semantic backfill
+
+This workflow indexes existing `private.clip_search_documents` through the same
+PGMQ/Edge worker path used by future published clips. The operator script never
+creates vectors itself and never needs the OpenAI key. Keep that key only in
+Supabase Function secrets.
+
+### Mandatory cost and health gate
+
+Look up the current official `text-embedding-3-large` input price immediately
+before each paid run and pass it explicitly; price is deliberately not a code
+constant:
+
+```powershell
+python scripts/backfill_topic_search.py dry-run --price-per-million-usd 0.13
+```
+
+The dry run is read-only. It pages every eligible keyword document and invokes
+the worker's existing TypeScript chunker locally, so the passage count follows
+the production algorithm. Token count is a conservative estimate of one token
+per three UTF-8 input bytes; actual provider usage is recorded by each worker
+response. Do not enqueue the catalogue until the owner has seen and approved
+this report's price.
+
+Production dry run on 2026-08-25, before any successful semantic clip:
+
+| Measure | Result |
+|---|---:|
+| Eligible/keyword documents | 3,188 |
+| Estimated passages | 4,160 |
+| Embedding-input UTF-8 bytes | 2,484,639 |
+| Conservative estimated provider tokens | 828,213 |
+| Price supplied | $0.13 / 1M input tokens |
+| Estimated full cost | $0.107668 |
+| Missing title / transcript / invalid hash / empty document | 0 / 0 / 0 / 0 |
+
+The full start is still prohibited if the one-clip smoke does not complete. A
+`provider_rate_limited` smoke result means leave the provider off and resolve the
+OpenAI project limit first; adding thousands of queue messages does not test or
+fix that condition.
+
+### Status, enqueue and resume
+
+```powershell
+python scripts/backfill_topic_search.py status
+python scripts/backfill_topic_search.py enqueue --batch-size 100 --max-enqueue 25
+python scripts/backfill_topic_search.py status
+```
+
+Start with 25 clips after the smoke and cost gates pass. `enqueue` only writes
+PGMQ messages; it does not enable OpenAI. The RPC accepts at most 200 clip IDs,
+and the script enforces the same ceiling. `--max-enqueue` bounds a pass. Re-run
+the command to resume: current documents and already queued source-hash/version
+tuples are skipped, so a completed catalogue is a no-op.
+
+After the 25-clip subset reaches current coverage without reviewed failures,
+enqueue the remainder:
+
+```powershell
+python scripts/backfill_topic_search.py enqueue --batch-size 100
+```
+
+### Start, bounded dispatch and emergency stop
+
+Provider use is a separate explicit switch:
+
+```powershell
+python scripts/backfill_topic_search.py start
+python scripts/backfill_topic_search.py dispatch --workers 1
+python scripts/backfill_topic_search.py status
+python scripts/backfill_topic_search.py stop
+```
+
+`start` enables the existing one-per-minute cron dispatcher. Each worker claims
+at most five documents. `dispatch --workers N` requests 1-4 additional existing
+Edge workers through the same Vault-authenticated database dispatcher; begin at
+one and increase only while provider limits, failures and spend remain healthy.
+Queue visibility and source-hash/index-version checks prevent two workers from
+successfully replacing the same current document.
+
+Run `stop` before investigation whenever rate limits, authentication errors,
+unexpected spend or repeated failures appear. It sets
+`provider_enabled=false` and `provider_kill_switch=true`; queued work remains
+durable for a later resume.
+
+### Failures and completion
+
+```powershell
+python scripts/backfill_topic_search.py status
+python scripts/backfill_topic_search.py retry-failed --batch-size 25 --max-enqueue 25
+python scripts/backfill_topic_search.py dry-run --price-per-million-usd 0.13
+```
+
+Review `semantic_last_error` before retrying failures. `retry-failed` is
+deliberately separate and uses `force=true`; do not loop it blindly. Completion
+means `currentDocuments == documents`, zero pending/processing documents, and
+every current document has at least one chunk matching its source hash and the
+active index version. Re-running both dry-run and enqueue at completion must
+report zero remaining cost/candidates and perform no writes.
+
+---
+
+## Topic-search quality gate and controlled release
+
+The semantic catalogue being complete does not make topic search releasable.
+Keep `VITE_TOPIC_SEARCH_ENABLED=false` until every gate below is evidenced and
+the owner gives an explicit production go/no-go. UI16.8 must not tune a live
+ranking function, rotate a secret or deploy as part of evaluation.
+
+### Offline evaluator
+
+The committed fixture has three independent parts:
+
+- `documents.json`: frozen retrieval pools and operational evidence;
+- `judgments.json`: reviewer-authored Swedish queries and clip-level grades;
+- `expected.json`: thresholds and explicit release approvals.
+
+Run it without network or provider spend:
+
+```powershell
+python scripts/evaluate_topic_search.py evaluate
+python scripts/evaluate_topic_search.py evaluate --strict-release
+```
+
+The first command validates and reports evidence even while release gates are
+pending. `--strict-release` exits non-zero unless every quality, operational,
+privacy, device and owner gate passes. Never make CI green by changing a pending
+approval to true or by treating an unjudged clip as irrelevant.
+
+Reviewers grade the union of the top ten keyword-only, semantic-only and hybrid
+results for every query:
+
+| Grade | Meaning |
+|---:|---|
+| 0 | not relevant |
+| 1 | touches the subject but does not clearly satisfy the intent |
+| 2 | clearly relevant |
+| 3 | direct or nearly exact answer |
+
+Set `reviewStatus=manual_complete` only after every pooled clip has a 0–3 grade.
+AI suggestions may help arrange the queue but are not manual judgments. Query
+fixtures are evaluation evidence only; do not copy them into aliases, product
+code, suggested topics or a whitelist.
+
+### Read-only three-mode capture
+
+`capture-live` makes one bounded OpenAI embeddings request for the fixture
+queries and read-only Management API retrieval calls. It refuses to run without
+an explicit cost acknowledgment:
+
+```powershell
+python scripts/evaluate_topic_search.py capture-live --confirm-provider-cost
+```
+
+The command prints a candidate `documents.json`; review the diff before using
+`--output`. It does not reserve the production provider budget, call a worker,
+enqueue jobs or write to Postgres. A valid local `OPENAI_API_KEY`,
+`RIKET_SUPABASE_PROJECT_REF` and `RIKET_SUPABASE_ACCESS_TOKEN` are required. Do
+not retrieve or copy the deployed Function secret to make this work.
+
+The explicit `--env-file` is authoritative. Long-lived desktop processes can
+retain rejected keys or point to another Supabase project; before UI16.9 those
+inherited values silently overrode the requested file and produced misleading
+HTTP 401/403 errors. Never print a key or commit an environment file.
+
+The 2026-08-25 post-v2 capture is complete: 36/36 three-mode query pools, 344
+embedding tokens and two provider-free verified-event plans. Structured fixture
+rows carry explicit UUID/date/source plans so capture reproduces production
+interpretation; they are evaluation evidence, not product aliases, suggestions
+or hard-coded topic terms.
+
+### Current failed and pending gates
+
+`docs/privacy/TOPIC_SEARCH_RELEASE_EVIDENCE.md` is authoritative. Migrations
+027/028 and `pleni-search-v2` are deployed with the viewer flag off. Both
+negative queries now return empty; their raw semantic pools remain in the
+fixture to prove the admission decision. The fixed 30-request post-cache sample
+has p95 2,027.124 ms, so the strict <1,500 ms latency gate still fails even
+though the former 6.99-second cold path is gone. The p95 request spent 1,121 ms
+in OpenAI and 236 ms in retrieval.
+
+The 36-query set has not been manually graded and no future-publish index-lag
+sample exists. Actual OpenAI retention controls, the device matrix and owner
+approval also remain pending. The Function currently uses global
+`api.openai.com`; no `OPENAI_EMBEDDINGS_BASE_URL` secret is configured.
+
+The real production privilege audit and catalogue coverage pass:
+
+- `private` schema usage denied to `anon` and `authenticated`;
+- private search tables have RLS and no browser read/write grant;
+- private search helpers and all public search RPCs, including v2, preflight
+  and cached-catalogue additions, are service-only;
+- keyword coverage 3,188/3,188;
+- semantic coverage 3,188/3,188 with 4,160 chunks and zero exceptions.
+
+### Required latency and index-lag evidence
+
+Agree the load profile before measuring it: client count, request rate, warm-up,
+query mix, geographic origin, duration and whether cold starts are included.
+Record every successful submitted-search duration and all failures/rate limits;
+the gate is nearest-rank p95 below 1,500 ms. Do not silently discard the first
+request or failed requests.
+
+For future indexing, publish or update an owner-approved non-sensitive test clip
+through the normal pipeline, record the document source-hash change time and the
+first current matching chunk time, and repeat enough times to establish a p95.
+The gate is below 120,000 ms. UI16.8 does not authorise this mutation by itself.
+
+### Privacy/account verification
+
+Before release, capture account-side evidence—not marketing claims—for:
+
+1. the OpenAI organisation/project used by the Functions;
+2. selected regional/data-residency configuration and actual embeddings base
+   URL;
+3. Zero Data Retention, Modified Abuse Monitoring or effective default abuse-log
+   retention;
+4. API-data training opt-in state;
+5. DPA, contracted entity, subprocessors/support access and incident contact.
+
+Store screenshots or exported evidence outside Git if they contain account ids,
+then record a redacted date/result in
+`docs/privacy/TOPIC_SEARCH_RELEASE_EVIDENCE.md`. “Eligible for ZDR” is not the
+same as “this project has ZDR.”
+
+### Physical-device matrix
+
+Use production-like, flag-on builds without enabling the production flag. For
+each row test topic submit, `Tolkat som`, facet removal, ambiguity, empty/error/
+keyword-fallback, a result row, `Spela alla`, one-clip swipes, Back restoration,
+rotation/keyboard and no more than four media sources:
+
+| Device/browser | Browser mode | Installed mode | Owner evidence |
+|---|---|---|---|
+| Android Chrome | pending | pending | device/version + result |
+| Samsung Internet | pending | pending | device/version + result |
+| iPhone Safari | pending | Home Screen pending | device/iOS/version + result |
+
+An emulator is diagnostic evidence, not a physical-device pass.
+
+### Staged release and rollback
+
+There is no staging environment, so stage by capability:
+
+1. Keep the production build flag false. Record the exact candidate commit.
+2. Pass the full tests, three-mode manual benchmark, agreed load/index-lag tests,
+   privacy/account checks and device matrix.
+3. Confirm provider kill switch behavior produces honest keyword fallback.
+4. Rehearse a flag-off build from the candidate commit and verify the ordinary
+   identity/party search and `Senaste` feed remain unchanged.
+5. Present the evidence matrix to the owner. Only an explicit **GO** authorises
+   changing `VITE_TOPIC_SEARCH_ENABLED=true` and rebuilding/deploying InstaPods.
+6. Immediately after an approved release, run positive, paraphrase, negative,
+   error/fallback, result-feed and Back checks on `pleni.se`.
+
+Rollback order:
+
+1. Set `VITE_TOPIC_SEARCH_ENABLED=false`, rebuild and deploy the known-good
+   flag-off commit with owner approval. This removes the viewer entry point;
+   private tables/indexes may remain.
+2. If provider spend or behavior is unsafe before that build finishes, run
+   `python scripts/backfill_topic_search.py stop`. This forces the provider kill
+   switch/keyword fallback and preserves index data.
+3. Do not drop search tables or roll back migrations during an incident unless a
+   separate destructive change has been reviewed and approved.
+4. Record flag/build/commit times, observed impact, provider state and recovery
+   verification in `PROGRESS.md`.
+
+The rollback procedure is documented but has not been rehearsed against a
+staged production release. Documentation alone is not a pass.
+
+### Owner go/no-go record
+
+The owner decision must name the candidate commit and explicitly confirm:
+
+- quality and negative-query gates pass;
+- latency, coverage and future-index-lag gates pass;
+- privacy notice and OpenAI account evidence are approved;
+- privilege/secret audit and physical devices pass;
+- rollback has been rehearsed and the operator is available to monitor.
+
+Silence, “proceed with evaluation,” prior backfill approval or approval of an
+earlier UI16 chunk is not production release approval.
+
+---
+
 ## Frontend PWA release and service-worker rollback
 
 InstaPods serves only the static frontend and deploys `origin/main`. A PWA release

@@ -1,12 +1,34 @@
 # Data-flow inventory
 
-Current release inventory, updated 2026-08-14. “Basis” is the project's in-house GDPR
+Current release inventory, updated 2026-08-25. “Basis” is the project's in-house GDPR
 analysis under the F0-2 risk acceptance; it has not been reviewed by counsel.
 
 The rule-based recommender is implemented but inactive behind
 `VITE_RECOMMENDATIONS_ENABLED=false`. The migrations and Edge Functions have
 not been applied/deployed by this change, so the current production data flows
 below remain unchanged.
+
+Topic search is also inactive in the viewer build behind
+`VITE_TOPIC_SEARCH_ENABLED=false`. Its database, Edge Function and semantic
+index are deployed for controlled evaluation. The following rows therefore
+describe an **inactive launch boundary**, not a claim that viewers are already
+using the feature.
+
+## Inactive topic-search boundary
+
+| Data | Source → destination | Purpose | Basis / special-category position | Retention criterion |
+|---|---|---|---|---|
+| Submitted search text, maximum 120 characters | Viewer → Pleni `clip-search` Edge Function | Interpret a viewer-requested person, party, event, date or topic search | Article 6 legitimate-interest/service-request analysis is proposed but owner/legal sign-off is pending. A query about politics does not by itself prove the viewer's opinion, but free text can contain personal or Article 9 data; the UI must tell viewers not to enter personal information. | Request memory only. The raw query is not written to Pleni logs, database, URL, localStorage or Clerk. |
+| Residual topic text | Pleni Edge Function → OpenAI Embeddings API | Create a 1,024-dimension vector used transiently to retrieve related public parliamentary clips | Same purpose as the submitted search. OpenAI is a processor for this operation. The actual project's EEA/data-residency and retention configuration must be verified before release. | Pleni stores no query vector or raw query. OpenAI documents no application state for `/v1/embeddings`; default abuse-monitoring logs may be retained for up to 30 days unless approved controls change that. Actual project status remains unverified. |
+| Daily HMAC client key, global/client bucket, counts, bucket boundaries and expiry | Request network address → one-way daily HMAC inside Edge Function → `private.search_rate_limit_buckets` | Resist automated abuse and cap provider spend without storing a raw address | Legitimate interest in service security and cost control. The HMAC is deliberately not a stable viewer identifier. | Buckets expire after 48 hours and are deleted opportunistically. Raw address and query are not accepted by the storage RPC. |
+| Public catalogue document, deterministic passage, 1,024-dimension passage embedding and source/index hashes | Riksdagen/Pleni public clip metadata → private Supabase search tables | Keyword and semantic retrieval over already-public parliamentary material | Same public-catalogue legitimate interest as the source clip. Embeddings describe public speech content, not viewer behaviour. | While the eligible clip is published and current; update/reject/unpublish/delete triggers converge the private index. Stale source-hash/index-version rows are excluded. |
+
+Official OpenAI documentation used for this inventory states that API data is
+not used to train OpenAI models by default unless the organisation opts in,
+that default abuse-monitoring logs may be kept for up to 30 days, and that the
+embeddings endpoint stores no application state and is eligible for Zero Data
+Retention. Those published defaults do not prove this project's account
+setting: <https://platform.openai.com/docs/models/default-usage-policies-by-endpoint>.
 
 ## Browser and device-local state
 
@@ -60,6 +82,8 @@ CDN access logs to a Clerk account or use them as a viewing-history profile.
 - No server-side follows, saves, likes, onboarding preferences or inferred
   political-interest profile.
 - No automated decision with legal or similarly significant effect.
+- No saved search history, search-derived viewer profile or use of search text
+  for recommendations, advertising, model training or suggested-search curation.
 
 Any implementation that changes one of these statements must update this
 inventory, the DPIA, the public notice version and the relevant consent/storage

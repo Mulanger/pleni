@@ -57,3 +57,13 @@ verify_jwt = false
 [functions.clerk-webhook]
 # A-14: authenticated by the Svix signature, not by a Supabase JWT.
 verify_jwt = false
+
+[functions.search-embed]
+# Private cron worker. Authentication is a dedicated secret header sourced
+# from Vault, not a viewer/session JWT.
+verify_jwt = false
+
+[functions.clip-search]
+# Public anonymous POST endpoint. CORS, request validation, HMAC abuse budgets
+# and all database authorization are enforced inside the handler.
+verify_jwt = false

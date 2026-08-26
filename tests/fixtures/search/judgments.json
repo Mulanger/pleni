@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "language": "sv-SE",
+  "reviewProtocol": {
+    "pool": "Top 10 union from keyword-only, semantic-only and hybrid retrieval.",
+    "grades": {
+      "0": "Inte relevant för frågan.",
+      "1": "Berör ämnet men besvarar inte tydligt sökintentionen.",
+      "2": "Tydligt relevant.",
+      "3": "Direkt eller nästan exakt svar på sökintentionen."
+    },
+    "requiredReview": "Every pooled clip must be read and graded by a human reviewer; AI suggestions are not manual judgments."
+  },
+  "queries": [
+    {"id": "q01", "query": "elsparkcyklar", "category": "topic_exact", "requiresExactTopThree": true, "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q02", "query": "trafiksäkerhet för små elektriska hyrfordon", "category": "descriptive_paraphrase", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q03", "query": "barnfattigdom", "category": "swedish_compound", "requiresExactTopThree": true, "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q04", "query": "familjer som inte har råd med mat och kläder", "category": "descriptive_paraphrase", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q05", "query": "äldreomsorg bemanning", "category": "topic_exact", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q06", "query": "för få anställda på äldreboenden", "category": "descriptive_paraphrase", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q07", "query": "järnvägsunderhåll", "category": "swedish_compound", "requiresExactTopThree": true, "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q08", "query": "nattåg i norra Sverige", "category": "topic_exact", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q09", "query": "havsbaserad vindkraft i Kattegatt", "category": "topic_exact", "requiresExactTopThree": true, "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q10", "query": "utsläpp och klimatmål", "category": "topic_broad", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q11", "query": "kvinnojourer som tvingas stänga", "category": "inflection", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q12", "query": "myndigheter som upptäcker våld i nära relationer", "category": "descriptive_paraphrase", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q13", "query": "nedstängning av 2G- och 3G-nät", "category": "topic_exact", "requiresExactTopThree": true, "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q14", "query": "digitalt utanförskap utan bank-id", "category": "descriptive_paraphrase", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q15", "query": "arbetsmiljön i sjukvården", "category": "topic_exact", "requiresExactTopThree": true, "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q16", "query": "statliga servicekontor som stänger", "category": "inflection", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q17", "query": "investeringar i elnät", "category": "topic_exact", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q18", "query": "taxiföretag som fuskar med regler", "category": "descriptive_paraphrase", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q19", "query": "ungdomar som skadas på jobbet", "category": "descriptive_paraphrase", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q20", "query": "AI tar ungas jobb", "category": "topic_exact", "requiresExactTopThree": true, "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q21", "query": "svensk halvledarindustri", "category": "swedish_compound", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q22", "query": "amerikanska molntjänster i offentlig sektor", "category": "descriptive_paraphrase", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q23", "query": "brist på poliser i Stockholm", "category": "topic_exact", "requiresExactTopThree": true, "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q24", "query": "hur ska gängkriminaliteten stoppas", "category": "descriptive_question", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q25", "query": "sill och strömming i Östersjön", "category": "synonym_pair", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q26", "query": "rätt till utbildning för personer med funktionsnedsättning", "category": "descriptive_paraphrase", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q27", "query": "moms på parkeringsplatser", "category": "topic_exact", "requiresExactTopThree": true, "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q28", "query": "överskuldsättning och vräkningar", "category": "topic_exact", "requiresExactTopThree": true, "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q29", "query": "\"Skattesänkningarna görs med lånade pengar\"", "category": "quoted_exact", "requiresExactTopThree": true, "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q30", "query": "Tyresö polisstation", "category": "place_topic", "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q31", "query": "Elisabeth Svantesson skattesänkningar 2026", "category": "person_topic_year", "capturePlan": {"topic": "skattesänkningar", "politicianId": "efbb5040-8b6d-40b4-9f8a-777210f16688", "dateFrom": "2026-01-01", "dateTo": "2026-12-31", "sourceIds": null}, "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q32", "query": "Tobias Andersson public service 2026", "category": "person_event_year", "capturePlan": {"topic": null, "politicianId": "42a7e9cd-515e-4468-a153-91ca14a85b94", "dateFrom": "2026-01-01", "dateTo": "2026-12-31", "sourceIds": ["771eeba6-4353-4331-9cff-be4c6184151c"]}, "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q33", "query": "Ebba Busch halvledare", "category": "person_topic", "capturePlan": {"topic": "halvledare", "politicianId": "c4078671-72d3-464f-a0c1-d3edf6f7f8a2", "dateFrom": null, "dateTo": null, "sourceIds": null}, "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q34", "query": "elsparkcyklar och trafiksäkerhetsarbete 2026", "category": "event_year", "capturePlan": {"topic": null, "politicianId": null, "dateFrom": "2026-01-01", "dateTo": "2026-12-31", "sourceIds": ["953b880d-5fe8-4dbf-8293-f3cc87cfa305"]}, "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q35", "query": "bananministeriet på månen", "category": "nonsense", "expectedNoResults": true, "reviewStatus": "pending_manual", "judgments": []},
+    {"id": "q36", "query": "kvantdatorer på varje förskola", "category": "absent_topic", "expectedNoResults": true, "reviewStatus": "pending_manual", "judgments": []}
+  ]
+}

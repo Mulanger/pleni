@@ -1622,6 +1622,37 @@ here before implementation, as rule 2 requires.
 
 ---
 
+## UI16.0–UI16.9 — Interpretable hybrid topic search — DONE 2026-08-25
+
+**Detailed source of truth:** `docs/TOPIC_SEARCH_IMPLEMENTATION_PLAN.md`.
+Migrations 022–028, the semantic catalogue, backfill, v2 search Function,
+“Tolkat som” result page and exact-order existing-player handoff are complete.
+The detailed plan retains every per-chunk dependency, file scope and acceptance
+gate. `src/contracts.py`, numbered pipeline contracts and normal feed/PWA media
+behavior remain outside UI16.
+
+## UI16.10 — Signed-in owner Android beta — DONE 2026-08-26
+
+**Owner approval:** the 2026-08-26 instruction authorises publishing the search
+candidate to `main` for testing in the real app; the owner reports no current
+users.
+
+**Scope — may modify:** `web/src/search/feature.ts`, `web/src/App.tsx`, focused
+frontend tests/styles, release/privacy documentation and `PROGRESS.md`.
+**Must not modify:** ranking thresholds, embedding/index version, database
+state, secrets, feed/player/PWA behavior, pipeline stages or `src/contracts.py`.
+
+**Acceptance:** ordinary visitors remain on the default-off app. The special
+production beta URL enables search only for a signed-in viewer, shows a provider
+warning and requires explicit per-session confirmation. An explicit
+`VITE_TOPIC_SEARCH_ENABLED=false` remains the emergency kill switch. Repository,
+frontend and Edge gates pass; `main` deploys; live positive/negative probes and
+the owner's Android findings are recorded. Known beta exceptions are p95 2.027 s
+versus the former 1.5 s target, ungraded 36-query pools and unverified OpenAI
+account retention/region controls.
+
+---
+
 ## Phase 2 backlog (not chunked yet)
 
 Deliberately deferred. Do not pull these forward.

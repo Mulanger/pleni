@@ -1,0 +1,510 @@
+{
+  "catalog": {
+    "people": [
+      {
+        "id": "person-magdalena",
+        "label": "Magdalena Andersson",
+        "party": "S",
+        "partyLabel": "Socialdemokraterna",
+        "aliases": [
+          { "value": "Magdalena Andersson", "verified": true },
+          { "value": "Finansminister Magdalena Andersson (S)", "verified": true },
+          { "value": "Maggie", "verified": false }
+        ]
+      },
+      {
+        "id": "person-asa",
+        "label": "Åsa Romson",
+        "party": "MP",
+        "partyLabel": "Miljöpartiet",
+        "aliases": [
+          { "value": "Åsa Romson", "verified": true },
+          { "value": "Statsrådet Åsa Romson (MP)", "verified": true }
+        ]
+      },
+      {
+        "id": "person-acko",
+        "label": "Acko Ankarberg Johansson",
+        "party": "KD",
+        "partyLabel": "Kristdemokraterna",
+        "aliases": [
+          { "value": "Acko Ankarberg Johansson", "verified": true },
+          { "value": "Acko Ankarberg", "verified": true, "provenance": "historical" }
+        ]
+      },
+      {
+        "id": "person-anna",
+        "label": "Anna Andersson",
+        "party": "S",
+        "partyLabel": "Socialdemokraterna",
+        "aliases": [{ "value": "Anna Andersson", "verified": true }]
+      },
+      {
+        "id": "person-anne",
+        "label": "Anne Andersson",
+        "party": "M",
+        "partyLabel": "Moderaterna",
+        "aliases": [{ "value": "Anne Andersson", "verified": true }]
+      },
+      {
+        "id": "person-erik",
+        "label": "Erik Andersson",
+        "party": "V",
+        "partyLabel": "Vänsterpartiet",
+        "aliases": [{ "value": "Erik Andersson", "verified": true }]
+      },
+      {
+        "id": "person-klara-lind",
+        "label": "Klara Lind",
+        "party": "C",
+        "partyLabel": "Centerpartiet",
+        "aliases": [{ "value": "Klara Lind", "verified": true }]
+      },
+      {
+        "id": "person-klara-lund",
+        "label": "Klara Lund",
+        "party": "L",
+        "partyLabel": "Liberalerna",
+        "aliases": [{ "value": "Klara Lund", "verified": true }]
+      }
+    ],
+    "events": [
+      {
+        "id": "event-budget-2022",
+        "label": "Budgetdebatten",
+        "dateFrom": "2022-11-08",
+        "dateTo": "2022-11-08",
+        "dateLabel": "8 november 2022",
+        "verified": true,
+        "aliases": [{ "value": "Budgetdebatten", "verified": true }],
+        "sourceIds": ["source-budget-2022"]
+      },
+      {
+        "id": "event-budget-2023",
+        "label": "Budgetdebatten",
+        "dateFrom": "2023-11-22",
+        "dateTo": "2023-11-22",
+        "dateLabel": "22 november 2023",
+        "verified": true,
+        "aliases": [{ "value": "Budgetdebatten", "verified": true }],
+        "sourceIds": ["source-budget-2023"]
+      },
+      {
+        "id": "event-scooters-2026",
+        "label": "Elsparkcyklar och trafiksäkerhetsarbete",
+        "dateFrom": "2026-06-22",
+        "dateTo": "2026-06-22",
+        "dateLabel": "22 juni 2026",
+        "verified": true,
+        "aliases": [
+          { "value": "Elsparkcyklar och trafiksäkerhetsarbete", "verified": true },
+          { "value": "HD10552", "verified": true }
+        ],
+        "sourceIds": ["source-scooters"]
+      },
+      {
+        "id": "event-eu-2024",
+        "label": "EU-nämndens öppna sammanträde",
+        "dateFrom": "2024-03-15",
+        "dateTo": "2024-03-15",
+        "dateLabel": "15 mars 2024",
+        "verified": true,
+        "aliases": [{ "value": "EU-nämndens öppna sammanträde", "verified": true }],
+        "sourceIds": ["source-eu-2024"]
+      },
+      {
+        "id": "event-northvolt-unverified-alias",
+        "label": "Northvolt-konkursen",
+        "dateFrom": "2025-03-12",
+        "dateTo": "2025-03-12",
+        "verified": true,
+        "aliases": [{ "value": "Northvolt konkurs", "verified": false }],
+        "sourceIds": ["source-northvolt"]
+      },
+      {
+        "id": "event-world-unverified",
+        "label": "Världshändelse",
+        "dateFrom": "2025-01-01",
+        "dateTo": "2025-01-01",
+        "verified": false,
+        "aliases": [{ "value": "Världshändelse", "verified": true }],
+        "sourceIds": []
+      }
+    ]
+  },
+  "cases": [
+    {
+      "label": "person topic and year",
+      "request": { "query": "magdalena andersson skatter 2017" },
+      "expect": {
+        "facets": [
+          { "kind": "person", "label": "Magdalena Andersson", "id": "person-magdalena" },
+          { "kind": "date", "label": "2017", "from": "2017-01-01", "to": "2017-12-31" },
+          { "kind": "topic", "label": "skatter" }
+        ],
+        "ambiguity": null,
+        "consumed": ["magdalena andersson", "2017"],
+        "plan": { "topic": "skatter", "politicianId": "person-magdalena", "party": null, "eventId": null, "sourceIds": null, "dateFrom": "2017-01-01", "dateTo": "2017-12-31", "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "topic only is open ended",
+      "request": { "query": "elsparkcyklar" },
+      "expect": {
+        "facets": [{ "kind": "topic", "label": "elsparkcyklar" }],
+        "ambiguity": null,
+        "consumed": [],
+        "plan": { "topic": "elsparkcyklar", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "topic and year",
+      "request": { "query": "elsparkcyklar 2021" },
+      "expect": {
+        "facets": [
+          { "kind": "date", "label": "2021", "from": "2021-01-01", "to": "2021-12-31" },
+          { "kind": "topic", "label": "elsparkcyklar" }
+        ],
+        "ambiguity": null,
+        "consumed": ["2021"],
+        "plan": { "topic": "elsparkcyklar", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": "2021-01-01", "dateTo": "2021-12-31", "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "year disambiguates a recurring verified event",
+      "request": { "query": "budgetdebatten 2022" },
+      "expect": {
+        "facets": [
+          { "kind": "event", "label": "Budgetdebatten", "id": "event-budget-2022" },
+          { "kind": "date", "label": "2022", "from": "2022-01-01", "to": "2022-12-31" }
+        ],
+        "ambiguity": null,
+        "consumed": ["budgetdebatten", "2022"],
+        "plan": { "topic": null, "politicianId": null, "party": null, "eventId": "event-budget-2022", "sourceIds": ["source-budget-2022"], "dateFrom": "2022-01-01", "dateTo": "2022-12-31", "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "unverified event alias remains topic text",
+      "request": { "query": "Northvolt konkurs" },
+      "expect": {
+        "facets": [{ "kind": "topic", "label": "Northvolt konkurs" }],
+        "ambiguity": null,
+        "consumed": [],
+        "plan": { "topic": "Northvolt konkurs", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "party code and topic",
+      "request": { "query": "S skatter" },
+      "expect": {
+        "facets": [
+          { "kind": "party", "label": "Socialdemokraterna", "party": "S" },
+          { "kind": "topic", "label": "skatter" }
+        ],
+        "ambiguity": null,
+        "consumed": ["S"],
+        "plan": { "topic": "skatter", "politicianId": null, "party": "S", "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "person only needs no topic",
+      "request": { "query": "Magdalena Andersson" },
+      "expect": {
+        "facets": [{ "kind": "person", "label": "Magdalena Andersson", "id": "person-magdalena" }],
+        "ambiguity": null,
+        "consumed": ["Magdalena Andersson"],
+        "plan": { "topic": null, "politicianId": "person-magdalena", "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "year only has no retrieval anchor",
+      "request": { "query": "2017" },
+      "expect": {
+        "facets": [{ "kind": "date", "label": "2017", "from": "2017-01-01", "to": "2017-12-31" }],
+        "ambiguity": null,
+        "consumed": ["2017"],
+        "plan": { "topic": null, "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": "2017-01-01", "dateTo": "2017-12-31", "hasRetrievalAnchor": false, "fallback": false }
+      }
+    },
+    {
+      "label": "descriptive sentence is preserved as topic",
+      "request": { "query": "hur påverkar höga elpriser svenska hushåll" },
+      "expect": {
+        "facets": [{ "kind": "topic", "label": "hur påverkar höga elpriser svenska hushåll" }],
+        "ambiguity": null,
+        "consumed": [],
+        "plan": { "topic": "hur påverkar höga elpriser svenska hushåll", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "surname collision never becomes a person filter",
+      "request": { "query": "Andersson" },
+      "expect": {
+        "facets": [{ "kind": "topic", "label": "Andersson" }],
+        "ambiguity": { "kind": "person", "ids": ["person-anna", "person-anne", "person-erik", "person-magdalena"] },
+        "consumed": [],
+        "plan": { "topic": "Andersson", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "titles punctuation and whitespace use exact spans",
+      "request": { "query": "  Finansminister   Magdalena Andersson, skatter!  " },
+      "expect": {
+        "facets": [
+          { "kind": "person", "label": "Magdalena Andersson", "id": "person-magdalena" },
+          { "kind": "topic", "label": "skatter" }
+        ],
+        "ambiguity": null,
+        "consumed": ["Finansminister Magdalena Andersson"],
+        "plan": { "topic": "skatter", "politicianId": "person-magdalena", "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "historical verified name resolves to current person",
+      "request": { "query": "Acko Ankarberg vården" },
+      "expect": {
+        "facets": [
+          { "kind": "person", "label": "Acko Ankarberg Johansson", "id": "person-acko" },
+          { "kind": "topic", "label": "vården" }
+        ],
+        "ambiguity": null,
+        "consumed": ["Acko Ankarberg"],
+        "plan": { "topic": "vården", "politicianId": "person-acko", "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "recurring event without year stays ambiguous and topical",
+      "request": { "query": "budgetdebatten" },
+      "expect": {
+        "facets": [{ "kind": "topic", "label": "budgetdebatten" }],
+        "ambiguity": { "kind": "event", "ids": ["event-budget-2022", "event-budget-2023"] },
+        "consumed": [],
+        "plan": { "topic": "budgetdebatten", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "full source title is a verified event",
+      "request": { "query": "Elsparkcyklar och trafiksäkerhetsarbete" },
+      "expect": {
+        "facets": [{ "kind": "event", "label": "Elsparkcyklar och trafiksäkerhetsarbete", "id": "event-scooters-2026" }],
+        "ambiguity": null,
+        "consumed": ["Elsparkcyklar och trafiksäkerhetsarbete"],
+        "plan": { "topic": null, "politicianId": null, "party": null, "eventId": "event-scooters-2026", "sourceIds": ["source-scooters"], "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "disabled person words return to topic",
+      "request": { "query": "magdalena andersson skatter 2017", "disabledFacets": ["person"] },
+      "expect": {
+        "facets": [
+          { "kind": "date", "label": "2017", "from": "2017-01-01", "to": "2017-12-31" },
+          { "kind": "topic", "label": "magdalena andersson skatter" }
+        ],
+        "ambiguity": null,
+        "consumed": ["2017"],
+        "plan": { "topic": "magdalena andersson skatter", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": "2017-01-01", "dateTo": "2017-12-31", "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "disabled date words return to topic",
+      "request": { "query": "magdalena andersson skatter 2017", "disabledFacets": ["date"] },
+      "expect": {
+        "facets": [
+          { "kind": "person", "label": "Magdalena Andersson", "id": "person-magdalena" },
+          { "kind": "topic", "label": "skatter 2017" }
+        ],
+        "ambiguity": null,
+        "consumed": ["magdalena andersson"],
+        "plan": { "topic": "skatter 2017", "politicianId": "person-magdalena", "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "disabled event remains topic while year stays active",
+      "request": { "query": "budgetdebatten 2022", "disabledFacets": ["event"] },
+      "expect": {
+        "facets": [
+          { "kind": "date", "label": "2022", "from": "2022-01-01", "to": "2022-12-31" },
+          { "kind": "topic", "label": "budgetdebatten" }
+        ],
+        "ambiguity": null,
+        "consumed": ["2022"],
+        "plan": { "topic": "budgetdebatten", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": "2022-01-01", "dateTo": "2022-12-31", "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "disabled party words return to topic",
+      "request": { "query": "S skatter", "disabledFacets": ["party"] },
+      "expect": {
+        "facets": [{ "kind": "topic", "label": "S skatter" }],
+        "ambiguity": null,
+        "consumed": [],
+        "plan": { "topic": "S skatter", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "unaccented person lookup preserves canonical Swedish label",
+      "request": { "query": "Asa Romson klimat" },
+      "expect": {
+        "facets": [
+          { "kind": "person", "label": "Åsa Romson", "id": "person-asa" },
+          { "kind": "topic", "label": "klimat" }
+        ],
+        "ambiguity": null,
+        "consumed": ["Asa Romson"],
+        "plan": { "topic": "klimat", "politicianId": "person-asa", "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "year range uses inclusive bounds and punctuation subtraction",
+      "request": { "query": "Magdalena Andersson — skatter, 2017–2019" },
+      "expect": {
+        "facets": [
+          { "kind": "person", "label": "Magdalena Andersson", "id": "person-magdalena" },
+          { "kind": "date", "label": "2017–2019", "from": "2017-01-01", "to": "2019-12-31" },
+          { "kind": "topic", "label": "skatter" }
+        ],
+        "ambiguity": null,
+        "consumed": ["Magdalena Andersson", "2017–2019"],
+        "plan": { "topic": "skatter", "politicianId": "person-magdalena", "party": null, "eventId": null, "sourceIds": null, "dateFrom": "2017-01-01", "dateTo": "2019-12-31", "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "from year is open ended",
+      "request": { "query": "skatter från 2021" },
+      "expect": {
+        "facets": [
+          { "kind": "date", "label": "från 2021", "from": "2021-01-01", "to": "9999-12-31" },
+          { "kind": "topic", "label": "skatter" }
+        ],
+        "ambiguity": null,
+        "consumed": ["från 2021"],
+        "plan": { "topic": "skatter", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": "2021-01-01", "dateTo": "9999-12-31", "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "since year is open ended",
+      "request": { "query": "skatter sedan 2022" },
+      "expect": {
+        "facets": [
+          { "kind": "date", "label": "sedan 2022", "from": "2022-01-01", "to": "9999-12-31" },
+          { "kind": "topic", "label": "skatter" }
+        ],
+        "ambiguity": null,
+        "consumed": ["sedan 2022"],
+        "plan": { "topic": "skatter", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": "2022-01-01", "dateTo": "9999-12-31", "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "unaccented full party name resolves structurally",
+      "request": { "query": "Miljopartiet klimat" },
+      "expect": {
+        "facets": [
+          { "kind": "party", "label": "Miljöpartiet", "party": "MP" },
+          { "kind": "topic", "label": "klimat" }
+        ],
+        "ambiguity": null,
+        "consumed": ["Miljopartiet"],
+        "plan": { "topic": "klimat", "politicianId": null, "party": "MP", "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "clear fuzzy full-name match is accepted",
+      "request": { "query": "Magdalena Anderson skatter" },
+      "expect": {
+        "facets": [
+          { "kind": "person", "label": "Magdalena Andersson", "id": "person-magdalena" },
+          { "kind": "topic", "label": "skatter" }
+        ],
+        "ambiguity": null,
+        "consumed": ["Magdalena Anderson"],
+        "plan": { "topic": "skatter", "politicianId": "person-magdalena", "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "fuzzy match without a clear margin stays ambiguous",
+      "request": { "query": "Klara Land skatter" },
+      "expect": {
+        "facets": [{ "kind": "topic", "label": "Klara Land skatter" }],
+        "ambiguity": { "kind": "person", "ids": ["person-klara-lind", "person-klara-lund"] },
+        "consumed": [],
+        "plan": { "topic": "Klara Land skatter", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "person and year can have no residual topic",
+      "request": { "query": "Magdalena Andersson 2017" },
+      "expect": {
+        "facets": [
+          { "kind": "person", "label": "Magdalena Andersson", "id": "person-magdalena" },
+          { "kind": "date", "label": "2017", "from": "2017-01-01", "to": "2017-12-31" }
+        ],
+        "ambiguity": null,
+        "consumed": ["Magdalena Andersson", "2017"],
+        "plan": { "topic": null, "politicianId": "person-magdalena", "party": null, "eventId": null, "sourceIds": null, "dateFrom": "2017-01-01", "dateTo": "2017-12-31", "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "stopword-only debris is removed",
+      "request": { "query": "Magdalena Andersson och 2017" },
+      "expect": {
+        "facets": [
+          { "kind": "person", "label": "Magdalena Andersson", "id": "person-magdalena" },
+          { "kind": "date", "label": "2017", "from": "2017-01-01", "to": "2017-12-31" }
+        ],
+        "ambiguity": null,
+        "consumed": ["Magdalena Andersson", "2017"],
+        "plan": { "topic": null, "politicianId": "person-magdalena", "party": null, "eventId": null, "sourceIds": null, "dateFrom": "2017-01-01", "dateTo": "2017-12-31", "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "event lookup accepts unaccented comparison form",
+      "request": { "query": "EU-namndens oppna sammantrade 2024" },
+      "expect": {
+        "facets": [
+          { "kind": "event", "label": "EU-nämndens öppna sammanträde", "id": "event-eu-2024" },
+          { "kind": "date", "label": "2024", "from": "2024-01-01", "to": "2024-12-31" }
+        ],
+        "ambiguity": null,
+        "consumed": ["EU-namndens oppna sammantrade", "2024"],
+        "plan": { "topic": null, "politicianId": null, "party": null, "eventId": "event-eu-2024", "sourceIds": ["source-eu-2024"], "dateFrom": "2024-01-01", "dateTo": "2024-12-31", "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "mismatched event year does not guess an occurrence",
+      "request": { "query": "budgetdebatten 2020" },
+      "expect": {
+        "facets": [
+          { "kind": "date", "label": "2020", "from": "2020-01-01", "to": "2020-12-31" },
+          { "kind": "topic", "label": "budgetdebatten" }
+        ],
+        "ambiguity": null,
+        "consumed": ["2020"],
+        "plan": { "topic": "budgetdebatten", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": "2020-01-01", "dateTo": "2020-12-31", "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "raw official title and party suffix remain a verified person alias",
+      "request": { "query": "Statsrådet Åsa Romson (MP) klimat" },
+      "expect": {
+        "facets": [
+          { "kind": "person", "label": "Åsa Romson", "id": "person-asa" },
+          { "kind": "topic", "label": "klimat" }
+        ],
+        "ambiguity": null,
+        "consumed": ["Statsrådet Åsa Romson (MP"],
+        "plan": { "topic": "klimat", "politicianId": "person-asa", "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": false }
+      }
+    },
+    {
+      "label": "interpretation failure safely falls back to whole query",
+      "request": { "query": "Magdalena Andersson skatter 2017" },
+      "forceFailure": true,
+      "expect": {
+        "facets": [{ "kind": "topic", "label": "Magdalena Andersson skatter 2017" }],
+        "ambiguity": null,
+        "consumed": [],
+        "plan": { "topic": "Magdalena Andersson skatter 2017", "politicianId": null, "party": null, "eventId": null, "sourceIds": null, "dateFrom": null, "dateTo": null, "hasRetrievalAnchor": true, "fallback": true }
+      }
+    }
+  ]
+}

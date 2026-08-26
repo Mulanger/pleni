@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 import {
   ArrowUpRight,
   Bookmark,
@@ -97,6 +97,38 @@ import {
 import { applyBrowserTheme } from "./pwa/theme";
 import { usePwaExperience } from "./pwa/usePwaExperience";
 import type { PwaExperience } from "./pwa/usePwaExperience";
+import { TopicSearchApiError } from "./search/api";
+import { topicSearchEnabled } from "./search/feature";
+import {
+  EMPTY_TOPIC_SEARCH_STATE,
+  TOPIC_SEARCH_RESULT_LIMIT,
+  addDisabledFacet,
+  beginTopicSearch,
+  buildTopicRequestQuery,
+  completeTopicSearch,
+  failTopicSearch,
+  identityQueryAfterTopicRemoval,
+  partyAfterTopicRemoval,
+  rememberTopicSearchScroll,
+  revealMoreTopicResults,
+  sortedSearchFacets,
+  topicResultHeading,
+  topicSearchErrorMessage,
+  visibleFacetLabel
+} from "./search/state";
+import type { TopicSearchState } from "./search/state";
+import {
+  createSearchFeedCollection,
+  searchFeedHistoryId,
+  withSearchFeedHistoryState
+} from "./search/route";
+import type { SearchFeedCollection } from "./search/route";
+import type {
+  DisabledSearchFacet,
+  SearchAmbiguityOption,
+  SearchClipResult,
+  SearchFacet
+} from "./search/types";
 import {
   loadClipsByIds,
   loadClipsForParty,
@@ -107,6 +139,7 @@ import {
   loadPoliticiansByIds,
   loadPoliticiansForParty,
   loadPublishedClips,
+  searchPublishedTopics,
   searchPoliticians
 } from "./supabase";
 import type {
@@ -298,7 +331,19 @@ function App() {
   const { route, navigate, backTo } = useAppNavigation();
   const tab = route.tab;
   const feedMode = route.feedMode;
+  const [searchFeedCollection, setSearchFeedCollection] =
+    useState<SearchFeedCollection | null>(null);
+  const [searchFeedOpen, setSearchFeedOpen] = useState(false);
+  const searchFeedCollectionRef = useRef<SearchFeedCollection | null>(null);
+  const searchFeedHistorySequenceRef = useRef(0);
+  searchFeedCollectionRef.current = searchFeedCollection;
+  const showingSearchFeed =
+    searchFeedOpen &&
+    searchFeedCollection !== null &&
+    route.view === "tab" &&
+    tab === "sok";
   const darkSurface =
+    showingSearchFeed ||
     (route.view === "tab" && tab === "hem") ||
     route.view === "person-clips" ||
     route.view === "party-clips" ||
@@ -321,6 +366,10 @@ function App() {
     route.view === "party" || route.view === "party-clips" ? route.partyCode : null;
   const [query, setQuery] = useState("");
   const [partyFilter, setPartyFilter] = useState<PartyCode | null>(null);
+  const [topicSearchState, setTopicSearchState] = useState<TopicSearchState>(
+    EMPTY_TOPIC_SEARCH_STATE
+  );
+  const searchFeedResponseRef = useRef(topicSearchState.response);
   const [muted, setMuted] = useState(false);
   // Follows, saves and likes now survive a reload. Device-local only — see
   // `library-store.ts` for why this is not a server call yet (C-1, C-2, C-6).
@@ -364,6 +413,9 @@ function App() {
   );
   const [newAccountRedirect, setNewAccountRedirect] = useState(hasNewAccountRedirect);
   const viewer = useViewer();
+  // The production beta is deliberately narrower than the deployed anonymous
+  // endpoint: only a signed-in viewer who opened the owner test URL sees it.
+  const topicSearchAvailable = topicSearchEnabled && viewer.signedIn;
   const consent = {
     ...onboarding.consent,
     personal: recommendationsEnabled
@@ -395,6 +447,27 @@ function App() {
       controller.abort();
     };
   }, []);
+
+  useEffect(() => {
+    const restoreSearchFeed = (event: PopStateEvent) => {
+      const historyId = searchFeedHistoryId(event.state);
+      setSearchFeedOpen(
+        historyId !== null && historyId === searchFeedCollectionRef.current?.historyId
+      );
+    };
+    window.addEventListener("popstate", restoreSearchFeed);
+    return () => window.removeEventListener("popstate", restoreSearchFeed);
+  }, []);
+
+  useEffect(() => {
+    if (searchFeedResponseRef.current === topicSearchState.response) {
+      return;
+    }
+    searchFeedResponseRef.current = topicSearchState.response;
+    searchFeedCollectionRef.current = null;
+    setSearchFeedCollection(null);
+    setSearchFeedOpen(false);
+  }, [topicSearchState.response]);
 
   useEffect(() => {
     if (!viewer.signedIn || !viewer.userId) {
@@ -997,6 +1070,43 @@ function App() {
     navigate({ view: "saved-clips", tab: "profil", feedMode, startId });
   };
 
+  const openTopicSearchFeed = (startId: string | null, scrollTop: number) => {
+    const response = topicSearchState.response;
+    if (!topicSearchAvailable || topicSearchState.phase !== "success" || !response?.results.length) {
+      return;
+    }
+    setTopicSearchState((current) => rememberTopicSearchScroll(current, scrollTop));
+    searchFeedHistorySequenceRef.current += 1;
+    const historyId = `search-feed-${searchFeedHistorySequenceRef.current}`;
+    const nextCollection = createSearchFeedCollection(
+      response.results,
+      topicResultHeading(response.interpretation.facets),
+      startId,
+      historyId
+    );
+    searchFeedCollectionRef.current = nextCollection;
+    setSearchFeedCollection(nextCollection);
+    setSearchFeedOpen(true);
+    // The URL deliberately stays unchanged: queries and result ids remain
+    // transient, while browser Back still receives its own history boundary.
+    window.history.pushState(
+      withSearchFeedHistoryState(window.history.state, historyId),
+      ""
+    );
+  };
+
+  const closeTopicSearchFeed = () => {
+    const currentHistoryId = searchFeedHistoryId(window.history.state);
+    if (
+      currentHistoryId !== null &&
+      currentHistoryId === searchFeedCollectionRef.current?.historyId
+    ) {
+      window.history.back();
+      return;
+    }
+    setSearchFeedOpen(false);
+  };
+
   const openFollowing = () => {
     navigate({ view: "tab", tab: "foljer", feedMode });
   };
@@ -1144,7 +1254,21 @@ function App() {
         />
       )}
       <main className="mobile-app" aria-label="Pleni">
-        {route.view === "legal" ? (
+        {showingSearchFeed && searchFeedCollection !== null ? (
+          <CollectionScreen
+            collection={searchFeedCollection}
+            onBack={closeTopicSearchFeed}
+            muted={muted}
+            setMuted={setMuted}
+            liked={liked}
+            saved={saved}
+            following={following}
+            onLike={toggleLikeClip}
+            onSave={toggleSaveClip}
+            onToggleFollow={toggleFollowPolitician}
+            onOpenPerson={openPerson}
+          />
+        ) : route.view === "legal" ? (
           <LegalScreen
             page={route.page}
             onBack={() => backTo({ view: "tab", tab: "profil", feedMode })}
@@ -1245,8 +1369,12 @@ function App() {
                 setPartyFilter={setPartyFilter}
                 partyProfiles={partyProfiles}
                 partyProfilesLoading={partyProfilesLoading}
+                topicState={topicSearchState}
+                setTopicState={setTopicSearchState}
+                topicSearchAvailable={topicSearchAvailable}
                 onOpenPerson={openPerson}
                 onOpenParty={openParty}
+                onOpenTopicFeed={openTopicSearchFeed}
               />
             )}
             {tab === "profil" && (
@@ -3557,8 +3685,12 @@ function SearchScreen({
   setPartyFilter,
   partyProfiles,
   partyProfilesLoading,
+  topicState,
+  setTopicState,
+  topicSearchAvailable,
   onOpenPerson,
-  onOpenParty
+  onOpenParty,
+  onOpenTopicFeed
 }: {
   query: string;
   setQuery: (query: string) => void;
@@ -3566,16 +3698,43 @@ function SearchScreen({
   setPartyFilter: (party: PartyCode | null) => void;
   partyProfiles: PartyProfile[];
   partyProfilesLoading: boolean;
+  topicState: TopicSearchState;
+  setTopicState: Dispatch<SetStateAction<TopicSearchState>>;
+  topicSearchAvailable: boolean;
   onOpenPerson: (personId: string) => void;
   onOpenParty: (party: PartyCode) => void;
+  onOpenTopicFeed: (startId: string | null, scrollTop: number) => void;
 }) {
   const [results, setResults] = useState<Politician[]>([]);
   const [searching, setSearching] = useState(false);
   const [resolvedSearchKey, setResolvedSearchKey] = useState<string | null>(null);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const topicControllerRef = useRef<AbortController | null>(null);
+  const topicRequestIdRef = useRef(0);
+  const topicBetaAcceptedRef = useRef(false);
+  const panelScrollRef = useRef<HTMLDivElement | null>(null);
+  const pendingScrollRestoreRef = useRef<number | null>(topicState.scrollTop);
   const normalizedQuery = query.trim();
-  const showResults = normalizedQuery.length > 0 || partyFilter !== null;
-  const searchKey = `${partyFilter ?? "ALL"}:${normalizedQuery.toLocaleLowerCase("sv-SE")}`;
+  const settledResponse =
+    topicSearchAvailable && topicState.phase === "success" ? topicState.response : null;
+  const responseMatchesInput =
+    settledResponse !== null && topicState.submittedInput === normalizedQuery;
+  const settledPersonFacet = responseMatchesInput
+    ? settledResponse.interpretation.facets.find(
+        (facet): facet is Extract<SearchFacet, { kind: "person" }> => facet.kind === "person"
+      ) ?? null
+    : null;
+  const settledPartyFacet = responseMatchesInput
+    ? settledResponse.interpretation.facets.find(
+        (facet): facet is Extract<SearchFacet, { kind: "party" }> => facet.kind === "party"
+      ) ?? null
+    : null;
+  const identityQuery = settledPersonFacet?.label ?? normalizedQuery;
+  const identityPartyFilter = settledPartyFacet?.party ?? partyFilter;
+  const showIdentityResults = identityQuery.length > 0 || identityPartyFilter !== null;
+  const showResults =
+    showIdentityResults || (topicSearchAvailable && topicState.phase !== "idle");
+  const searchKey = `${identityPartyFilter ?? "ALL"}:${identityQuery.toLocaleLowerCase("sv-SE")}`;
 
   const rememberSearch = (value: string) => {
     const normalizedValue = value.trim();
@@ -3608,11 +3767,123 @@ function SearchScreen({
     onOpenPerson(politician.id);
   };
 
-  const matchingParties = useMemo(() => {
-    if (partyFilter && partyFilter !== "NONE") {
-      return partyProfiles.filter((profile) => profile.abbr === partyFilter);
+  const stopTopicRequest = () => {
+    topicRequestIdRef.current += 1;
+    topicControllerRef.current?.abort();
+    topicControllerRef.current = null;
+  };
+
+  const submitTopicSearch = (
+    input = normalizedQuery,
+    disabledFacets: readonly DisabledSearchFacet[] = topicState.disabledFacets,
+    selectedParty = partyFilter
+  ) => {
+    if (!topicSearchAvailable) {
+      rememberSearch(input);
+      return;
     }
-    const term = normalizedQuery.toLocaleLowerCase("sv-SE");
+
+    if (!topicBetaAcceptedRef.current) {
+      const accepted = window.confirm(
+        "Testversion: ämnestexten skickas till OpenAI för att hitta relevanta klipp. " +
+          "Skriv inte personuppgifter eller privat information. Vill du fortsätta?",
+      );
+      if (!accepted) {
+        return;
+      }
+      topicBetaAcceptedRef.current = true;
+    }
+
+    const normalizedInput = input.trim();
+    if (normalizedInput.length < 2 && selectedParty === null) {
+      return;
+    }
+    const partyLabel = selectedParty
+      ? partyProfiles.find((profile) => profile.abbr === selectedParty)?.name ??
+        PARTIES[selectedParty].name
+      : null;
+    const requestQuery = buildTopicRequestQuery(normalizedInput, selectedParty, partyLabel);
+    if (requestQuery.length < 2) {
+      return;
+    }
+
+    panelScrollRef.current?.scrollTo({ top: 0 });
+    stopTopicRequest();
+    const requestId = topicRequestIdRef.current;
+    const controller = new AbortController();
+    topicControllerRef.current = controller;
+    rememberSearch(normalizedInput || partyLabel || requestQuery);
+    setTopicState((current) =>
+      beginTopicSearch(current, normalizedInput, requestQuery, disabledFacets)
+    );
+
+    searchPublishedTopics(
+      {
+        query: requestQuery,
+        limit: TOPIC_SEARCH_RESULT_LIMIT,
+        ...(disabledFacets.length > 0 ? { disabledFacets: [...disabledFacets] } : {})
+      },
+      controller.signal
+    )
+      .then((response) => {
+        if (!controller.signal.aborted && topicRequestIdRef.current === requestId) {
+          setTopicState((current) => completeTopicSearch(current, response));
+        }
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || topicRequestIdRef.current !== requestId) {
+          return;
+        }
+        const kind = error instanceof TopicSearchApiError ? error.kind : "network";
+        setTopicState((current) => failTopicSearch(current, kind));
+      })
+      .finally(() => {
+        if (topicRequestIdRef.current === requestId) {
+          topicControllerRef.current = null;
+        }
+      });
+  };
+
+  const removeFacet = (facet: SearchFacet) => {
+    if (facet.kind === "topic") {
+      stopTopicRequest();
+      const facets = topicState.response?.interpretation.facets ?? [];
+      setQuery(identityQueryAfterTopicRemoval(facets));
+      setPartyFilter(partyAfterTopicRemoval(facets));
+      setTopicState(EMPTY_TOPIC_SEARCH_STATE);
+      return;
+    }
+
+    const disabledFacets = addDisabledFacet(topicState.disabledFacets, facet.kind);
+    const selectedParty = facet.kind === "party" ? null : partyFilter;
+    if (facet.kind === "party") {
+      setPartyFilter(null);
+      if (!topicState.submittedInput.trim()) {
+        stopTopicRequest();
+        setTopicState(EMPTY_TOPIC_SEARCH_STATE);
+        return;
+      }
+    }
+    submitTopicSearch(topicState.submittedInput, disabledFacets, selectedParty);
+  };
+
+  const chooseAmbiguity = (option: SearchAmbiguityOption) => {
+    setQuery(option.label);
+    setPartyFilter(null);
+    submitTopicSearch(option.label, [], null);
+  };
+
+  useEffect(
+    () => () => {
+      topicControllerRef.current?.abort();
+    },
+    []
+  );
+  const matchingParties = useMemo(() => {
+    if (identityPartyFilter && identityPartyFilter !== "NONE") {
+      return partyProfiles.filter((profile) => profile.abbr === identityPartyFilter);
+    }
+    const term = identityQuery.toLocaleLowerCase("sv-SE");
     if (!term) {
       return [];
     }
@@ -3620,15 +3891,24 @@ function SearchScreen({
       [profile.abbr, profile.name, profile.short]
         .some((value) => value.toLocaleLowerCase("sv-SE").includes(term))
     );
-  }, [normalizedQuery, partyFilter, partyProfiles]);
+  }, [identityPartyFilter, identityQuery, partyProfiles]);
 
   const resultCount = matchingParties.length + results.length;
   const searchPending =
-    showResults &&
+    showIdentityResults &&
     (partyProfilesLoading || searching || resolvedSearchKey !== searchKey);
 
+  useLayoutEffect(() => {
+    const scrollTop = pendingScrollRestoreRef.current;
+    if (searchPending || scrollTop === null || panelScrollRef.current === null) {
+      return;
+    }
+    panelScrollRef.current.scrollTop = scrollTop;
+    pendingScrollRestoreRef.current = null;
+  }, [searchPending]);
+
   useEffect(() => {
-    if (!showResults) {
+    if (!showIdentityResults) {
       setResults([]);
       setSearching(false);
       setResolvedSearchKey(null);
@@ -3640,7 +3920,10 @@ function SearchScreen({
     // Debounced: a request per keystroke would put ~8 in flight for a surname
     // and the answers can arrive out of order.
     const timer = window.setTimeout(() => {
-      searchPoliticians(normalizedQuery, { party: partyFilter, signal: controller.signal })
+      searchPoliticians(identityQuery, {
+        party: identityPartyFilter,
+        signal: controller.signal
+      })
         .then((politicians) => {
           if (!controller.signal.aborted) {
             setResults(politicians);
@@ -3664,7 +3947,7 @@ function SearchScreen({
       // one — the same stale-response rule FE-7 states for the feed.
       controller.abort();
     };
-  }, [normalizedQuery, partyFilter, searchKey, showResults]);
+  }, [identityPartyFilter, identityQuery, searchKey, showIdentityResults]);
 
   return (
     <section
@@ -3672,25 +3955,54 @@ function SearchScreen({
     >
       <div className="search-header">
         {!showResults && <h1>Sök</h1>}
-        <label className="search-box">
-          <Search size={18} />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                rememberSearch(normalizedQuery);
-              }
-            }}
-            aria-label="Sök person, parti eller ämne"
-            placeholder="Sök person, parti eller ämne"
-          />
-          {query.length > 0 && (
-            <button type="button" onClick={() => setQuery("")} aria-label="Rensa sökningen">
-              <X size={13} />
-            </button>
-          )}
-        </label>
+        <form
+          className="search-form"
+          role="search"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submitTopicSearch();
+          }}
+        >
+          <div className="search-box">
+            <Search size={18} aria-hidden="true" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              aria-label="Sök person, parti eller ämne"
+              placeholder="Sök person, parti eller ämne"
+            />
+            {query.length > 0 && (
+              <button
+                type="button"
+                className="search-clear"
+                onClick={() => {
+                  stopTopicRequest();
+                  setQuery("");
+                  setTopicState(EMPTY_TOPIC_SEARCH_STATE);
+                }}
+                aria-label="Rensa sökningen"
+              >
+                <X size={13} />
+              </button>
+            )}
+            {topicSearchAvailable && (
+              <button
+                type="submit"
+                className="search-submit"
+                disabled={normalizedQuery.length < 2 && partyFilter === null}
+                aria-label="Sök i klippen"
+              >
+                Sök
+              </button>
+            )}
+          </div>
+        </form>
+        {topicSearchAvailable && (
+          <p className="topic-search-privacy-note">
+            Testversion: OpenAI hjälper oss att tolka ämnessökningar. Skriv inte personuppgifter
+            eller privat information.
+          </p>
+        )}
         <div className="chips" aria-label="Filtrera på parti">
           <button
             type="button"
@@ -3712,19 +4024,25 @@ function SearchScreen({
             </button>
           ))}
         </div>
+        {settledResponse && (
+          <SearchInterpretation
+            facets={settledResponse.interpretation.facets}
+            onRemove={removeFacet}
+          />
+        )}
       </div>
-      <div className="panel-scroll" aria-busy={searchPending || undefined}>
+      <div
+        className="panel-scroll"
+        ref={panelScrollRef}
+        aria-busy={searchPending || topicState.phase === "loading" || undefined}
+      >
         {showResults ? (
-          searchPending ? (
-            <SearchResultsSkeleton />
-          ) : resultCount === 0 ? (
-            <div className="panel-empty" role="status">
-              <strong>Inga träffar</strong>
-              <span>Sök på en politikers namn, eller filtrera på parti.</span>
-            </div>
-          ) : (
-            <div className="search-results" aria-live="polite">
-              {matchingParties.length > 0 && (
+          <div className="search-results" aria-live="polite">
+            {searchPending ? (
+              <SearchResultsSkeleton />
+            ) : (
+              <>
+                {matchingParties.length > 0 && (
                 <section className="search-party-results" aria-label="Partier">
                   <div className="search-kicker">Partisida</div>
                   {matchingParties.map((profile) => (
@@ -3801,8 +4119,48 @@ function SearchScreen({
                   </div>
                 </section>
               )}
-            </div>
-          )
+                {!topicSearchAvailable && resultCount === 0 && (
+                  <div className="panel-empty" role="status">
+                    <strong>Inga träffar</strong>
+                    <span>Sök på en politikers namn, eller filtrera på parti.</span>
+                  </div>
+                )}
+              </>
+            )}
+
+            {topicSearchAvailable && topicState.phase === "loading" && (
+              <TopicSearchResultsSkeleton />
+            )}
+            {topicSearchAvailable && topicState.phase === "error" && (
+              <section className="topic-search-message" role="alert">
+                <strong>Klippsökningen pausades</strong>
+                <p>{topicSearchErrorMessage(topicState.errorKind)}</p>
+                <button type="button" onClick={() => submitTopicSearch(topicState.submittedInput)}>
+                  Försök igen
+                </button>
+              </section>
+            )}
+            {settledResponse && (
+              <TopicSearchResults
+                response={settledResponse}
+                revealedCount={topicState.revealedCount}
+                onRevealMore={() => setTopicState(revealMoreTopicResults)}
+                onChooseAmbiguity={chooseAmbiguity}
+                onPlay={(startId) =>
+                  onOpenTopicFeed(startId, panelScrollRef.current?.scrollTop ?? 0)
+                }
+              />
+            )}
+            {topicSearchAvailable &&
+              topicState.phase === "idle" &&
+              !searchPending &&
+              resultCount === 0 && (
+                <div className="panel-empty topic-search-idle" role="status">
+                  <strong>Inga personer eller partier</strong>
+                  <span>Tryck på Sök för att leta efter relevanta klipp.</span>
+                </div>
+              )}
+          </div>
         ) : (
           <>
             {recentSearches.length > 0 && (
@@ -3848,6 +4206,220 @@ function SearchScreen({
         )}
       </div>
     </section>
+  );
+}
+
+function SearchInterpretation({
+  facets,
+  onRemove
+}: {
+  facets: readonly SearchFacet[];
+  onRemove: (facet: SearchFacet) => void;
+}) {
+  const sorted = sortedSearchFacets(facets);
+  if (sorted.length === 0) {
+    return null;
+  }
+  return (
+    <div className="search-interpretation" aria-label="Tolkat som">
+      <span>Tolkat som</span>
+      <div>
+        {sorted.map((facet) => (
+          <span className="search-facet" key={`${facet.kind}:${facet.label}`}>
+            {visibleFacetLabel(facet)}
+            <button
+              type="button"
+              onClick={() => onRemove(facet)}
+              aria-label={`Ta bort ${visibleFacetLabel(facet)} och bredda sökningen`}
+            >
+              <X size={11} aria-hidden="true" />
+            </button>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TopicSearchResults({
+  response,
+  revealedCount,
+  onRevealMore,
+  onChooseAmbiguity,
+  onPlay
+}: {
+  response: NonNullable<TopicSearchState["response"]>;
+  revealedCount: number;
+  onRevealMore: () => void;
+  onChooseAmbiguity: (option: SearchAmbiguityOption) => void;
+  onPlay: (startId: string | null) => void;
+}) {
+  const visibleResults = response.results.slice(0, revealedCount);
+  const remaining = response.results.length - visibleResults.length;
+  const ambiguity = response.interpretation.ambiguity;
+
+  return (
+    <div className="topic-search-results">
+      {ambiguity && (
+        <section className="search-ambiguity" aria-labelledby="search-ambiguity-title">
+          <span className="search-kicker">Välj {ambiguity.kind === "person" ? "person" : "händelse"}</span>
+          <h2 id="search-ambiguity-title">{ambiguity.message}</h2>
+          <div>
+            {ambiguity.options.map((option) => (
+              <button type="button" key={option.id} onClick={() => onChooseAmbiguity(option)}>
+                <span>{option.label}</span>
+                <small>{option.detail}</small>
+                <ChevronRight size={16} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {response.event && <SearchEventDestination event={response.event} />}
+
+      {response.mode === "keyword_fallback" && (
+        <div className="topic-search-fallback" role="status">
+          Visar ordträffar just nu. Politiker, partier och filter fungerar som vanligt.
+        </div>
+      )}
+
+      <section className="topic-clip-section" aria-labelledby="topic-result-heading">
+        <div className="topic-result-heading">
+          <div>
+            <h2 id="topic-result-heading">
+              {topicResultHeading(response.interpretation.facets)}
+            </h2>
+            <p>
+              Mest relevanta först · {response.results.length}{" "}
+              {response.results.length === 1 ? "träff" : "träffar"}
+            </p>
+          </div>
+          {response.results.length > 0 && (
+            <button type="button" className="topic-show-more" onClick={() => onPlay(null)}>
+              Spela alla
+            </button>
+          )}
+        </div>
+
+        {visibleResults.length > 0 ? (
+          <div className="topic-result-list">
+            {visibleResults.map((result) => (
+              <TopicClipResultRow
+                result={result}
+                key={result.clip.id}
+                onPlay={() => onPlay(result.clip.id)}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="topic-search-empty" role="status">
+            <strong>Inga relevanta klipp hittades</strong>
+            <span>Ta bort ett filter eller prova en bredare svensk formulering.</span>
+          </div>
+        )}
+
+        {remaining > 0 && (
+          <button type="button" className="topic-show-more" onClick={onRevealMore}>
+            Visa {Math.min(20, remaining)} till
+          </button>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function SearchEventDestination({
+  event
+}: {
+  event: NonNullable<NonNullable<TopicSearchState["response"]>["event"]>;
+}) {
+  const content = (
+    <>
+      <span className="search-event-mark" aria-hidden="true">
+        <Play size={14} fill="currentColor" />
+      </span>
+      <span>
+        <small>Verifierad riksdagshändelse</small>
+        <strong>{event.label}</strong>
+        <span>
+          {event.dateLabel} · {event.clipCount} klipp
+        </span>
+      </span>
+      <ArrowUpRight size={17} aria-hidden="true" />
+    </>
+  );
+  return (
+    <section className="search-event-section" aria-label="Händelse">
+      <span className="search-kicker">Händelse</span>
+      {event.sourceUrl ? (
+        <a href={event.sourceUrl} target="_blank" rel="noreferrer" className="search-event-row">
+          {content}
+        </a>
+      ) : (
+        <div className="search-event-row">{content}</div>
+      )}
+    </section>
+  );
+}
+
+function TopicClipResultRow({
+  result,
+  onPlay
+}: {
+  result: SearchClipResult;
+  onPlay: () => void;
+}) {
+  const party = PARTIES[result.partyAtSpeech];
+  return (
+    <article className="topic-result-row"
+      aria-labelledby={`topic-title-${result.clip.id}`}
+      role="link"
+      tabIndex={0}
+      onClick={onPlay}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          onPlay();
+        }
+      }}
+    >
+      <div className="topic-result-thumb">
+        <img src={result.clip.thumbUrl} alt="" loading="lazy" />
+        <span>{formatDuration(result.clip.durationS)}</span>
+      </div>
+      <div className="topic-result-copy">
+        <h3 id={`topic-title-${result.clip.id}`}>{result.clip.title}</h3>
+        <div className="topic-result-byline">
+          <i style={{ background: party.color }} aria-hidden="true" />
+          <span>{result.speakerNameAtSpeech}</span>
+          <b>· {result.partyAtSpeech === "NONE" ? "Partilös" : result.partyAtSpeech}</b>
+        </div>
+        <div className="topic-result-source">
+          {formatDate(result.clip.debateDate)} · {result.clip.sourceTitle}
+        </div>
+        <p>“{result.matchExcerpt}”</p>
+      </div>
+    </article>
+  );
+}
+
+function TopicSearchResultsSkeleton() {
+  return (
+    <div className="topic-results-skeleton" role="status" aria-label="Söker i klippen">
+      <span className="sr-only">Söker i klippen…</span>
+      <div className="topic-skeleton-heading skeleton-shape" aria-hidden="true" />
+      {Array.from({ length: 3 }, (_, index) => (
+        <div className="topic-skeleton-row" aria-hidden="true" key={index}>
+          <span className="skeleton-shape" />
+          <div>
+            <span className="skeleton-shape" />
+            <span className="skeleton-shape" />
+            <span className="skeleton-shape" />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 

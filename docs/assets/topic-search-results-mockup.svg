@@ -1,0 +1,227 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="844" viewBox="0 0 390 844" role="img" aria-labelledby="title desc">
+  <title id="title">Pleni search results concept for Magdalena Andersson skatter 2017</title>
+  <desc id="desc">A light mobile search page with a search field, party filters, a politician result, relevant parliamentary video clips, and Pleni bottom navigation.</desc>
+
+  <defs>
+    <linearGradient id="thumb1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d7b294"/>
+      <stop offset="0.5" stop-color="#9a6f58"/>
+      <stop offset="1" stop-color="#55382f"/>
+    </linearGradient>
+    <linearGradient id="thumb2" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#d5c2ad"/>
+      <stop offset="0.55" stop-color="#85715f"/>
+      <stop offset="1" stop-color="#342e2b"/>
+    </linearGradient>
+    <linearGradient id="thumb3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c7b7a6"/>
+      <stop offset="0.45" stop-color="#746050"/>
+      <stop offset="1" stop-color="#252525"/>
+    </linearGradient>
+    <linearGradient id="navFade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.86"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.98"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="7" stdDeviation="9" flood-color="#18181b" flood-opacity="0.08"/>
+    </filter>
+    <clipPath id="clip1"><rect x="16" y="333" width="84" height="112" rx="12"/></clipPath>
+    <clipPath id="clip2"><rect x="16" y="463" width="84" height="112" rx="12"/></clipPath>
+    <clipPath id="clip3"><rect x="16" y="593" width="84" height="112" rx="12"/></clipPath>
+  </defs>
+
+  <rect width="390" height="844" fill="#ffffff"/>
+
+  <!-- Search header: based on the current Pleni search implementation -->
+  <rect x="0" y="0" width="390" height="145" fill="#fafaf9"/>
+  <rect x="0" y="144" width="390" height="1" fill="#ececea"/>
+  <g transform="translate(16 13)">
+    <rect width="358" height="48" rx="14" fill="#f2f3f5" stroke="#e6e7e9"/>
+    <g transform="translate(15 14)" fill="none" stroke="#8d8e88" stroke-width="1.8" stroke-linecap="round">
+      <circle cx="8" cy="8" r="6"/>
+      <path d="M12.4 12.4 17 17"/>
+    </g>
+    <text x="44" y="29" fill="#18181b" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="14.2" font-weight="500">magdalena andersson skatter 2017</text>
+    <circle cx="336" cy="24" r="11" fill="#e7e7e7"/>
+    <path d="M332.5 20.5 339.5 27.5M339.5 20.5 332.5 27.5" stroke="#777970" stroke-width="1.45" stroke-linecap="round"/>
+  </g>
+
+  <g font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13" font-weight="700">
+    <rect x="16" y="73" width="59" height="34" rx="17" fill="#18181b"/>
+    <circle cx="33" cy="90" r="3.5" fill="#c4c4bd"/>
+    <text x="44" y="94" fill="#ffffff">Alla</text>
+
+    <rect x="83" y="73" width="47" height="34" rx="17" fill="#fff" stroke="#e5e5e1"/>
+    <circle cx="99" cy="90" r="3.5" fill="#e8112d"/>
+    <text x="110" y="94" fill="#292925">S</text>
+
+    <rect x="138" y="73" width="49" height="34" rx="17" fill="#fff" stroke="#e5e5e1"/>
+    <circle cx="154" cy="90" r="3.5" fill="#3e9fd1"/>
+    <text x="165" y="94" fill="#292925">M</text>
+
+    <rect x="195" y="73" width="57" height="34" rx="17" fill="#fff" stroke="#e5e5e1"/>
+    <circle cx="211" cy="90" r="3.5" fill="#b99a00"/>
+    <text x="222" y="94" fill="#292925">SD</text>
+
+    <rect x="260" y="73" width="48" height="34" rx="17" fill="#fff" stroke="#e5e5e1"/>
+    <circle cx="276" cy="90" r="3.5" fill="#009933"/>
+    <text x="287" y="94" fill="#292925">C</text>
+
+    <rect x="316" y="73" width="47" height="34" rx="17" fill="#fff" stroke="#e5e5e1"/>
+    <circle cx="332" cy="90" r="3.5" fill="#af0000"/>
+    <text x="343" y="94" fill="#292925">V</text>
+  </g>
+
+  <!-- Interpreted query tokens -->
+  <text x="18" y="129" fill="#9a9fa7" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="9.5" font-weight="800" letter-spacing="0.9">TOLKAT SOM</text>
+  <g font-family="Inter, Segoe UI, Arial, sans-serif" font-size="10.5" font-weight="650">
+    <text x="91" y="129" fill="#5e6167">Person · Magdalena Andersson</text>
+    <circle cx="240" cy="126" r="1.5" fill="#b7b8b4"/>
+    <text x="247" y="129" fill="#5e6167">Ämne · skatter</text>
+    <circle cx="327" cy="126" r="1.5" fill="#b7b8b4"/>
+    <text x="334" y="129" fill="#5e6167">2017</text>
+  </g>
+
+  <!-- Politician destination -->
+  <g font-family="Inter, Segoe UI, Arial, sans-serif">
+    <text x="18" y="171" fill="#9a9fa7" font-size="10.5" font-weight="800" letter-spacing="0.9">POLITIKER</text>
+    <text x="337" y="171" fill="#7f848c" font-size="11.5" font-weight="700">1 träff</text>
+    <g filter="url(#softShadow)">
+      <rect x="16" y="182" width="358" height="72" rx="16" fill="#ffffff" stroke="#e8e8e5"/>
+    </g>
+    <circle cx="53" cy="218" r="23" fill="#fde9ec" stroke="#f7cdd3"/>
+    <text x="53" y="223" text-anchor="middle" fill="#a20c22" font-size="13.5" font-weight="800">MA</text>
+    <circle cx="70" cy="234" r="8.5" fill="#e8112d" stroke="#ffffff" stroke-width="2"/>
+    <text x="70" y="237.5" text-anchor="middle" fill="#ffffff" font-size="7.2" font-weight="850">S</text>
+    <text x="89" y="213" fill="#18181b" font-size="14.5" font-weight="800">Magdalena Andersson</text>
+    <text x="89" y="233" fill="#79796f" font-size="12">Socialdemokraterna · Partiledare</text>
+    <path d="m348 212 6 6-6 6" fill="none" stroke="#9a9a92" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Contextual video results -->
+  <g font-family="Inter, Segoe UI, Arial, sans-serif">
+    <text x="18" y="290" fill="#9a9fa7" font-size="10.5" font-weight="800" letter-spacing="0.9">KLIPP OM SKATTER FRÅN 2017</text>
+    <text x="18" y="312" fill="#79796f" font-size="11.5" font-weight="600">Mest relevanta först · 12 träffar</text>
+    <rect x="291" y="281" width="83" height="30" rx="15" fill="#ffffff" stroke="#e5e5e1"/>
+    <path d="m305 292 0 8 7-4z" fill="#18181b"/>
+    <text x="318" y="300" fill="#292925" font-size="11.5" font-weight="750">Spela alla</text>
+  </g>
+
+  <!-- Result 1 thumbnail -->
+  <g clip-path="url(#clip1)">
+    <rect x="16" y="333" width="84" height="112" fill="url(#thumb1)"/>
+    <rect x="16" y="333" width="84" height="36" fill="#ead8c4" opacity="0.45"/>
+    <rect x="22" y="372" width="72" height="55" rx="3" fill="#6c4436" opacity="0.7"/>
+    <ellipse cx="58" cy="371" rx="13" ry="15" fill="#e0b69d"/>
+    <path d="M42 431c1-28 8-44 16-44s15 16 16 44" fill="#27262b"/>
+    <path d="M51 387h14l-7 12z" fill="#f4f0eb"/>
+    <rect x="49" y="406" width="18" height="3" rx="1.5" fill="#a7775e"/>
+    <rect x="16" y="333" width="84" height="112" fill="#18181b" opacity="0.04"/>
+  </g>
+  <rect x="62" y="418" width="31" height="20" rx="6" fill="#18181b" fill-opacity="0.86"/>
+  <text x="77.5" y="432" text-anchor="middle" fill="#fff" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="9.5" font-weight="750">0:48</text>
+  <circle cx="58" cy="389" r="13" fill="#ffffff" fill-opacity="0.9"/>
+  <path d="m55 383 0 12 9-6z" fill="#18181b"/>
+
+  <g font-family="Inter, Segoe UI, Arial, sans-serif">
+    <text x="116" y="351" fill="#18181b" font-size="14.8" font-weight="810" letter-spacing="-0.15">
+      <tspan x="116" dy="0">Skatterna ska finansiera</tspan>
+      <tspan x="116" dy="18">en stark gemensam välfärd</tspan>
+    </text>
+    <circle cx="120" cy="393" r="3.5" fill="#e8112d"/>
+    <text x="129" y="397" fill="#545651" font-size="11.1" font-weight="680">Magdalena Andersson · S</text>
+    <text x="116" y="414" fill="#8a8d87" font-size="10.8">16 nov. 2017 · Finansdebatt</text>
+    <text x="116" y="433" fill="#777a75" font-size="11.5">
+      <tspan x="116" dy="0">“…ett rättvist skattesystem som</tspan>
+      <tspan x="116" dy="15">finansierar jobb, skola och vård.”</tspan>
+    </text>
+  </g>
+  <line x1="116" y1="454" x2="374" y2="454" stroke="#efefec"/>
+
+  <!-- Result 2 thumbnail -->
+  <g clip-path="url(#clip2)">
+    <rect x="16" y="463" width="84" height="112" fill="url(#thumb2)"/>
+    <rect x="23" y="471" width="70" height="29" rx="3" fill="#e8ded2" opacity="0.34"/>
+    <path d="M23 505h70v55H23z" fill="#5e5147" opacity="0.72"/>
+    <ellipse cx="60" cy="500" rx="12" ry="14" fill="#d8b092"/>
+    <path d="M43 565c3-31 8-48 17-48 9 0 15 17 17 48" fill="#4a1721"/>
+    <path d="M53 516h14l-7 13z" fill="#f3eee9"/>
+    <rect x="31" y="478" width="22" height="4" rx="2" fill="#997b66" opacity="0.55"/>
+  </g>
+  <rect x="62" y="548" width="31" height="20" rx="6" fill="#18181b" fill-opacity="0.86"/>
+  <text x="77.5" y="562" text-anchor="middle" fill="#fff" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="9.5" font-weight="750">1:12</text>
+  <circle cx="58" cy="519" r="13" fill="#ffffff" fill-opacity="0.9"/>
+  <path d="m55 513 0 12 9-6z" fill="#18181b"/>
+
+  <g font-family="Inter, Segoe UI, Arial, sans-serif">
+    <text x="116" y="481" fill="#18181b" font-size="14.8" font-weight="810" letter-spacing="-0.15">
+      <tspan x="116" dy="0">Om skattesänkningar och</tspan>
+      <tspan x="116" dy="18">växande ekonomiska klyftor</tspan>
+    </text>
+    <circle cx="120" cy="523" r="3.5" fill="#e8112d"/>
+    <text x="129" y="527" fill="#545651" font-size="11.1" font-weight="680">Magdalena Andersson · S</text>
+    <text x="116" y="544" fill="#8a8d87" font-size="10.8">14 juni 2017 · Ekonomisk politik</text>
+    <text x="116" y="563" fill="#777a75" font-size="11.5">
+      <tspan x="116" dy="0">“…de största skattesänkningarna</tspan>
+      <tspan x="116" dy="15">kan inte gå till dem med mest.”</tspan>
+    </text>
+  </g>
+  <line x1="116" y1="584" x2="374" y2="584" stroke="#efefec"/>
+
+  <!-- Result 3, partially visible above navigation to imply scroll -->
+  <g clip-path="url(#clip3)">
+    <rect x="16" y="593" width="84" height="112" fill="url(#thumb3)"/>
+    <rect x="20" y="603" width="76" height="30" rx="3" fill="#ddd0c4" opacity="0.28"/>
+    <path d="M22 638h74v58H22z" fill="#3b3531" opacity="0.75"/>
+    <ellipse cx="57" cy="631" rx="12" ry="14" fill="#d4ab8c"/>
+    <path d="M40 699c2-29 9-51 17-51s15 22 17 51" fill="#242a31"/>
+    <path d="M50 647h14l-7 13z" fill="#f0ece7"/>
+  </g>
+  <rect x="62" y="678" width="31" height="20" rx="6" fill="#18181b" fill-opacity="0.86"/>
+  <text x="77.5" y="692" text-anchor="middle" fill="#fff" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="9.5" font-weight="750">0:56</text>
+  <circle cx="58" cy="649" r="13" fill="#ffffff" fill-opacity="0.9"/>
+  <path d="m55 643 0 12 9-6z" fill="#18181b"/>
+
+  <g font-family="Inter, Segoe UI, Arial, sans-serif">
+    <text x="116" y="611" fill="#18181b" font-size="14.8" font-weight="810" letter-spacing="-0.15">
+      <tspan x="116" dy="0">Så påverkas kommunerna av</tspan>
+      <tspan x="116" dy="18">förändrade skatteintäkter</tspan>
+    </text>
+    <circle cx="120" cy="653" r="3.5" fill="#e8112d"/>
+    <text x="129" y="657" fill="#545651" font-size="11.1" font-weight="680">Magdalena Andersson · S</text>
+    <text x="116" y="674" fill="#8a8d87" font-size="10.8">7 dec. 2017 · Budgetdebatt</text>
+    <text x="116" y="693" fill="#777a75" font-size="11.5">
+      <tspan x="116" dy="0">“…kommunernas intäkter ska räcka</tspan>
+      <tspan x="116" dy="15">till välfärd i hela landet.”</tspan>
+    </text>
+  </g>
+
+  <!-- Bottom navigation -->
+  <rect x="0" y="778" width="390" height="66" fill="url(#navFade)"/>
+  <line x1="0" y1="778" x2="390" y2="778" stroke="#ededeb"/>
+
+  <g fill="none" stroke="#a8a8a0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M47 804 58 795l11 9v12H51v-12"/>
+    <path d="M54 816v-7h8v7"/>
+    <circle cx="147" cy="801" r="4"/>
+    <circle cx="137" cy="804" r="3.5"/>
+    <circle cx="157" cy="804" r="3.5"/>
+    <path d="M140 816c0-5 3-8 7-8s7 3 7 8M129 816c0-4 3-7 7-7M165 816c0-4-3-7-7-7"/>
+  </g>
+  <g fill="none" stroke="#18181b" stroke-width="1.9" stroke-linecap="round">
+    <circle cx="244" cy="804" r="8"/>
+    <path d="m250 810 6 6"/>
+  </g>
+  <g fill="none" stroke="#a8a8a0" stroke-width="1.8" stroke-linecap="round">
+    <circle cx="341" cy="802" r="6"/>
+    <path d="M329 817c1-6 5-9 12-9s11 3 12 9"/>
+  </g>
+
+  <g font-family="Inter, Segoe UI, Arial, sans-serif" font-size="10" font-weight="650" text-anchor="middle">
+    <text x="58" y="834" fill="#a8a8a0">Hem</text>
+    <text x="147" y="834" fill="#a8a8a0">Följer</text>
+    <text x="244" y="834" fill="#18181b">Sök</text>
+    <text x="341" y="834" fill="#a8a8a0">Profil</text>
+  </g>
+</svg>
+

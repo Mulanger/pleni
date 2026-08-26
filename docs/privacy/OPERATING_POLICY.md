@@ -7,6 +7,29 @@ policy and its production release. It excludes playback history, inference and
 exploration. `VITE_RECOMMENDATIONS_ENABLED=false` is now an emergency kill
 switch rather than the normal release state.
 
+Topic search is separately present behind `VITE_TOPIC_SEARCH_ENABLED=false`.
+Its backend evaluation does not authorise a viewer release.
+
+## Topic-search query handling
+
+- Search text is transient input. Do not add it to URLs, analytics, error logs,
+  local storage, Clerk metadata, database rows, support traces or suggested
+  searches.
+- Do not connect topic queries, result clicks or result-feed playback to an
+  account, advertising id or recommendation profile.
+- Only the residual topic text may be sent to the configured embeddings
+  endpoint. Do not send a Clerk id, IP address, rate-limit HMAC or result click.
+- The public search surface must say that OpenAI helps interpret a submitted
+  topic and ask viewers not to enter personal information.
+- Provider unavailability or a kill switch falls back to keyword search. A
+  nonsense or absent topic must return an honest empty state, not semantically
+  adjacent filler.
+- The OpenAI account's actual regional and retention settings, DPA and
+  subprocessor position must be recorded before the viewer flag can be enabled.
+- Raw queries must not be reused to fine-tune models, create aliases, populate
+  “trending searches” or train a ranking system without a separate inventory,
+  lawful-basis assessment, notice and owner decision.
+
 ## Minors and onboarding (F0-7)
 
 - Public parliamentary video is available without an account or age check.
