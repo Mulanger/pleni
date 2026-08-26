@@ -5337,6 +5337,66 @@ Markdown report.
 - `judgments.json` is untouched and still 0/36 manually complete. Do not grade
   it, and do not ask the owner to.
 
+## OPT2 production release — DEPLOYED 2026-08-26
+
+**Released:** owner approval was recorded in the session before any production
+write. `029_search_candidate_admission.up.sql` was applied through the checksum
+ledger; migrations 001–028 all reported `already-applied`. The `clip-search`
+Edge Function was then deployed from candidate commit `af8238a` with
+`verify_jwt=false`, matching the existing public anonymous configuration.
+
+**Exact live Function:** Supabase project `nlooigmwuqqhhnontlgp`, Function id
+`51f63fc5-564b-42ca-8846-b6d9c4e0595f`, version **7**, bundle SHA-256
+`4c2c2046550777188e3893a410301add7c519eb094cfebf3f1d2e014ce44aee0`, updated
+`2026-08-26T21:35:47.614Z`. Public responses report
+`searchVersion=pleni-search-v3`.
+
+**Pre-release tests:** `C:\WINDOWS\py.exe -3.12 tasks.py test lint typecheck`
+— **501 passed**, 79 deselected, Ruff clean and mypy clean over 83 source files.
+Edge tests — **123 passed, 0 failed**. `git diff --check af8238a^ af8238a`
+passed. The only untracked worktree file was `.claude/settings.local.json`; it
+was not staged or committed.
+
+**Post-migration contract:**
+`pytest tests/live/test_topic_search_rpc.py -m live -q` — **5 passed**. This
+proved 029 is present, v3 is service-only, v2 remains callable, both versions
+keep the same private envelope, the materialized catalogue still matches live
+entities and rate-limit storage still cannot retain query/address data.
+
+**Public live probes:** all returned HTTP 200, `pleni-search-v3` and hybrid
+mode.
+
+| Query | Results | Acceptance |
+|---|---:|---|
+| `elsparkcyklar` | 6 | first result remains “6 500 skadades i olyckor med elsparkcyklar”; all three known elflyg ids absent |
+| `elsparkcykel 30 mars` | 2 | broadened from 30 March; every result is dated 22 June 2026; all three known elflyg ids absent |
+| `elsparkcykel 22 juni` | 2 | exact-date results only; no broadening notice |
+| `trafiksäkerhet för små elektriska hyrfordon` | 6 | descriptive semantic query remains non-empty |
+| `bananministeriet på månen` | 0 | negative remains empty |
+| `kvantdatorer på varje förskola` | 0 | negative remains empty |
+
+The first request included a 5,886 ms cold path; the five following requests
+were 779–1,291 ms. This release does not claim the separate broad latency gate
+is closed.
+
+**Operational rollback:** keep migration 029 applied; it is additive and v2
+remains deployed. From a temporary checkout of rollback commit `16a4887`, run:
+
+```powershell
+git worktree add ..\pleni-search-v2-rollback 16a4887
+cd ..\pleni-search-v2-rollback
+npx supabase functions deploy clip-search --project-ref nlooigmwuqqhhnontlgp --no-verify-jwt
+```
+
+Then verify a public response reports `searchVersion=pleni-search-v2`. No SQL
+rollback is needed for an incident. The reviewed down migration exists only for
+later schema cleanup and drops v3 without touching v2.
+
+**Blocked / needs a decision:** none for the OPT2 release. OPT3 remains a
+separate chunk. The 36-query human-judgment programme remains intentionally
+unused and is not a prerequisite for continuing the finished optimization
+roadmap.
+
 ## OPT2 — Ranking v3 with candidate-level admission — DONE 2026-08-26
 
 **Built:** the additive migration pair `migrations/029_search_candidate_admission.{up,down}.sql`

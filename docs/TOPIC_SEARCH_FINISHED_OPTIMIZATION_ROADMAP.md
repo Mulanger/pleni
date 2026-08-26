@@ -283,7 +283,7 @@ recorded as forbidden scooter examples and as a known open defect owned by OPT2.
 
 ## OPT2 — Ranking v3 with candidate-level admission
 
-**Status:** DONE 2026-08-26, offline only; deploy still needs owner authority.
+**Status:** DEPLOYED 2026-08-26 after explicit owner approval.
 **Size:** large. **Depends on:** OPT1.
 
 ### Objective
@@ -388,7 +388,9 @@ Do not ask the owner to grade 385 rows and do not add aliases or training data.
 
 ### Delivered 2026-08-26
 
-**Status:** DONE, offline only. Nothing is deployed and nothing is pushed.
+**Status:** DONE. The implementation described below was first completed and
+tested offline, then released after explicit owner approval; see the production
+record at the end of this chunk.
 
 Implemented as the additive migration pair `029_search_candidate_admission`,
 candidate-admission constants and a mirrored predicate in
@@ -441,29 +443,38 @@ Every top-five position is byte-identical before and after in all eight captured
 searches: only tail candidates were removed, and no keyword-matched candidate
 was dropped anywhere in the grid.
 
-**Still blocked, not worked around.** `elsparkcykel`, `elsparkcykel 30 mars` and
-`elsparkcykel 22 juni` remain `blocked_needs_capture`. OPT2 was explicitly
-instructed to make no live or OpenAI call, so the capture that would resolve
-them was not produced and their date gates stay honestly unproven. Gate 5 was
-verified instead against the captured `elsparkcyklar` run, which is the only
-scooter search the frozen capture can evidence and the run the three false
-positives were originally identified from.
+**Offline capture limitation.** The original smoke artifact still marks
+`elsparkcykel`, `elsparkcykel 30 mars` and `elsparkcykel 22 juni` as
+`blocked_needs_capture`; OPT2 implementation did not rewrite historical capture
+evidence. The later owner-authorised production release tested those three
+behaviours directly and recorded the results below.
 
 **Not changed:** the public `clip-search-v1` response shape, embedding
 dimensions, index contents, frontend code, `src/contracts.py`, migrations
 022-028, the 36-query fixture and `judgments.json` (still 0/36 and not to be
 graded), user query logs, secrets and provider settings.
 
-**Deployment is a separate owner-authorised step.** Applying `029` and deploying
-the Edge Function were prepared and tested locally only. The operational
-rollback is redeploying the previous Edge commit, which calls v2; `029`'s down
-migration drops v3 alone and leaves v2 intact.
+### Production record 2026-08-26
+
+Migration 029 is applied. `clip-search` Function version 7 was deployed from
+commit `af8238a` with bundle SHA-256
+`4c2c2046550777188e3893a410301add7c519eb094cfebf3f1d2e014ce44aee0` and
+returns `searchVersion=pleni-search-v3`.
+
+Public live acceptance passed for the plain scooter query, empty 30 March date
+broadening, exact 22 June filtering, the descriptive scooter query and both
+negative probes. The three known elflyg ids were absent. The exact counts and
+timings are recorded in `PROGRESS.md`.
+
+Operational rollback is redeploying `clip-search` from commit `16a4887`, which
+calls v2. Keep 029 applied during an incident; v2 remains callable and no SQL
+rollback is required. The down migration drops v3 alone if later schema cleanup
+is separately reviewed.
 
 
 ## OPT3 — Intent and filter correctness hardening
 
-**Status:** PLANNED. **Size:** medium. **Depends on:** OPT2 (delivered offline;
-OPT3 does not require the v3 deploy to have happened).
+**Status:** PLANNED. **Size:** medium. **Depends on:** OPT2 (deployed).
 
 ### Objective
 

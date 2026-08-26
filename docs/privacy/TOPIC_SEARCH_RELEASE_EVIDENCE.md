@@ -323,3 +323,34 @@ alone. `search_clip_candidates_v2` and migrations 022-028 are untouched, so the
 operational rollback is redeploying the previous Edge Function commit, which
 calls v2. The v2 response envelope is unchanged, and an Edge test asserts the
 handler still accepts it.
+
+## OPT2 production release (2026-08-26)
+
+The owner explicitly approved applying migration 029, deploying and verifying
+`clip-search`, pushing the result to `main`, and documenting rollback. Migration
+029 was applied through the checksum ledger after 001–028 all matched their
+recorded checksums.
+
+Supabase reports `clip-search` Function version 7, Function id
+`51f63fc5-564b-42ca-8846-b6d9c4e0595f`, bundle SHA-256
+`4c2c2046550777188e3893a410301add7c519eb094cfebf3f1d2e014ce44aee0`, updated
+`2026-08-26T21:35:47.614Z`, with `verify_jwt=false`. The candidate source commit
+is `af8238a`, and public responses report `pleni-search-v3`.
+
+Five read-only production RPC contract tests passed. Six public probes then
+returned HTTP 200 in hybrid mode: the plain scooter query returned six results;
+the empty 30 March query broadened to two results from 22 June only; the exact
+22 June query returned two results without broadening; the descriptive scooter
+query returned six; both negative phrases returned zero. None of the three
+known elflyg ids appeared. Only counts, dates, identifiers and short public
+titles were retained in the handoff; no embedding, provider response, address,
+credential or full transcript was recorded.
+
+The first request measured 5,886 ms and the five warm requests measured
+779–1,291 ms. These observations verify behavior, not the separate p95 latency
+gate.
+
+Operational rollback keeps 029 applied and redeploys `clip-search` from commit
+`16a4887`, which calls v2. The exact command is recorded in `PROGRESS.md`. The
+down migration is not part of incident rollback and would require separate
+review.
