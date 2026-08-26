@@ -76,6 +76,13 @@ export interface SearchEventDestination {
   clipCount: number;
 }
 
+export interface SearchDateBroadening {
+  kind: "date";
+  label: string;
+  from: string;
+  to: string;
+}
+
 /** Structurally mirrors the public `ClipItem` consumed by the existing feed. */
 export interface SearchClipPayload {
   id: string;
@@ -125,6 +132,7 @@ export interface ClipSearchResponse {
   };
   event: SearchEventDestination | null;
   results: SearchClipResult[];
+  dateBroadening?: SearchDateBroadening | null;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -322,6 +330,18 @@ function validateEvent(value: unknown): void {
   nonNegativeIntegerAt(event.clipCount, `${path}.clipCount`);
 }
 
+function validateDateBroadening(value: unknown): void {
+  if (value === undefined || value === null) return;
+  const path = "response.dateBroadening";
+  const broadening = objectAt(value, path);
+  exactKeys(broadening, ["kind", "label", "from", "to"], [], path);
+  if (broadening.kind !== "date") fail(`${path}.kind`, "must be date");
+  stringAt(broadening.label, `${path}.label`);
+  const from = isoDateAt(broadening.from, `${path}.from`);
+  const to = isoDateAt(broadening.to, `${path}.to`);
+  if (from > to) fail(path, "must have from on or before to");
+}
+
 function validateClip(value: unknown, path: string): void {
   const clip = objectAt(value, path);
   const required = [
@@ -370,7 +390,7 @@ function validateResult(value: unknown, index: number): void {
 
 export function parseClipSearchResponse(value: unknown): ClipSearchResponse {
   const response = objectAt(value, "response");
-  exactKeys(response, ["mode", "searchVersion", "indexVersion", "interpretation", "event", "results"], [], "response");
+  exactKeys(response, ["mode", "searchVersion", "indexVersion", "interpretation", "event", "results"], ["dateBroadening"], "response");
   const mode = stringAt(response.mode, "response.mode") as SearchMode;
   if (!SEARCH_MODES.has(mode)) fail("response.mode", "is unsupported");
   stringAt(response.searchVersion, "response.searchVersion");
@@ -387,6 +407,7 @@ export function parseClipSearchResponse(value: unknown): ClipSearchResponse {
   }
   validateAmbiguity(interpretation.ambiguity);
   validateEvent(response.event);
+  validateDateBroadening(response.dateBroadening);
 
   const results = arrayAt(response.results, "response.results");
   if (results.length > 60) fail("response.results", "must contain at most 60 clips");

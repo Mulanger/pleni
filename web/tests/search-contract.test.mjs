@@ -85,6 +85,30 @@ test("an HTML excerpt is rejected by both response parsers", () => {
   assert.throws(() => parseEdgeResponse(response), { name: "SearchContractError" });
 });
 
+test("date broadening metadata round-trips through both contract copies", () => {
+  const response = structuredClone(fixtures.responses[1]);
+  response.dateBroadening = {
+    kind: "date",
+    label: "30 mars 2026",
+    from: "2026-03-30",
+    to: "2026-03-30",
+  };
+  assert.deepEqual(parseWebResponse(response), response);
+  assert.deepEqual(parseEdgeResponse(response), response);
+});
+
+test("malformed date broadening metadata is rejected", () => {
+  const response = structuredClone(fixtures.responses[1]);
+  response.dateBroadening = {
+    kind: "date",
+    label: "30 mars 2026",
+    from: "2026-02-30",
+    to: "2026-02-30",
+  };
+  assert.throws(() => parseWebResponse(response), { name: "SearchContractError" });
+  assert.throws(() => parseEdgeResponse(response), { name: "SearchContractError" });
+});
+
 test("topic search is production-on and keeps an explicit kill switch", () => {
   assert.equal(topicSearchEnabled, false);
   assert.equal(topicSearchEnabledFrom(undefined), false);

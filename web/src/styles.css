@@ -1648,7 +1648,8 @@ a {
   color: var(--muted-2);
 }
 
-.topic-search-fallback {
+.topic-search-fallback,
+.topic-search-relaxation {
   padding: 10px 12px;
   border-left: 2px solid #b8b9b4;
   background: #f7f7f5;

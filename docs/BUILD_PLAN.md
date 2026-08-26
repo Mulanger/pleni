@@ -1712,6 +1712,30 @@ unchanged. Loading shows a compact visible spinner and status copy above the
 existing skeleton, with reduced-motion support. Edge/frontend tests,
 TypeScript, build/PWA checks, Function deployment and live interpretation pass.
 
+## UI16.14 — Automatic date broadening for empty topic searches — DONE 2026-08-26
+
+**Depends on:** UI16.13. **Size:** small.
+
+**Objective:** keep exact date interpretation authoritative while automatically
+showing relevant topic clips from other dates when the exact date has no
+matches, with an explicit server-provided explanation.
+
+**Scope — may modify:** the shared `clip-search-v1` response contract and its
+Edge/browser parsers; the Edge search handler and focused tests; `web/src/App.tsx`,
+`web/src/styles.css` and focused frontend tests; topic-search documentation and
+`PROGRESS.md`. **Must not modify:** database schema, ranking thresholds,
+embeddings, indexing, player/PWA media behavior, pipeline stages or
+`src/contracts.py`.
+
+**Acceptance:** an exact date query is attempted first; an empty topic-plus-date
+query retries candidate retrieval with only the date removed, reusing the same
+embedding and preserving person, party and verified-event filters. Date-only
+queries never broaden. The response omits the relaxed date facet and includes
+validated date-broadening metadata; the frontend displays a concise Swedish
+notice and no extra user action is required. Exact matches and existing topic,
+identity and provider-fallback behavior remain unchanged. Edge/frontend tests,
+TypeScript, production build, deployment and live probes pass.
+
 ---
 
 ## Phase 2 backlog (not chunked yet)

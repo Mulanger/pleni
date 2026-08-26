@@ -5140,3 +5140,51 @@ remain outside this chunk.
 **Next agent should know:** keep date filtering tied to `sources.debate_date`,
 not clip publication time. If month-only or relative dates are later added,
 version them with explicit fixtures instead of weakening the exact-day rule.
+
+## UI16.14 — Automatic date broadening for empty topic searches — DEPLOYED 2026-08-26
+
+**Built:** Added optional `dateBroadening` metadata to the mirrored
+`clip-search-v1` response contract. The Edge handler now tries the exact date
+first and, only when a topic-plus-date query has no results, repeats candidate
+retrieval with the date removed. The same embedding and all person, party and
+verified-event/source filters are retained. The result UI omits the relaxed date
+facet and shows `Inga klipp hittades den <datum>. Visar relevanta klipp från
+andra datum.`. Date-only and disabled-date searches never broaden.
+
+**Tests:** all **108 Edge tests** and **70 frontend tests** pass. Edge/browser
+contract fixtures cover valid and malformed broadening metadata; focused handler
+tests cover exact hits, empty-date fallback, identity/event preservation,
+disabled dates and provider keyword fallback. Frontend TypeScript, production
+Vite build, PWA verification (9 app-shell entries, no video/private data) and
+`git diff --check` pass. The Python gate was not rerun because this workstation
+does not expose an installed project Python runtime; no Python files changed.
+
+**Contracts touched:** optional `dateBroadening` in `clip-search-v1`, mirrored
+byte-identically in the Edge and browser parsers. `src/contracts.py` unchanged.
+
+**Database state:** no migrations, tables, indexes or RPC signatures changed.
+
+**Deployment state:** the updated `clip-search` Edge Function was deployed with
+the existing JWT-verification setting; the frontend commit was pushed to
+`origin/main` for InstaPods auto-deploy. Live exact-date and broadened-date
+probes passed.
+
+**Index state:** unchanged from UI16.13: 3,188/3,188 keyword documents and
+3,188/3,188 current semantic documents, 4,160 current chunks, zero reviewed
+semantic exceptions, index version `openai:text-embedding-3-large:1024:v1`.
+
+**Decisions made:** unqualified day–month phrases remain exact dates in the
+current UTC year. Automatic broadening is transparent, removes only the date,
+and runs only when a topic remains and the exact candidate set is empty. The
+response explicitly records the original date so the browser never reinterprets
+the query.
+
+**Observations (not fixed, out of scope):** month-only and relative-date
+phrases remain unsupported; exact date searches with no topic remain bounded
+and empty by design.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** test `elsparkcyklar 30 mars` for broad results with
+the notice, `elsparkcyklar 22 juni` for exact-date results without it, and
+`elsparkcyklar` for the unchanged all-date search.

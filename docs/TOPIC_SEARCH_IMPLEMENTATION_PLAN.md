@@ -1,13 +1,13 @@
 # UI16 — Interpretable Hybrid Topic and Event Search
 
-**Status:** UI16.0–UI16.13 are deployed. Topic/video results are part of the
+**Status:** UI16.0–UI16.14 are deployed. Topic/video results are part of the
 normal public Search tab; no sign-in or special URL is required.
 **Last updated:** 2026-08-26.
 **Owner-approved direction:** preserve the current live party/politician search and
 add contextual search over published clips, including the visible **“Tolkat som”**
 interpretation shown in the mockup below.
 
-This document is the detailed implementation source of truth for UI16; all fourteen
+This document is the detailed implementation source of truth for UI16; all fifteen
 bounded scopes are also registered in `docs/BUILD_PLAN.md`. It is intentionally
 detailed because future coding agents implement one chunk at a time and do not
 share conversation memory.
@@ -267,6 +267,13 @@ type SearchClipResult = {
   matchKind: "keyword" | "context" | "both" | "filtered";
 };
 
+type SearchDateBroadening = {
+  kind: "date";
+  label: string;
+  from: string;
+  to: string;
+};
+
 type ClipSearchResponse = {
   mode: "hybrid" | "keyword_fallback" | "filtered";
   searchVersion: string;
@@ -281,6 +288,7 @@ type ClipSearchResponse = {
   };
   event: SearchEventDestination | null;
   results: SearchClipResult[];
+  dateBroadening?: SearchDateBroadening | null;
 };
 ```
 
@@ -321,6 +329,10 @@ lookup key, but never as the canonical name.
   that year. The result is then honestly empty.
 - A valid Swedish day–month is an exact date facet. Impossible dates such as
   `31 februari` remain topic text; the interpreter must not silently repair them.
+- If an exact date plus topic returns no clips, the server automatically retries
+  with only the date removed, preserves any person/party/event filters, omits the
+  date from the applied facets and reports the original date in explicit
+  date-broadening metadata. Date-only queries never broaden.
 - An event requires a verified event/source record. Semantic similarity to a
   title alone is insufficient to apply a strict event filter.
 - If an event alias has several occurrences and no date resolves it, return
@@ -336,7 +348,7 @@ lookup key, but never as the canonical name.
 | `magdalena andersson skatter 2017` | Person · Magdalena Andersson; Ämne · skatter; År · 2017 | strict person/year filters; hybrid rank by tax relevance |
 | `elsparkcyklar` | Ämne · elsparkcyklar | hybrid results across all people, parties and dates |
 | `elsparkcyklar 2021` | Ämne · elsparkcyklar; År · 2021 | hybrid topic retrieval inside 2021 |
-| `elsparkcyklar 30 mars` | Ämne · elsparkcyklar; Datum · 30 mars in the current UTC year | exact debate-date filter; honestly empty when no matching source exists |
+| `elsparkcyklar 30 mars` | Ämne · elsparkcyklar after automatic broadening | exact date is tried first; if empty, relevant topic clips from other dates are shown with a clear notice |
 | `budgetdebatten 2022` | Händelse · Budgetdebatten; År · 2022 | verified event destination plus clips mapped to that event |
 | `Northvolt konkurs` | Ämne · Northvolt konkurs | topic search unless a verified Pleni event exists |
 | `S skatter` | Parti · Socialdemokraterna; Ämne · skatter | historical speech-party filter plus topic retrieval |
@@ -713,6 +725,7 @@ checks and append the handoff template from this document.
 | UI16.7 | relevance-feed handoff and session restoration | UI16.6 | medium | DONE 2026-08-25 |
 | UI16.8 | relevance evaluation, privacy gate and controlled release | all previous | large | IMPLEMENTED / RELEASE BLOCKED |
 | UI16.9 | no-filler relevance, latency and evaluation closeout | UI16.8 evidence | medium | BACKEND DEPLOYED / RELEASE BLOCKED |
+| UI16.14 | automatic date broadening for empty topic searches | UI16.13 | small | DONE 2026-08-26 |
 
 ### UI16.0 — Gate, file ownership and interface fixtures
 

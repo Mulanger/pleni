@@ -79,6 +79,7 @@ test("uses the request year for an unqualified Swedish day-month filter", async 
   const body = await response.json();
 
   assert.equal(response.status, 200);
+  assert.equal(body.dateBroadening, null);
   assert.deepEqual(
     body.interpretation.facets.map((facet: { kind: string; label: string }) => [
       facet.kind,
@@ -92,6 +93,90 @@ test("uses the request year for an unqualified Swedish day-month filter", async 
   assert.equal(fake.searches[0].topic, "elsparkcyklar");
   assert.equal(fake.searches[0].dateFrom, "2026-03-30");
   assert.equal(fake.searches[0].dateTo, "2026-03-30");
+});
+
+test("automatically broadens an empty date filter without re-embedding", async () => {
+  const fake = fakeDependencies({
+    candidateFor: (search) =>
+      search.dateFrom === "2026-03-30" ? envelope(null, true) : envelope(RESULT, true),
+  });
+  const dependencies: ClipSearchDependencies = {
+    ...fake.dependencies,
+    now: () => new Date("2026-08-26T12:00:00Z"),
+  };
+  const response = await handler(dependencies)(request("elsparkcyklar 30 mars"));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.results.length, 1);
+  assert.deepEqual(body.interpretation.facets.map((facet: { kind: string }) => facet.kind), ["topic"]);
+  assert.deepEqual(body.dateBroadening, {
+    kind: "date",
+    label: "30 mars 2026",
+    from: "2026-03-30",
+    to: "2026-03-30",
+  });
+  assert.equal(fake.searches.length, 2);
+  assert.equal(fake.searches[0].dateFrom, "2026-03-30");
+  assert.equal(fake.searches[1].dateFrom, null);
+  assert.equal(fake.searches[1].dateTo, null);
+  assert.equal(fake.searches[1].politicianId, null);
+  assert.equal(fake.embeddedTopics.length, 1);
+});
+
+test("date broadening preserves person, party and verified event constraints", async () => {
+  const fake = fakeDependencies({
+    candidateFor: (search) =>
+      search.dateFrom === "2022-01-01" ? envelope(null, true) : envelope(RESULT, true),
+  });
+  const response = await handler(fake.dependencies)(
+    request("Magdalena Andersson S budgetdebatten elsparkcyklar 2022"),
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.dateBroadening.label, "2022");
+  assert.deepEqual(body.interpretation.facets.map((facet: { kind: string }) => facet.kind), ["person", "party", "event", "topic"]);
+  assert.equal(fake.searches.length, 2);
+  assert.equal(fake.searches[0].sourceIds?.[0], SOURCE_ID);
+  assert.equal(fake.searches[1].sourceIds?.[0], SOURCE_ID);
+  assert.equal(fake.searches[0].politicianId, MAGDALENA_ID);
+  assert.equal(fake.searches[1].politicianId, MAGDALENA_ID);
+  assert.equal(fake.searches[0].party, "S");
+  assert.equal(fake.searches[1].party, "S");
+  assert.equal(fake.searches[1].dateFrom, null);
+  assert.equal(fake.searches[1].dateTo, null);
+});
+
+test("disabled date facets never trigger automatic broadening", async () => {
+  const fake = fakeDependencies({ candidate: envelope(null, true) });
+  const response = await handler(fake.dependencies)(requestWithFacets("elsparkcyklar 30 mars", ["date"]));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.results, []);
+  assert.equal(body.dateBroadening, null);
+  assert.equal(fake.searches.length, 1);
+  assert.equal(fake.searches[0].dateFrom, null);
+});
+
+test("provider failure still broadens with one keyword-only embedding attempt", async () => {
+  const fake = fakeDependencies({
+    embedError: new OpenAIEmbeddingError("provider_timeout", true),
+    candidateFor: (search) =>
+      search.dateFrom === "2026-03-30"
+        ? envelope(null, false)
+        : envelope({ ...RESULT, matchKind: "keyword" }, false),
+  });
+  const response = await handler(fake.dependencies)(request("elsparkcyklar 30 mars"));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.mode, "keyword_fallback");
+  assert.equal(body.results[0].matchKind, "keyword");
+  assert.equal(body.dateBroadening.label, "30 mars 2026");
+  assert.equal(fake.embeddedTopics.length, 1);
+  assert.equal(fake.searches.length, 2);
 });
 
 test("person-only search uses filtered mode without calling OpenAI", async () => {
@@ -390,6 +475,14 @@ function handler(dependencies: ClipSearchDependencies) {
 }
 
 function request(query: string, address = "198.51.100.10"): Request {
+  return requestWithFacets(query, [], address);
+}
+
+function requestWithFacets(
+  query: string,
+  disabledFacets: string[],
+  address = "198.51.100.10",
+): Request {
   return new Request("https://example.test/clip-search", {
     method: "POST",
     headers: {
@@ -397,13 +490,14 @@ function request(query: string, address = "198.51.100.10"): Request {
       "Content-Type": "application/json",
       "X-Forwarded-For": address,
     },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query, ...(disabledFacets.length > 0 ? { disabledFacets } : {}) }),
   });
 }
 
 function fakeDependencies(options: {
   catalog?: unknown;
   candidate?: unknown;
+  candidateFor?: (search: SearchCandidateRequest) => unknown;
   embedError?: OpenAIEmbeddingError;
   requestDecision?: unknown;
 } = {}) {
@@ -451,7 +545,7 @@ function fakeDependencies(options: {
     },
     async searchCandidates(search) {
       searches.push(search);
-      return options.candidate ?? envelope(RESULT, true);
+      return options.candidateFor?.(search) ?? options.candidate ?? envelope(RESULT, true);
     },
     async loadEventDestination(eventId) {
       eventIds.push(eventId);

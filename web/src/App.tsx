@@ -4269,6 +4269,12 @@ function TopicSearchResults({
         </div>
       )}
 
+      {response.dateBroadening && (
+        <div className="topic-search-relaxation" role="status">
+          Inga klipp hittades den {response.dateBroadening.label}. Visar relevanta klipp från andra datum.
+        </div>
+      )}
+
       <section className="topic-clip-section" aria-labelledby="topic-result-heading">
         <div className="topic-result-heading">
           <div>

@@ -4,7 +4,9 @@ import {
   SearchContractError,
   type ClipSearchRequest,
   type ClipSearchResponse,
+  type SearchDateBroadening,
   type SearchEventDestination,
+  type SearchFacet,
 } from "../search-types.ts";
 import { jsonResponse } from "../cors.ts";
 import { OpenAIEmbeddingError } from "./openai.ts";
@@ -194,6 +196,7 @@ export function createClipSearchHandler(
           },
           event: null,
           results: [],
+          dateBroadening: null,
         });
         status = 200;
         return jsonResponse(response, status, cors);
@@ -224,24 +227,51 @@ export function createClipSearchHandler(
         }
       }
 
+      const candidateRequest: SearchCandidateRequest = {
+        topic: interpretation.plan.topic,
+        queryEmbedding,
+        limit,
+        politicianId: interpretation.plan.politicianId,
+        party: interpretation.plan.party,
+        dateFrom: interpretation.plan.dateFrom,
+        dateTo: interpretation.plan.dateTo,
+        sourceIds: interpretation.plan.sourceIds,
+      };
       const retrievalStarted = performance.now();
       const [candidateValue, eventValue] = await Promise.all([
-        dependencies.searchCandidates({
-          topic: interpretation.plan.topic,
-          queryEmbedding,
-          limit,
-          politicianId: interpretation.plan.politicianId,
-          party: interpretation.plan.party,
-          dateFrom: interpretation.plan.dateFrom,
-          dateTo: interpretation.plan.dateTo,
-          sourceIds: interpretation.plan.sourceIds,
-        }),
+        dependencies.searchCandidates(candidateRequest),
         interpretation.plan.eventId
           ? dependencies.loadEventDestination(interpretation.plan.eventId)
           : Promise.resolve(null),
       ]);
+      let candidates = parseCandidateEnvelope(candidateValue);
+      let dateBroadening: SearchDateBroadening | null = null;
+      let facets: SearchFacet[] = interpretation.facets;
+      if (shouldBroadenDate(interpretation.plan, candidates)) {
+        const broadened = parseCandidateEnvelope(
+          await dependencies.searchCandidates({
+            ...candidateRequest,
+            dateFrom: null,
+            dateTo: null,
+          }),
+        );
+        if (broadened.results.length > 0) {
+          candidates = broadened;
+          const dateFacet = interpretation.facets.find(
+            (facet): facet is Extract<SearchFacet, { kind: "date" }> => facet.kind === "date",
+          );
+          if (dateFacet) {
+            dateBroadening = {
+              kind: "date",
+              label: dateFacet.label,
+              from: dateFacet.from,
+              to: dateFacet.to,
+            };
+            facets = interpretation.facets.filter((facet) => facet.kind !== "date");
+          }
+        }
+      }
       retrievalMs = elapsedMs(retrievalStarted);
-      const candidates = parseCandidateEnvelope(candidateValue);
       mode = interpretation.plan.topic
         ? providerFallback || !candidates.semanticAvailable
           ? "keyword_fallback"
@@ -253,11 +283,12 @@ export function createClipSearchHandler(
         searchVersion: SEARCH_RANKING_VERSION,
         indexVersion: candidates.indexVersion,
         interpretation: {
-          facets: interpretation.facets,
+          facets,
           ambiguity: interpretation.ambiguity,
         },
         event: parseEventDestination(eventValue),
         results: candidates.results,
+        dateBroadening,
       });
       resultCount = response.results.length;
       status = 200;
@@ -288,6 +319,18 @@ export function createClipSearchHandler(
       });
     }
   };
+}
+
+function shouldBroadenDate(
+  plan: { topic: string | null; dateFrom: string | null; dateTo: string | null },
+  candidates: SearchCandidateEnvelope,
+): boolean {
+  return (
+    candidates.results.length === 0 &&
+    plan.topic !== null &&
+    plan.dateFrom !== null &&
+    plan.dateTo !== null
+  );
 }
 
 function parsePreparedRequest(value: unknown): PreparedSearchRequestEnvelope {
