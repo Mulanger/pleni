@@ -167,3 +167,159 @@ header, so browsers blocked a healthy endpoint response. UI16.12 commit
 deployed and verified with a 204 preflight explicitly allowing
 `apikey, content-type, x-client-info`, followed by a 200 public query returning
 ten `elsparkcyklar` results.
+
+## OPT1 lean automatic smoke baseline — 2026-08-26
+
+`scripts/evaluate_topic_search.py smoke` replays ten committed Swedish phrases
+against the frozen 2026-08-25 capture and writes
+`test_outputs/topic_search_smoke_baseline.md`.
+
+**This is engineering smoke evidence, not human-validated relevance evidence.**
+It records observable retrieval behavior only. It creates no relevance grade, no
+nDCG, no precision and no human denominator, and it does not change the
+judgment status recorded above: `judgments.json` remains 0/36 manually complete
+and the owner has no review action. The ten phrases are regression test data.
+They are never derived from logged user searches, the live endpoint never reads
+them, and they are not a topic whitelist, a synonym table, a list of permitted
+searches, training data or a ranking input.
+
+Result on the frozen capture: **7 pass, 0 fail, 3 blocked** of 10.
+
+| Phrase | Expectation | Result |
+|---|---|---|
+| `elsparkcykel` | non-empty | blocked, no capture for this exact phrase |
+| `elsparkcykel 30 mars` | broadens, excludes the requested date | blocked, no date metadata captured |
+| `elsparkcykel 22 juni` | exact date, no broadening notice | blocked, no date metadata captured |
+| `trafiksäkerhet för små elektriska hyrfordon` | non-empty | pass, 10 results |
+| `barnfattigdom` | non-empty | pass, 10 results |
+| `äldreomsorg bemanning` | non-empty | pass, 10 results |
+| `havsbaserad vindkraft i Kattegatt` | non-empty | pass, 10 results |
+| `hur ska gängkriminaliteten stoppas` | non-empty | pass, 10 results |
+| `bananministeriet på månen` | empty | pass, 0 results |
+| `kvantdatorer på varje förskola` | empty | pass, 0 results |
+
+The baseline records `searchVersion`/`rankingVersion` `pleni-search-v2`,
+`indexVersion` `openai:text-embedding-3-large:1024:v1` and capture date
+2026-08-25T17:00:10Z. Re-running it over the same fixtures is byte-identical.
+
+### Privacy boundary of the smoke path
+
+The smoke command is offline and provider-free: it reads two committed fixtures
+and makes no Supabase, OpenAI or other network call. Its output carries titles,
+source titles, speaker/party at speech, match excerpts, match kind, clip ids and
+debate dates only. Per-candidate cosine similarity and Swedish lexical coverage
+are private ranking scores and are dropped before anything is written. No
+credential, access token, project reference, client address, embedding or raw
+user query can reach the output; regression tests assert each of those.
+
+### Known open defect recorded as the before state
+
+Three electric-aviation clips entered the captured `elsparkcyklar` audit query
+as context-only filler at hybrid ranks 8-10 with zero Swedish lexical coverage:
+`HD10398_27_c02`, `HD10401_27_c02` and `HD10406_27_c02`. They are recorded as
+forbidden scooter examples in `tests/fixtures/search/smoke.json`. OPT1 may not
+change ranking, so the baseline reports them as a known open defect owned by
+OPT2 rather than failing on them.
+
+### Blocked evidence for the next agent
+
+The frozen capture holds no run for `elsparkcykel`, `elsparkcykel 30 mars` or
+`elsparkcykel 22 juni`, and it records no debate date, interpretation facet or
+date-broadening metadata for any phrase. Those three expectations are reported
+as `blocked_needs_capture` rather than guessed, because resolving them needs a
+live Supabase read and one OpenAI query embedding that OPT1 is not permitted to
+perform. `_result_summary` now captures `clip.debateDate`, which migration 026
+already returns, so the next authorised `capture-live` run carries dates without
+further code change. Adding the three phrases to the capture set and recording
+the interpretation/broadening envelope remain open.
+
+## OPT2 — Ranking v3 with candidate-level admission (2026-08-26)
+
+Prepared and tested offline. Nothing was deployed, nothing was pushed to `main`,
+and no live, OpenAI or other network call was made.
+
+### What changed
+
+v2 admitted every semantic candidate as soon as the query as a whole cleared its
+safety gate, so one strong candidate could drag context-only filler into an
+otherwise valid result list. v3 keeps that query-level gate (a keyword anchor,
+or best similarity at least `0.53`, or best Swedish lexical coverage at least
+`0.67`) and adds candidate-level admission after it: a semantic-only candidate
+is admitted only when its own similarity is at least `0.50` or its own lexical
+coverage is at least `0.67`. Keyword-matched candidates are exempt and always
+survive, so exact Swedish matches and compounds cannot be filtered out.
+
+Semantic retrieval ranks are assigned before admission, so dropping a row never
+reorders or promotes the rows that remain. Structured person, party, date and
+verified-event filters stay inside the `eligible` CTE ahead of retrieval. No
+recency boost was added; date remains a filter and a deterministic tie break. A
+result list may be shorter than the requested limit and is never backfilled.
+
+### How the thresholds were chosen
+
+`scripts/evaluate_topic_search.py admission-grid` replays the roadmap's 180-point
+grid offline against the frozen 2026-08-25 capture. **This is engineering
+evidence of observable membership, not human-validated relevance evidence.** It
+produces no relevance grade, no nDCG and no precision, and no configuration is
+called best; the fixture's 36 queries and 385 captured rows were not graded and
+must not be.
+
+Candidate similarity `0.40` was discarded because it keeps the elflyg filler;
+`0.53` was discarded because it starves the descriptive scooter search below
+`min(5, baseline)`. Of the 108 survivors the roadmap's conservative order selects
+`sim0.50-lex0.67-kw1.50-sem1.00-k50`. The keyword weight, semantic weight and
+RRF `k` change result order rather than admission, and the frozen capture
+preserves only the top-N that the deployed weights produced, so they cannot be
+separated offline and were held at the deployed values.
+
+### Measured effect on the frozen capture
+
+| Search | Before | After | Dropped |
+|---|---|---|---|
+| `elsparkcyklar` (`q01`) | 10 | 6 | 3 elflyg rows plus 1 weak context row |
+| `trafiksäkerhet för små elektriska hyrfordon` | 10 | 6 | 4 tail context rows |
+| `barnfattigdom` | 10 | 10 | none |
+| `äldreomsorg bemanning` | 10 | 10 | none |
+| `havsbaserad vindkraft i Kattegatt` | 10 | 6 | 4 tail context rows |
+| `hur ska gängkriminaliteten stoppas` | 10 | 10 | none |
+| `bananministeriet på månen` | 0 | 0 | none |
+| `kvantdatorer på varje förskola` | 0 | 0 | none |
+
+Every top-five position is identical before and after in all eight captured
+searches: only tail candidates were removed. No keyword-matched candidate was
+dropped in any of the 180 configurations, and both negative phrases stay empty
+in all of them.
+
+The known open defect OPT1 recorded is closed on the captured evidence:
+`HD10398_27_c02`, `HD10401_27_c02` and `HD10406_27_c02` are removed from the
+scooter result by their own similarity (`0.416605`, below `0.50`) and coverage
+(`0`, below `0.67`), independent of the date-exclusion guard.
+
+### Privacy boundary of the grid path
+
+The `admission-grid` command is offline and provider-free: it reads three
+committed fixtures and makes no Supabase, OpenAI or other network call. Its JSON
+output carries configuration identifiers, gate booleans, counts and clip ids;
+the before/after report adds titles, source titles, speaker/party at speech,
+match excerpts, match kind and debate dates. Per-candidate cosine similarity and
+Swedish lexical coverage stay private: they are dropped before anything is
+written, they never appear in the public `clip-search-v1` response, and
+regression tests assert both. No credential, access token, project reference,
+client address, embedding or raw user query can reach the output.
+
+### Still blocked
+
+`elsparkcykel`, `elsparkcykel 30 mars` and `elsparkcykel 22 juni` remain
+`blocked_needs_capture`. OPT2 was instructed to make no live or OpenAI call, so
+the capture that would resolve them was not produced and their date gates stay
+honestly unproven rather than assumed green. Gate 5 was verified instead against
+the captured `elsparkcyklar` run, the only scooter search the frozen capture can
+evidence and the run the three false positives were identified from.
+
+### Rollback
+
+`029_search_candidate_admission.down.sql` drops `search_clip_candidates_v3`
+alone. `search_clip_candidates_v2` and migrations 022-028 are untouched, so the
+operational rollback is redeploying the previous Edge Function commit, which
+calls v2. The v2 response envelope is unchanged, and an Edge test asserts the
+handler still accepts it.

@@ -4,6 +4,15 @@ The default command is offline and provider-free.  ``capture-live`` is an
 explicit operator action: it reads the current production catalogue, spends a
 small amount on query embeddings, and prints a candidate snapshot for review.
 It never changes database state and never logs query text or credentials.
+
+``smoke`` is also offline and provider-free.  It replays ten committed Swedish
+phrases against the frozen capture and reports observable retrieval behavior as
+engineering smoke evidence.  It is regression testing, not model training and
+not human relevance judgment: it produces no grade and no judged metric.
+
+``admission-grid`` is offline and provider-free too.  It replays OPT2's
+candidate-level admission grid against the same capture and selects one
+configuration by the roadmap's conservative order, never by a judged metric.
 """
 
 from __future__ import annotations
@@ -26,8 +35,52 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DOCUMENTS = ROOT / "tests" / "fixtures" / "search" / "documents.json"
 DEFAULT_JUDGMENTS = ROOT / "tests" / "fixtures" / "search" / "judgments.json"
 DEFAULT_EXPECTED = ROOT / "tests" / "fixtures" / "search" / "expected.json"
+DEFAULT_SMOKE = ROOT / "tests" / "fixtures" / "search" / "smoke.json"
+DEFAULT_SMOKE_REPORT = ROOT / "test_outputs" / "topic_search_smoke_baseline.md"
+DEFAULT_GRID_REPORT = ROOT / "test_outputs" / "topic_search_admission_before_after.md"
 MODES = ("keyword", "semantic", "hybrid")
 MAX_RANK = 10
+
+# The served order is the hybrid list; keyword-only and semantic-only pools are
+# diagnostics and are never what a viewer sees.
+SMOKE_SERVED_MODE = "hybrid"
+SMOKE_TOP_N = 5
+SMOKE_EXCERPT_CHARS = 160
+
+# Committed regression phrases.  Frozen here so the set cannot silently grow
+# into a topic whitelist, a synonym table or a list of permitted searches, and
+# so no logged user search can ever be substituted for one of them.
+SMOKE_QUERIES = (
+    "elsparkcykel",
+    "elsparkcykel 30 mars",
+    "elsparkcykel 22 juni",
+    "trafiksäkerhet för små elektriska hyrfordon",
+    "barnfattigdom",
+    "äldreomsorg bemanning",
+    "havsbaserad vindkraft i Kattegatt",
+    "hur ska gängkriminaliteten stoppas",
+    "bananministeriet på månen",
+    "kvantdatorer på varje förskola",
+)
+SMOKE_EXPECTATIONS = (
+    "non_empty",
+    "empty",
+    "exact_date_no_broadening",
+    "broadened_from_empty_exact",
+)
+
+# Only these captured per-clip fields may leave the smoke path.  Similarity and
+# lexical coverage are private ranking scores and are dropped deliberately.
+SMOKE_PUBLIC_DOCUMENT_FIELDS = (
+    "title",
+    "sourceTitle",
+    "speakerNameAtSpeech",
+    "partyAtSpeech",
+    "excerpt",
+    "matchKind",
+    "debateDate",
+)
+SMOKE_PRIVATE_DOCUMENT_FIELDS = ("semanticSimilarity", "lexicalCoverage")
 OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings"
 SUPABASE_MANAGEMENT_BASE = "https://api.supabase.com/v1"
 
@@ -352,6 +405,915 @@ def evaluate(
     }
 
 
+def _smoke_public_document(document: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep only publicly explainable capture fields; drop private scores."""
+
+    public: dict[str, Any] = {}
+    for field in SMOKE_PUBLIC_DOCUMENT_FIELDS:
+        value = document.get(field)
+        if value is None:
+            continue
+        if field == "excerpt" and isinstance(value, str) and len(value) > SMOKE_EXCERPT_CHARS:
+            value = value[:SMOKE_EXCERPT_CHARS].rstrip() + "..."
+        public[field] = value
+    return public
+
+
+def _smoke_searches(smoke: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Validate that the committed phrase set is exactly the frozen ten."""
+
+    rows = _required_list(smoke, "searches")
+    if len(rows) != len(SMOKE_QUERIES):
+        raise EvaluationError(f"smoke fixture must hold exactly {len(SMOKE_QUERIES)} searches")
+    searches: list[Mapping[str, Any]] = []
+    seen_ids: set[str] = set()
+    for row, committed in zip(rows, SMOKE_QUERIES, strict=True):
+        if not isinstance(row, Mapping):
+            raise EvaluationError("every smoke search must be an object")
+        search_id = _required_string(row, "id")
+        if search_id in seen_ids:
+            raise EvaluationError(f"duplicate smoke search id: {search_id}")
+        seen_ids.add(search_id)
+        if _required_string(row, "query") != committed:
+            raise EvaluationError(f"smoke search {search_id} is not the committed phrase")
+        expectation = _required_string(row, "expectation")
+        if expectation not in SMOKE_EXPECTATIONS:
+            raise EvaluationError(f"unknown smoke expectation for {search_id}: {expectation}")
+        searches.append(row)
+    return searches
+
+
+def _smoke_evidence(
+    search: Mapping[str, Any],
+    runs: Mapping[str, Mapping[str, Any]],
+    query_text: Mapping[str, str],
+) -> tuple[Mapping[str, Any] | None, str | None]:
+    """Resolve one search to its captured run, or to an honest blocked reason."""
+
+    search_id = _required_string(search, "id")
+    evidence = search.get("evidence")
+    if not isinstance(evidence, Mapping):
+        raise EvaluationError(f"smoke search {search_id} needs an evidence object")
+    kind = _required_string(evidence, "kind")
+    if kind == "not_captured_offline":
+        return None, _required_string(evidence, "reason")
+    if kind != "offline_capture":
+        raise EvaluationError(f"unknown smoke evidence kind for {search_id}: {kind}")
+    run_id = _required_string(evidence, "runId")
+    run = runs.get(run_id)
+    if run is None:
+        raise EvaluationError(f"smoke search {search_id} references unknown run {run_id}")
+    # Guard against silently attributing one phrase's capture to another.
+    captured_query = _required_string(evidence, "capturedQuery")
+    actual = query_text.get(run_id)
+    if actual != captured_query or actual != _required_string(search, "query"):
+        raise EvaluationError(f"smoke search {search_id} is bound to a different captured phrase")
+    return run, None
+
+
+def _smoke_observed(run: Mapping[str, Any]) -> dict[str, Any]:
+    """Summarise one captured run as served order, ids, dates and facets."""
+
+    run_id = _required_string(run, "queryId")
+    rankings = run.get("rankings")
+    if not isinstance(rankings, Mapping):
+        raise EvaluationError(f"rankings missing for {run_id}")
+    served = rankings.get(SMOKE_SERVED_MODE)
+    if not isinstance(served, list) or not all(
+        isinstance(clip_id, str) and clip_id for clip_id in served
+    ):
+        raise EvaluationError(f"invalid served ranking for {run_id}")
+    raw_documents = run.get("documents")
+    documents = raw_documents if isinstance(raw_documents, Mapping) else {}
+    rows: list[dict[str, Any]] = []
+    dates: list[str | None] = []
+    for clip_id in served:
+        raw = documents.get(clip_id)
+        document = _smoke_public_document(raw if isinstance(raw, Mapping) else {})
+        dates.append(document.get("debateDate"))
+        rows.append({"clipId": clip_id, **document})
+    interpretation = run.get("interpretation")
+    return {
+        "runId": run_id,
+        "retrievalEvidenceComplete": run.get("retrievalEvidenceComplete") is True,
+        "resultCount": len(served),
+        "clipIds": list(served),
+        "debateDates": dates,
+        "debateDatesCaptured": bool(dates) and all(isinstance(value, str) for value in dates),
+        "interpretation": interpretation if isinstance(interpretation, Mapping) else None,
+        "dateBroadening": run.get("dateBroadening"),
+        "dateMetadataCaptured": "dateBroadening" in run and "interpretation" in run,
+        "topResults": rows[:SMOKE_TOP_N],
+    }
+
+
+def _smoke_facet_kinds(observed: Mapping[str, Any]) -> list[str]:
+    interpretation = observed.get("interpretation")
+    if not isinstance(interpretation, Mapping):
+        return []
+    facets = interpretation.get("facets")
+    if not isinstance(facets, list):
+        return []
+    return [
+        facet["kind"]
+        for facet in facets
+        if isinstance(facet, Mapping) and isinstance(facet.get("kind"), str)
+    ]
+
+
+def _smoke_date_range(search: Mapping[str, Any]) -> tuple[str, str]:
+    date = search.get("date")
+    if not isinstance(date, Mapping):
+        raise EvaluationError(f"smoke search {_required_string(search, 'id')} needs a date range")
+    return _required_string(date, "from"), _required_string(date, "to")
+
+
+def _smoke_check(
+    search: Mapping[str, Any], observed: Mapping[str, Any]
+) -> tuple[str, list[str], str | None]:
+    """Return status, failure notes and any blocked reason for one expectation."""
+
+    expectation = _required_string(search, "expectation")
+    failures: list[str] = []
+    count = int(observed["resultCount"])
+
+    if expectation == "empty":
+        if count:
+            failures.append(f"expected an empty result, captured {count}")
+        return ("fail" if failures else "pass"), failures, None
+
+    if count == 0:
+        failures.append("expected a non-empty result, captured 0")
+    if expectation == "non_empty":
+        return ("fail" if failures else "pass"), failures, None
+
+    # Both date expectations need the interpretation and broadening metadata
+    # that the current capture format does not record.
+    if not observed["dateMetadataCaptured"]:
+        return (
+            "blocked_needs_capture",
+            failures,
+            "the bound capture records no interpretation or date-broadening metadata",
+        )
+    date_from, date_to = _smoke_date_range(search)
+    broadening = observed.get("dateBroadening")
+    dates = [value for value in observed["debateDates"] if isinstance(value, str)]
+
+    if expectation == "exact_date_no_broadening":
+        if broadening is not None:
+            failures.append("an exact date search must not report date broadening")
+        if "date" not in _smoke_facet_kinds(observed):
+            failures.append("an exact date search must keep its date facet")
+        outside = [value for value in dates if value < date_from or value > date_to]
+        if outside:
+            failures.append(f"exact date search returned {len(outside)} rows outside its range")
+        return ("fail" if failures else "pass"), failures, None
+
+    # broadened_from_empty_exact
+    if not isinstance(broadening, Mapping):
+        failures.append("a broadened search must report its removed date range")
+    elif broadening.get("from") != date_from or broadening.get("to") != date_to:
+        failures.append("broadening metadata must name the original requested range")
+    if "date" in _smoke_facet_kinds(observed):
+        failures.append("a broadened search must drop the relaxed date facet")
+    inside = [value for value in dates if date_from <= value <= date_to]
+    if inside:
+        failures.append(f"broadened search returned {len(inside)} rows from the excluded range")
+    return ("fail" if failures else "pass"), failures, None
+
+
+def _smoke_forbidden(smoke: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    examples = smoke.get("forbiddenExamples")
+    if examples is None:
+        return {}
+    if not isinstance(examples, Mapping):
+        raise EvaluationError("forbiddenExamples must be an object")
+    resolved: dict[str, Mapping[str, Any]] = {}
+    for name, raw in examples.items():
+        if not isinstance(raw, Mapping):
+            raise EvaluationError(f"forbidden example {name} must be an object")
+        clip_ids = _required_list(raw, "clipIds")
+        if not clip_ids or not all(isinstance(value, str) and value for value in clip_ids):
+            raise EvaluationError(f"forbidden example {name} needs non-empty clip ids")
+        resolved[name] = raw
+    return resolved
+
+
+def smoke_baseline(
+    documents: Mapping[str, Any],
+    judgments: Mapping[str, Any],
+    smoke: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Replay the committed phrases against the frozen offline capture.
+
+    The result is engineering smoke evidence: observable retrieval behavior
+    only.  It carries no relevance grade, no judged metric, no credential, no
+    client address, no embedding and no private ranking score.
+    """
+
+    searches = _smoke_searches(smoke)
+    forbidden = _smoke_forbidden(smoke)
+    runs = {
+        _required_string(raw, "queryId"): raw
+        for raw in _required_list(documents, "runs")
+        if isinstance(raw, Mapping)
+    }
+    query_text = {
+        _required_string(raw, "id"): _required_string(raw, "query")
+        for raw in _required_list(judgments, "queries")
+        if isinstance(raw, Mapping)
+    }
+
+    rows: list[dict[str, Any]] = []
+    failed: list[str] = []
+    blocked: list[str] = []
+    for search in searches:
+        search_id = _required_string(search, "id")
+        run, blocked_reason = _smoke_evidence(search, runs, query_text)
+        row: dict[str, Any] = {
+            "id": search_id,
+            "query": _required_string(search, "query"),
+            "expectation": _required_string(search, "expectation"),
+        }
+        if run is None:
+            row["status"] = "blocked_needs_capture"
+            row["blockedReason"] = blocked_reason
+            row["observed"] = None
+            blocked.append(search_id)
+            rows.append(row)
+            continue
+        observed = _smoke_observed(run)
+        status, failures, reason = _smoke_check(search, observed)
+        name = search.get("forbiddenExample")
+        if isinstance(name, str):
+            if name not in forbidden:
+                raise EvaluationError(f"smoke search {search_id} names unknown example {name}")
+            banned = set(forbidden[name]["clipIds"])
+            hits = [clip_id for clip_id in observed["clipIds"] if clip_id in banned]
+            row["forbiddenExample"] = {"name": name, "observedHits": hits}
+        row["status"] = status
+        row["observed"] = observed
+        if failures:
+            row["failures"] = failures
+        if status == "fail":
+            failed.append(search_id)
+        elif status == "blocked_needs_capture":
+            row["blockedReason"] = reason
+            blocked.append(search_id)
+        rows.append(row)
+
+    open_defects = [
+        {
+            "name": name,
+            "clipIds": list(example["clipIds"]),
+            "reason": example.get("reason"),
+            "identifiedFrom": example.get("identifiedFrom"),
+            "ownedBy": example.get("ownedBy"),
+        }
+        for name, example in sorted(forbidden.items())
+        if example.get("currentlyPresentInCapture") is True
+    ]
+    raw_versions = smoke.get("versions")
+    versions = dict(raw_versions) if isinstance(raw_versions, Mapping) else {}
+    for key in ("searchVersion", "rankingVersion", "indexVersion", "capturedAt"):
+        if not isinstance(versions.get(key), str) or not versions[key].strip():
+            raise EvaluationError(f"smoke versions.{key} must be a non-empty string")
+    captured_index = documents.get("indexVersion")
+    if isinstance(captured_index, str) and versions["indexVersion"] != captured_index:
+        raise EvaluationError("smoke indexVersion does not match the bound capture")
+
+    return {
+        "schemaVersion": 1,
+        "evidenceKind": "engineering_smoke_evidence",
+        "evidenceNote": smoke.get("evidenceNote"),
+        "purposeNote": smoke.get("purposeNote"),
+        "versions": versions,
+        "smokeQueryCount": len(rows),
+        "passCount": sum(1 for row in rows if row["status"] == "pass"),
+        "failCount": len(failed),
+        "blockedCount": len(blocked),
+        "failedSearches": failed,
+        "blockedSearches": blocked,
+        "knownOpenDefects": open_defects,
+        "searches": rows,
+    }
+
+
+def render_smoke_report(payload: Mapping[str, Any]) -> str:
+    """Render the compact top-five title/excerpt report for agent inspection."""
+
+    raw_versions = payload.get("versions")
+    versions = raw_versions if isinstance(raw_versions, Mapping) else {}
+    lines = [
+        "# Topic search smoke baseline",
+        "",
+        "**Engineering smoke evidence.** Produced automatically from frozen offline",
+        "fixtures. It records observable retrieval behavior only. It is **not**",
+        "human-validated relevance evidence: it contains no relevance grade, no",
+        "nDCG, no precision and no private ranking score.",
+        "",
+        "The ten phrases below are committed regression test data. They are never",
+        "derived from logged user searches, the live endpoint never reads them, and",
+        "they are not a topic whitelist, a synonym table or a ranking input.",
+        "",
+        "| Field | Value |",
+        "|---|---|",
+        f"| Search version | `{versions.get('searchVersion')}` |",
+        f"| Ranking version | `{versions.get('rankingVersion')}` |",
+        f"| Index version | `{versions.get('indexVersion')}` |",
+        f"| Capture source | `{versions.get('captureSource')}` |",
+        f"| Capture date | {versions.get('capturedAt')} |",
+        "",
+        f"Pass {payload.get('passCount')} / fail {payload.get('failCount')} / "
+        f"blocked {payload.get('blockedCount')} of {payload.get('smokeQueryCount')}.",
+        "",
+    ]
+    raw_searches = payload.get("searches")
+    for search in raw_searches if isinstance(raw_searches, list) else []:
+        if not isinstance(search, Mapping):
+            continue
+        lines.append(f"## {search.get('id')} - {search.get('query')}")
+        lines.append("")
+        lines.append(f"- Expectation: `{search.get('expectation')}`")
+        lines.append(f"- Status: **{search.get('status')}**")
+        observed = search.get("observed")
+        if not isinstance(observed, Mapping):
+            lines.append(f"- Blocked: {search.get('blockedReason')}")
+            lines.append("")
+            continue
+        lines.append(
+            f"- Results: {observed.get('resultCount')} (captured run `{observed.get('runId')}`)"
+        )
+        example = search.get("forbiddenExample")
+        if isinstance(example, Mapping):
+            raw_hits = example.get("observedHits")
+            hits = raw_hits if isinstance(raw_hits, list) else []
+            summary = ", ".join(f"`{value}`" for value in hits) if hits else "none observed"
+            lines.append(f"- Forbidden `{example.get('name')}`: {summary}")
+        failures = search.get("failures")
+        if isinstance(failures, list):
+            lines.extend(f"- Failure: {failure}" for failure in failures)
+        raw_rows = observed.get("topResults")
+        rows = raw_rows if isinstance(raw_rows, list) else []
+        lines.append("")
+        if not rows:
+            lines.append("_No results captured._")
+            lines.append("")
+            continue
+        lines.append("| # | Title | Excerpt |")
+        lines.append("|---|---|---|")
+        for position, row in enumerate(rows, 1):
+            if not isinstance(row, Mapping):
+                continue
+            title = str(row.get("title") or "").replace("|", r"\|")
+            excerpt = str(row.get("excerpt") or "").replace("|", r"\|")
+            lines.append(f"| {position} | {title} | {excerpt} |")
+        lines.append("")
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
+# --- OPT2 candidate-level admission grid -------------------------------------
+#
+# The grid is offline and provider-free.  It replays candidate-level admission
+# over the frozen capture and applies the roadmap's deterministic conservative
+# gates.  It produces no relevance grade and no judged metric: every gate below
+# is an observable membership fact, never a quality claim.
+
+CANDIDATE_SIMILARITY_GRID = (0.40, 0.45, 0.48, 0.50, 0.53)
+CANDIDATE_LEXICAL_GRID = (0.34, 0.50, 0.67)
+KEYWORD_WEIGHT_GRID = (1.5, 2.0)
+SEMANTIC_WEIGHT_GRID = (0.75, 1.0)
+RRF_K_GRID = (40, 50, 60)
+
+# The constants migration 027 deployed.  Rule 7's final tie-break resolves to
+# these: they are the only fusion weights the frozen capture can evidence.
+PRODUCTION_KEYWORD_WEIGHT = 1.5
+PRODUCTION_SEMANTIC_WEIGHT = 1.0
+PRODUCTION_RRF_K = 50
+
+# A candidate carrying a keyword match is never subject to candidate admission.
+KEYWORD_MATCH_KINDS = ("keyword", "both")
+SEMANTIC_ONLY_MATCH_KIND = "context"
+MINIMUM_RETAINED_RESULTS = 5
+DESCRIPTIVE_SEMANTIC_SEARCH_ID = "s04"
+
+
+@dataclass(frozen=True)
+class GridConfiguration:
+    """One point in the roadmap's threshold grid."""
+
+    candidate_similarity: float
+    candidate_lexical_coverage: float
+    keyword_weight: float
+    semantic_weight: float
+    rrf_k: int
+
+    @property
+    def configuration_id(self) -> str:
+        return (
+            f"sim{self.candidate_similarity:.2f}"
+            f"-lex{self.candidate_lexical_coverage:.2f}"
+            f"-kw{self.keyword_weight:.2f}"
+            f"-sem{self.semantic_weight:.2f}"
+            f"-k{self.rrf_k}"
+        )
+
+    @property
+    def uses_production_fusion(self) -> bool:
+        return (
+            self.keyword_weight == PRODUCTION_KEYWORD_WEIGHT
+            and self.semantic_weight == PRODUCTION_SEMANTIC_WEIGHT
+            and self.rrf_k == PRODUCTION_RRF_K
+        )
+
+
+def _grid_configurations() -> list[GridConfiguration]:
+    return [
+        GridConfiguration(similarity, lexical, keyword_weight, semantic_weight, rrf_k)
+        for similarity in CANDIDATE_SIMILARITY_GRID
+        for lexical in CANDIDATE_LEXICAL_GRID
+        for keyword_weight in KEYWORD_WEIGHT_GRID
+        for semantic_weight in SEMANTIC_WEIGHT_GRID
+        for rrf_k in RRF_K_GRID
+    ]
+
+
+def _grid_candidates(run: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Return the captured served order annotated with its admission inputs."""
+
+    run_id = _required_string(run, "queryId")
+    rankings = run.get("rankings")
+    if not isinstance(rankings, Mapping):
+        raise EvaluationError(f"rankings missing for {run_id}")
+    served = rankings.get(SMOKE_SERVED_MODE)
+    if not isinstance(served, list):
+        raise EvaluationError(f"invalid served ranking for {run_id}")
+    raw_documents = run.get("documents")
+    documents = raw_documents if isinstance(raw_documents, Mapping) else {}
+    candidates: list[dict[str, Any]] = []
+    for clip_id in served:
+        if not isinstance(clip_id, str) or not clip_id:
+            raise EvaluationError(f"invalid served ranking for {run_id}")
+        raw = documents.get(clip_id)
+        document = raw if isinstance(raw, Mapping) else {}
+        match_kind = document.get("matchKind")
+        if match_kind not in (*KEYWORD_MATCH_KINDS, SEMANTIC_ONLY_MATCH_KIND):
+            raise EvaluationError(f"run {run_id} candidate {clip_id} has no usable matchKind")
+        keyword_matched = match_kind in KEYWORD_MATCH_KINDS
+        similarity = document.get("semanticSimilarity")
+        coverage = document.get("lexicalCoverage")
+        scored = isinstance(similarity, int | float) and isinstance(coverage, int | float)
+        if not keyword_matched and not scored:
+            # A semantic-only candidate without its own scores cannot be judged
+            # offline.  Inventing one would manufacture missing evidence.
+            raise EvaluationError(
+                f"run {run_id} semantic-only candidate {clip_id} has no captured scores"
+            )
+        candidates.append(
+            {
+                "clipId": clip_id,
+                "keywordMatched": keyword_matched,
+                "similarity": float(similarity) if isinstance(similarity, int | float) else None,
+                "lexicalCoverage": float(coverage) if isinstance(coverage, int | float) else None,
+            }
+        )
+    return candidates
+
+
+def _admit(candidate: Mapping[str, Any], configuration: GridConfiguration) -> bool:
+    """Apply candidate-level admission to exactly one candidate.
+
+    A strong candidate elsewhere in the query is deliberately not an input:
+    admission reads only this candidate's own evidence.
+    """
+
+    if candidate["keywordMatched"] is True:
+        return True
+    similarity = candidate["similarity"]
+    coverage = candidate["lexicalCoverage"]
+    meets_similarity = isinstance(similarity, float) and (
+        similarity >= configuration.candidate_similarity
+    )
+    meets_coverage = isinstance(coverage, float) and (
+        coverage >= configuration.candidate_lexical_coverage
+    )
+    return meets_similarity or meets_coverage
+
+
+def _grid_runs(
+    documents: Mapping[str, Any],
+    judgments: Mapping[str, Any],
+    smoke: Mapping[str, Any],
+) -> tuple[list[dict[str, Any]], list[str], dict[str, dict[str, Any]]]:
+    """Bind smoke searches and the forbidden-example source to captured runs."""
+
+    searches = _smoke_searches(smoke)
+    forbidden = _smoke_forbidden(smoke)
+    runs = {
+        _required_string(raw, "queryId"): raw
+        for raw in _required_list(documents, "runs")
+        if isinstance(raw, Mapping)
+    }
+    query_text = {
+        _required_string(raw, "id"): _required_string(raw, "query")
+        for raw in _required_list(judgments, "queries")
+        if isinstance(raw, Mapping)
+    }
+
+    bound: list[dict[str, Any]] = []
+    blocked: list[str] = []
+    for search in searches:
+        search_id = _required_string(search, "id")
+        run, _ = _smoke_evidence(search, runs, query_text)
+        if run is None:
+            blocked.append(search_id)
+            continue
+        bound.append(
+            {
+                "id": search_id,
+                "query": _required_string(search, "query"),
+                "expectation": _required_string(search, "expectation"),
+                "runId": _required_string(run, "queryId"),
+                "candidates": _grid_candidates(run),
+            }
+        )
+
+    # The scooter false positives were identified from a captured run of their
+    # own.  It is the only scooter search the frozen capture can evidence, so it
+    # carries gate 5 while the three `elsparkcykel` phrases stay blocked.
+    scooter: dict[str, dict[str, Any]] = {}
+    for name, example in sorted(forbidden.items()):
+        identified = example.get("identifiedFrom")
+        if not isinstance(identified, Mapping):
+            raise EvaluationError(f"forbidden example {name} needs identifiedFrom")
+        run_id = _required_string(identified, "runId")
+        run = runs.get(run_id)
+        if run is None:
+            raise EvaluationError(f"forbidden example {name} references unknown run {run_id}")
+        captured_query = _required_string(identified, "capturedQuery")
+        if query_text.get(run_id) != captured_query:
+            raise EvaluationError(f"forbidden example {name} is bound to a different phrase")
+        scooter[name] = {
+            "name": name,
+            "runId": run_id,
+            "query": captured_query,
+            "clipIds": list(example["clipIds"]),
+            "candidates": _grid_candidates(run),
+        }
+    return bound, blocked, scooter
+
+
+def _admission_outcome(
+    candidates: Sequence[Mapping[str, Any]], configuration: GridConfiguration
+) -> tuple[list[Mapping[str, Any]], list[str], int]:
+    """Split one captured run into admitted rows, dropped keyword rows and tail."""
+
+    admitted = [row for row in candidates if _admit(row, configuration)]
+    admitted_ids = {str(row["clipId"]) for row in admitted}
+    dropped_keyword = [
+        str(row["clipId"])
+        for row in candidates
+        if row["keywordMatched"] is True and str(row["clipId"]) not in admitted_ids
+    ]
+    tail = sum(1 for row in admitted if row["keywordMatched"] is not True)
+    return admitted, dropped_keyword, tail
+
+
+def _evaluate_configuration(
+    configuration: GridConfiguration,
+    bound: Sequence[Mapping[str, Any]],
+    scooter: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Apply the roadmap's gates to one configuration and return its evidence."""
+
+    searches: list[dict[str, Any]] = []
+    negatives_empty = True
+    retains_minimum = True
+    keyword_preserved = True
+    semantic_only_admitted = 0
+
+    for search in bound:
+        candidates = search["candidates"]
+        assert isinstance(candidates, list)
+        admitted, dropped_keyword, tail = _admission_outcome(candidates, configuration)
+        baseline_count = len(candidates)
+        required = min(MINIMUM_RETAINED_RESULTS, baseline_count)
+        semantic_only_admitted += tail
+        if search["expectation"] == "empty" and admitted:
+            negatives_empty = False
+        if search["expectation"] != "empty" and len(admitted) < required:
+            retains_minimum = False
+        if dropped_keyword:
+            keyword_preserved = False
+        searches.append(
+            {
+                "id": search["id"],
+                "runId": search["runId"],
+                "expectation": search["expectation"],
+                "baselineCount": baseline_count,
+                "admittedCount": len(admitted),
+                "requiredMinimum": required,
+                "semanticOnlyAdmitted": tail,
+                "droppedKeywordMatched": dropped_keyword,
+            }
+        )
+
+    # Gate 4 names the descriptive semantic-only scooter search explicitly, so
+    # it is checked by id rather than folded into the shared minimum.
+    descriptive = next(
+        (row for row in searches if row["id"] == DESCRIPTIVE_SEMANTIC_SEARCH_ID),
+        None,
+    )
+    descriptive_non_empty = descriptive is not None and descriptive["admittedCount"] > 0
+
+    forbidden_rows: list[dict[str, Any]] = []
+    forbidden_removed = True
+    for name, example in sorted(scooter.items()):
+        candidates = example["candidates"]
+        assert isinstance(candidates, list)
+        admitted, dropped_keyword, tail = _admission_outcome(candidates, configuration)
+        banned = set(example["clipIds"])
+        hits = [str(row["clipId"]) for row in admitted if str(row["clipId"]) in banned]
+        semantic_only_admitted += tail
+        if hits:
+            forbidden_removed = False
+        if dropped_keyword:
+            keyword_preserved = False
+        forbidden_rows.append(
+            {
+                "name": name,
+                "runId": example["runId"],
+                "baselineCount": len(candidates),
+                "admittedCount": len(admitted),
+                "observedHits": hits,
+                "droppedKeywordMatched": dropped_keyword,
+            }
+        )
+
+    gates = {
+        "negativesStayEmpty": negatives_empty,
+        "retainsMinimumResults": retains_minimum,
+        "descriptiveSemanticNonEmpty": descriptive_non_empty,
+        "forbiddenExamplesRemoved": forbidden_removed,
+        "keywordMatchedPreserved": keyword_preserved,
+    }
+    return {
+        "configurationId": configuration.configuration_id,
+        "candidateSimilarity": configuration.candidate_similarity,
+        "candidateLexicalCoverage": configuration.candidate_lexical_coverage,
+        "keywordWeight": configuration.keyword_weight,
+        "semanticWeight": configuration.semantic_weight,
+        "rrfK": configuration.rrf_k,
+        "usesProductionFusion": configuration.uses_production_fusion,
+        "gates": gates,
+        "passes": all(gates.values()),
+        "semanticOnlyAdmitted": semantic_only_admitted,
+        "searches": searches,
+        "forbiddenExamples": forbidden_rows,
+    }
+
+
+def _selection_key(row: Mapping[str, Any]) -> tuple[int, float, float, bool, str]:
+    """Rule 7, as a total order.
+
+    Fewer semantic-only tail candidates, then the higher candidate similarity
+    threshold, then the higher lexical threshold, then the deployed fusion
+    weights, then the deterministic configuration id.
+    """
+
+    return (
+        int(row["semanticOnlyAdmitted"]),
+        -float(row["candidateSimilarity"]),
+        -float(row["candidateLexicalCoverage"]),
+        not bool(row["usesProductionFusion"]),
+        str(row["configurationId"]),
+    )
+
+
+def admission_grid(
+    documents: Mapping[str, Any],
+    judgments: Mapping[str, Any],
+    smoke: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Replay the OPT2 threshold grid offline and select one configuration.
+
+    There is no human-judged denominator here, so no configuration is called
+    "best" and no nDCG or precision is produced.  Selection is the roadmap's
+    deterministic conservative order applied to observable membership only.
+    """
+
+    bound, blocked, scooter = _grid_runs(documents, judgments, smoke)
+    if not scooter:
+        raise EvaluationError("the grid needs at least one forbidden example to verify")
+    results = [
+        _evaluate_configuration(configuration, bound, scooter)
+        for configuration in _grid_configurations()
+    ]
+    survivors = [row for row in results if row["passes"]]
+    selected = min(survivors, key=_selection_key) if survivors else None
+
+    before_after: list[dict[str, Any]] = []
+    if selected is not None:
+        chosen = GridConfiguration(
+            float(selected["candidateSimilarity"]),
+            float(selected["candidateLexicalCoverage"]),
+            float(selected["keywordWeight"]),
+            float(selected["semanticWeight"]),
+            int(selected["rrfK"]),
+        )
+        runs = {
+            _required_string(raw, "queryId"): raw
+            for raw in _required_list(documents, "runs")
+            if isinstance(raw, Mapping)
+        }
+        for search in bound:
+            before_after.append(
+                _before_after_rows(
+                    str(search["id"]),
+                    str(search["query"]),
+                    runs[str(search["runId"])],
+                    search["candidates"],
+                    chosen,
+                )
+            )
+        for name, example in sorted(scooter.items()):
+            before_after.append(
+                _before_after_rows(
+                    name,
+                    str(example["query"]),
+                    runs[str(example["runId"])],
+                    example["candidates"],
+                    chosen,
+                )
+            )
+
+    conflicts: list[str] = []
+    if not survivors:
+        for gate in (
+            "negativesStayEmpty",
+            "retainsMinimumResults",
+            "descriptiveSemanticNonEmpty",
+            "forbiddenExamplesRemoved",
+            "keywordMatchedPreserved",
+        ):
+            failing = [row["configurationId"] for row in results if not row["gates"][gate]]
+            if failing:
+                conflicts.append(
+                    f"{gate} fails for {len(failing)} of {len(results)} configurations"
+                )
+
+    return {
+        "schemaVersion": 1,
+        "evidenceKind": "engineering_admission_grid_evidence",
+        "evidenceNote": (
+            "Offline replay of candidate-level admission over the frozen capture. It records "
+            "observable membership only: which candidates each threshold pair admits. It "
+            "carries no relevance grade and must never be reported as nDCG, precision or "
+            "judged quality, and no configuration here is called best."
+        ),
+        "fusionNote": (
+            "Keyword weight, semantic weight and RRF k change result order, never candidate "
+            "admission. The frozen capture preserves only the top-N that the deployed weights "
+            "produced, so a different weighting cannot be replayed against it honestly. They "
+            "are enumerated for completeness and resolved to the deployed constants."
+        ),
+        "blockedSearches": blocked,
+        "configurationCount": len(results),
+        "survivorCount": len(survivors),
+        "selected": selected,
+        "beforeAfter": before_after,
+        "conflicts": conflicts,
+        "configurations": results,
+    }
+
+
+def _before_after_rows(
+    label: str,
+    query: str,
+    run: Mapping[str, Any],
+    candidates: Sequence[Mapping[str, Any]],
+    configuration: GridConfiguration,
+) -> dict[str, Any]:
+    """Compare one captured run before and after candidate-level admission."""
+
+    raw_documents = run.get("documents")
+    documents = raw_documents if isinstance(raw_documents, Mapping) else {}
+
+    def public(clip_id: str) -> dict[str, Any]:
+        raw = documents.get(clip_id)
+        return _smoke_public_document(raw if isinstance(raw, Mapping) else {})
+
+    admitted = [row for row in candidates if _admit(row, configuration)]
+    admitted_ids = {str(row["clipId"]) for row in admitted}
+    dropped = [row for row in candidates if str(row["clipId"]) not in admitted_ids]
+    return {
+        "id": label,
+        "query": query,
+        "runId": _required_string(run, "queryId"),
+        "beforeCount": len(candidates),
+        "afterCount": len(admitted),
+        "before": [
+            {"clipId": str(row["clipId"]), **public(str(row["clipId"]))}
+            for row in candidates[:SMOKE_TOP_N]
+        ],
+        "after": [
+            {"clipId": str(row["clipId"]), **public(str(row["clipId"]))}
+            for row in admitted[:SMOKE_TOP_N]
+        ],
+        "dropped": [
+            {"clipId": str(row["clipId"]), **public(str(row["clipId"]))} for row in dropped
+        ],
+    }
+
+
+def render_admission_grid_report(payload: Mapping[str, Any]) -> str:
+    """Render the compact top-five before/after report for the handoff."""
+
+    selected = payload.get("selected")
+    lines = [
+        "# Topic search candidate-admission before/after",
+        "",
+        "**Engineering evidence.** Produced automatically from the frozen offline",
+        "capture. It records observable retrieval membership only. It is **not**",
+        "human-validated relevance evidence: it contains no relevance grade, no",
+        "nDCG and no precision, and no configuration here is called best.",
+        "",
+        "Private ranking scores are deliberately absent from this report and from",
+        "the public search response.",
+        "",
+    ]
+    if not isinstance(selected, Mapping):
+        conflicts = payload.get("conflicts")
+        lines.append("**No configuration passed the required gates.**")
+        lines.append("")
+        for conflict in conflicts if isinstance(conflicts, list) else []:
+            lines.append(f"- {conflict}")
+        return "\n".join(lines).rstrip("\n") + "\n"
+
+    lines.extend(
+        [
+            "| Field | Value |",
+            "|---|---|",
+            f"| Configuration | `{selected.get('configurationId')}` |",
+            f"| Candidate similarity | {selected.get('candidateSimilarity')} |",
+            f"| Candidate lexical coverage | {selected.get('candidateLexicalCoverage')} |",
+            f"| Keyword RRF weight | {selected.get('keywordWeight')} (unchanged) |",
+            f"| Semantic RRF weight | {selected.get('semanticWeight')} (unchanged) |",
+            f"| RRF k | {selected.get('rrfK')} (unchanged) |",
+            f"| Configurations evaluated | {payload.get('configurationCount')} |",
+            f"| Configurations passing every gate | {payload.get('survivorCount')} |",
+            "",
+        ]
+    )
+    blocked = payload.get("blockedSearches")
+    if isinstance(blocked, list) and blocked:
+        lines.append(
+            "Blocked without an offline capture, and left unproven rather than "
+            f"assumed green: {', '.join(f'`{value}`' for value in blocked)}."
+        )
+        lines.append("")
+
+    raw_rows = payload.get("beforeAfter")
+    for row in raw_rows if isinstance(raw_rows, list) else []:
+        if not isinstance(row, Mapping):
+            continue
+        lines.append(f"## {row.get('id')} - {row.get('query')}")
+        lines.append("")
+        lines.append(
+            f"- Results: {row.get('beforeCount')} before, {row.get('afterCount')} after "
+            f"(captured run `{row.get('runId')}`)"
+        )
+        raw_dropped = row.get("dropped")
+        dropped = raw_dropped if isinstance(raw_dropped, list) else []
+        if dropped:
+            lines.append(f"- Dropped {len(dropped)} semantic-only candidate(s):")
+            for item in dropped:
+                if isinstance(item, Mapping):
+                    lines.append(f"  - `{item.get('clipId')}` - {item.get('title')}")
+        else:
+            lines.append("- Dropped nothing.")
+        lines.append("")
+        lines.append("| # | Before | After |")
+        lines.append("|---|---|---|")
+        raw_before = row.get("before")
+        raw_after = row.get("after")
+        before = raw_before if isinstance(raw_before, list) else []
+        after = raw_after if isinstance(raw_after, list) else []
+        for position in range(max(len(before), len(after))):
+            left = before[position] if position < len(before) else None
+            right = after[position] if position < len(after) else None
+            lines.append(f"| {position + 1} | {_report_cell(left)} | {_report_cell(right)} |")
+        lines.append("")
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
+def _report_cell(row: Any) -> str:
+    if not isinstance(row, Mapping):
+        return "_(absent)_"
+    title = str(row.get("title") or row.get("clipId") or "").replace("|", r"\|")
+    return title
+
+
 def _read_env_file(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     if not path.exists():
@@ -581,6 +1543,10 @@ def _result_summary(result: Any) -> tuple[list[str], dict[str, dict[str, Any]]]:
         documents[clip_id] = {
             "title": clip.get("title"),
             "sourceTitle": clip.get("sourceTitle"),
+            # The debate date is already in the RPC envelope (migration 026).
+            # Capturing it is what lets a later offline smoke run verify exact
+            # and broadened date behavior without another provider call.
+            "debateDate": clip.get("debateDate"),
             "speakerNameAtSpeech": raw.get("speakerNameAtSpeech"),
             "partyAtSpeech": raw.get("partyAtSpeech"),
             "excerpt": raw.get("matchExcerpt"),
@@ -738,13 +1704,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "command",
-        choices=("evaluate", "capture-live"),
+        choices=("evaluate", "capture-live", "smoke", "admission-grid"),
         nargs="?",
         default="evaluate",
     )
     parser.add_argument("--documents", type=Path, default=DEFAULT_DOCUMENTS)
     parser.add_argument("--judgments", type=Path, default=DEFAULT_JUDGMENTS)
     parser.add_argument("--expected", type=Path, default=DEFAULT_EXPECTED)
+    parser.add_argument("--smoke", type=Path, default=DEFAULT_SMOKE)
+    parser.add_argument("--report", type=Path, default=DEFAULT_SMOKE_REPORT)
+    parser.add_argument("--grid-report", type=Path, default=DEFAULT_GRID_REPORT)
     parser.add_argument("--env-file", type=Path, default=ROOT / ".env")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--confirm-provider-cost", action="store_true")
@@ -760,6 +1729,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             if not args.confirm_provider_cost:
                 raise EvaluationError("capture-live requires --confirm-provider-cost")
             payload = capture_live(judgments, args.env_file)
+        elif args.command == "admission-grid":
+            payload = admission_grid(_load_json(args.documents), judgments, _load_json(args.smoke))
+            report = args.grid_report
+            report.parent.mkdir(parents=True, exist_ok=True)
+            report.write_text(render_admission_grid_report(payload), encoding="utf-8", newline="\n")
+        elif args.command == "smoke":
+            payload = smoke_baseline(_load_json(args.documents), judgments, _load_json(args.smoke))
+            report = args.report
+            report.parent.mkdir(parents=True, exist_ok=True)
+            report.write_text(render_smoke_report(payload), encoding="utf-8", newline="\n")
         else:
             payload = evaluate(_load_json(args.documents), judgments, _load_json(args.expected))
     except EvaluationError as exc:
@@ -767,11 +1746,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     rendered = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     if args.output:
-        args.output.write_text(rendered, encoding="utf-8")
+        args.output.write_text(rendered, encoding="utf-8", newline="\n")
     else:
         sys.stdout.write(rendered)
-    if args.strict_release and payload.get("readiness") != "ready":
-        return 1
+    if args.strict_release:
+        # A blocked search is honest missing evidence, not a regression: OPT1 is
+        # forbidden from manufacturing the capture that would resolve it.
+        if args.command == "smoke":
+            return 1 if payload.get("failedSearches") else 0
+        if args.command == "admission-grid":
+            return 0 if payload.get("selected") else 1
+        if payload.get("readiness") != "ready":
+            return 1
     return 0
 
 

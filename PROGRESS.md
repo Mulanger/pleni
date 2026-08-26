@@ -5235,3 +5235,259 @@ quality change.
 the broadening notice and zero `2026-03-30` dates. `elsparkcykel 22 juni`
 returns nine exact-date results with no notice, and `elsparkcykel` remains at 28
 results.
+
+## OPT1 — Lean automatic smoke baseline — DONE 2026-08-26
+
+**Built:** an offline, provider-free `smoke` command in
+`scripts/evaluate_topic_search.py`; the focused fixture
+`tests/fixtures/search/smoke.json`; the compact report
+`test_outputs/topic_search_smoke_baseline.md` (ignored directory); the OPT1
+chunk entry in `docs/BUILD_PLAN.md`; the OPT1 record in
+`docs/privacy/TOPIC_SEARCH_RELEASE_EVIDENCE.md`; the DONE/handoff section in
+`docs/TOPIC_SEARCH_FINISHED_OPTIMIZATION_ROADMAP.md`.
+
+This is ordinary regression testing, not model training and not human relevance
+judgment. The ten committed phrases are test data only: they are never derived
+from logged user searches, the live endpoint never reads them, and they are not
+a topic whitelist, a synonym table, a list of permitted searches, training data
+or a source of ranking decisions.
+
+**Tests:** 24 new unit tests in `tests/unit/test_topic_search_evaluation.py`
+(36 in that file). `C:\WINDOWS\py.exe -3.12 tasks.py test lint typecheck` is
+green: **471 passed**, 78 deselected, 1 pre-existing `audioop` deprecation
+warning; ruff clean; mypy clean over 83 source files. `git diff --check` clean.
+`ruff format --check` is clean for both files this chunk touched; the 33
+unrelated files it would reformat are pre-existing and were left alone.
+
+**Contracts touched:** none. `src/contracts.py`, `clip-search-v1`, ranking
+thresholds, Edge Functions, migrations, the frontend and the embedding
+model/index are all unchanged.
+
+**Database state:** unchanged. No migration, table, index or RPC signature was
+touched, and no live or OpenAI call was made.
+
+**Deployment state:** nothing deployed, nothing pushed. The work sits on
+`claude/opt1-smoke-baseline-f4d17b` in a worktree.
+
+**Index state:** unchanged; the baseline pins `openai:text-embedding-3-large:1024:v1`
+and refuses to run against a capture with a different index version.
+
+**Result:** 7 pass, 0 fail, 3 blocked of 10 on the frozen 2026-08-25 capture.
+Re-running over the same fixtures is byte-identical for both the JSON and the
+Markdown report.
+
+**Decisions made:**
+- The served order is the hybrid list. Keyword-only and semantic-only pools stay
+  diagnostics, because they are not what a viewer sees.
+- Seven phrases bind to real captured runs and are verified by exact captured
+  query text, so one phrase can never silently inherit another's evidence. That
+  guard is what keeps `elsparkcykel` from claiming the captured `elsparkcyklar`
+  run.
+- The three phrases with no capture are reported as `blocked_needs_capture`
+  rather than guessed or filled in from prose. Their expectations are encoded
+  and unit-tested against synthetic captures, so they begin checking
+  automatically the moment a capture carries date metadata.
+- A blocked search does not fail `--strict-release`; a real regression does.
+  OPT1 is forbidden from producing the capture that would resolve a blocker, so
+  failing on one would only train the next agent to ignore the gate.
+- Private ranking scores (cosine similarity, Swedish lexical coverage) are
+  dropped by an allowlist before anything is written.
+- `_result_summary` now captures `clip.debateDate`, which migration 026 already
+  returns. This costs nothing today and removes the date blocker from the next
+  authorised capture.
+- `--output` now writes LF instead of the Windows default CRLF. This is shared
+  with `evaluate` and `capture-live` and is what makes a written baseline
+  byte-identical across platforms. `evaluate`'s payload itself is unchanged:
+  its stdout and JSON content are byte-identical to the previous commit.
+
+**Observations (not fixed, out of scope):**
+- `docs/TOPIC_SEARCH_FINISHED_OPTIMIZATION_ROADMAP.md` existed only as an
+  untracked file in the sibling worktree `.codex-worktrees/ui16-public-search`.
+  It was copied into this worktree byte-identically (md5
+  `9c80634066ad98c721ba8fe088fd4553`) and verified to contain OPT0-OPT5 and
+  `Lean automatic smoke baseline` before any work began. It has never been
+  committed on any branch; the owner should decide where it lives.
+- OPT0's `review-export`/`review-import` tooling is not present in this repo, on
+  any branch, or in either sibling worktree. OPT1 does not depend on it.
+- `ruff format --check` reports 33 pre-existing unformatted files repo-wide.
+  Formatting them is not this chunk's scope.
+
+**Blocked / needs a decision:**
+- The three `elsparkcykel` smoke expectations cannot be verified offline. The
+  frozen capture has no run for those exact phrases, and no run of any phrase
+  records a debate date, an interpretation facet or date-broadening metadata.
+  Producing them needs a live Supabase read plus one OpenAI query embedding,
+  which OPT1 is explicitly not permitted to perform. This is recorded, not
+  worked around.
+
+**Next agent should know:**
+- Run `C:\WINDOWS\py.exe -3.12 scripts/evaluate_topic_search.py smoke` for the
+  baseline; add `--strict-release` in CI. Output goes to
+  `test_outputs/topic_search_smoke_baseline.{json,md}`.
+- To unblock the three date expectations, an authorised operator must run one
+  `capture-live` that includes the three elsparkcykel phrases and records the
+  interpretation and `dateBroadening` envelope per run. Nothing else is needed:
+  `_smoke_check` already implements both date rules and both are unit-tested.
+- The three known elflyg false positives `HD10398_27_c02`, `HD10401_27_c02` and
+  `HD10406_27_c02` sit at hybrid ranks 8-10 of the captured `elsparkcyklar` run
+  with zero lexical coverage. They are recorded as forbidden scooter examples
+  and as a known open defect owned by OPT2. OPT1 may not change ranking, so the
+  baseline reports them instead of failing on them; OPT2 removing them is the
+  measurable improvement.
+- `judgments.json` is untouched and still 0/36 manually complete. Do not grade
+  it, and do not ask the owner to.
+
+## OPT2 — Ranking v3 with candidate-level admission — DONE 2026-08-26
+
+**Built:** the additive migration pair `migrations/029_search_candidate_admission.{up,down}.sql`
+creating `public.search_clip_candidates_v3`; candidate-admission constants and a
+mirrored `admitsSemanticCandidate` predicate in
+`supabase/functions/_shared/search/ranking.ts`; the v3 RPC switch in
+`supabase/functions/clip-search/index.ts`; the offline `admission-grid` command
+and its before/after report renderer in `scripts/evaluate_topic_search.py`; the
+OPT2 entries in `docs/BUILD_PLAN.md`,
+`docs/TOPIC_SEARCH_FINISHED_OPTIMIZATION_ROADMAP.md` and
+`docs/privacy/TOPIC_SEARCH_RELEASE_EVIDENCE.md`.
+
+This is ordinary ranking work backed by offline regression evidence. It is not
+model training and not human relevance judgment. The 36-query fixture and its
+385 captured rows were not graded, `judgments.json` is untouched and still 0/36,
+and the owner has no action item beyond the deploy decision below.
+
+**Tests:** 30 new unit tests in `tests/unit/test_topic_search_evaluation.py`
+(66 in that file) and 13 new Edge tests in
+`supabase/functions/tests/clip-search.test.ts` (36 declarations there, 39
+executed cases: one existing declaration is a three-case parameterised loop).
+`C:\WINDOWS\py.exe -3.12 -m pytest tests/unit -q` passes.
+`C:\WINDOWS\py.exe -3.12 tasks.py test lint typecheck` is green: **501 passed**,
+79 deselected, 1 pre-existing `audioop` deprecation warning; ruff clean; mypy
+clean over 83 source files. `node --experimental-strip-types --test
+supabase/functions/tests/*.test.ts` is **123 pass, 0 fail**. `git diff --check`
+is clean. `ruff format --check` is clean for all three Python files this chunk
+touched; the 32 unrelated files it would reformat are pre-existing.
+
+**Contracts touched:** none. The public `clip-search-v1` response shape,
+`src/contracts.py`, embedding dimensions, index contents, the frontend, the
+video pipeline, Bunny, the player/PWA and migrations 022-028 are all unchanged.
+`searchVersion` in the response is a value, not a shape: it now reads
+`pleni-search-v3`.
+
+**Database state:** unchanged on every environment. Migration 029 was written
+and tested as text; it was **not applied**. No live or OpenAI call was made.
+
+**Deployment state:** nothing deployed, nothing pushed. The work sits on
+`claude/pleni-opt2-ranking-4d87c9` in a worktree.
+
+**Index state:** unchanged. `openai:text-embedding-3-large:1024:v1`, same
+dimensions, same chunks, no backfill.
+
+### The defect and the fix
+
+v2's `semantic_admitted` CTE cross joins one query-level `semantic_confidence`
+row, so a single keyword anchor anywhere in the query admits **every** semantic
+candidate. That is why three electric-aviation clips sat at ranks 8-10 of the
+captured `elsparkcyklar` run with cosine similarity `0.416605` and zero Swedish
+lexical coverage.
+
+v3 keeps that query-level gate verbatim and adds a second CTE after it. A
+candidate that also matched keywords is exempt; a semantic-only candidate must
+clear `similarity >= 0.50` or `lexical_coverage >= 0.67` on its own evidence.
+The v3 function body is otherwise byte-identical to v2: same `eligible` CTE with
+the structured filters ahead of retrieval, same `0.35` floor, same `limit 120`
+pools, same `1.5`/`1.0` weights and `k = 50`, same tie breaks, same envelope.
+
+### Selected configuration
+
+`sim0.50-lex0.67-kw1.50-sem1.00-k50` — candidate similarity `0.50`, candidate
+lexical coverage `0.67`, fusion weights and `k` unchanged from v2.
+
+Run `C:\WINDOWS\py.exe -3.12 scripts/evaluate_topic_search.py admission-grid`
+(add `--strict-release` in CI; it exits 1 when no configuration passes). Output
+goes to `test_outputs/topic_search_admission_before_after.md`.
+
+| Candidate similarity | Outcome |
+|---|---|
+| `0.40` | discarded, 36 configurations: the three elflyg rows stay in the scooter result |
+| `0.45` / `0.48` / `0.50` | 108 survivors; semantic-only tails 30 / 29 / 25-23 |
+| `0.53` | discarded, 36 configurations: the descriptive scooter search falls to 3, below `min(5, 10)` |
+
+Rule 7 picks the fewest semantic-only tail candidates (23, a unique minimum at
+lexical `0.67`), then the higher similarity.
+
+### Top-five before/after on the frozen capture
+
+Engineering evidence of observable membership. Not human-validated relevance
+evidence: no grade, no nDCG, no precision, and no configuration is called best.
+
+| Search | Before | After | Dropped |
+|---|---|---|---|
+| `elsparkcyklar` (`q01`) | 10 | 6 | 3 elflyg rows + 1 weak context row |
+| `trafiksäkerhet för små elektriska hyrfordon` (`s04`) | 10 | 6 | 4 tail context rows |
+| `barnfattigdom` (`s05`) | 10 | 10 | none |
+| `äldreomsorg bemanning` (`s06`) | 10 | 10 | none |
+| `havsbaserad vindkraft i Kattegatt` (`s07`) | 10 | 6 | 4 tail context rows |
+| `hur ska gängkriminaliteten stoppas` (`s08`) | 10 | 10 | none |
+| `bananministeriet på månen` (`s09`) | 0 | 0 | none |
+| `kvantdatorer på varje förskola` (`s10`) | 0 | 0 | none |
+
+**Every top-five position is identical before and after in all eight captured
+searches.** Only tail candidates were removed. Across all 180 configurations no
+keyword-matched candidate was ever dropped and both negatives stayed empty.
+
+**Decisions made:**
+- Semantic retrieval ranks stay assigned *before* admission, exactly as in v2.
+  Recomputing them afterwards would promote survivors and reshuffle the head;
+  filtering after ranking is why the top five is provably unchanged.
+- `matchKind` is what makes a candidate semantic-only, not absence from the
+  captured keyword top-10. The captured `rankings.keyword` list is a
+  diagnostic pool of 10, while the real keyword CTE holds up to 120, so
+  `barnfattigdom` and `äldreomsorg bemanning` look semantic-only by list
+  membership but are `both` and correctly exempt.
+- The keyword weight, semantic weight and RRF `k` axes were enumerated but held
+  at the deployed values. They change order rather than admission, and the
+  frozen capture preserves only the top-N the deployed weights produced, so a
+  different weighting cannot be replayed against it honestly. The grid records
+  this rather than implying it compared them.
+- The smoke fixture keeps `pleni-search-v2`. It describes what produced the
+  frozen capture, so it is now the v2 before-state and its drift test binds to
+  the new `SEARCH_RANKING_ROLLBACK_VERSION`. Relabelling it v3 would have
+  falsified the baseline.
+- Gate 5 is verified against the captured `elsparkcyklar` run, bound through
+  `forbiddenExamples.identifiedFrom`. It is the only scooter search the frozen
+  capture can evidence, and it is the run the three false positives came from.
+- The grid stops and reports conflicts rather than selecting something when no
+  configuration passes; a unit test drives that path.
+
+**Observations (not fixed, out of scope):**
+- `docs/BUILD_PLAN.md` still labels the OPT1 chunk `PLANNED` although OPT1 is
+  DONE and recorded as such in the roadmap and `PROGRESS.md`. Left alone: it is
+  OPT1's record to correct.
+- `ruff format --check` reports 32 pre-existing unformatted files repo-wide.
+  Formatting them is not this chunk's scope.
+
+**Blocked / needs a decision:**
+- **The deploy is the owner's call and was not performed.** Applying
+  `029_search_candidate_admission.up.sql` and deploying the `clip-search` Edge
+  Function both require explicit owner authority at the time they happen. Until
+  then production still runs v2 and is unaffected by this branch.
+- The three `elsparkcykel` smoke expectations remain `blocked_needs_capture`.
+  OPT2 was instructed to make no live or OpenAI call, so the capture OPT1's
+  handoff asked for was not produced. Their date gates stay honestly unproven
+  rather than assumed green.
+
+**Next agent should know:**
+- Deploy order if the owner authorises it: apply `029` first (additive, v2 stays
+  callable), then deploy the Edge Function, then capture the live version and
+  the rollback command here. Rollback is redeploying the previous Edge commit,
+  which calls v2; no SQL rollback is needed for that.
+  `029_search_candidate_admission.down.sql` drops v3 alone.
+- `tests/live/test_topic_search_rpc.py` now expects `search_clip_candidates_v3`
+  only when `029` is in `public.schema_migrations`, so it is truthful before and
+  after the deploy. `test_v3_returns_the_same_envelope_as_v2` skips until then.
+- The selected constants live in three places and two tests fail on drift:
+  `029_search_candidate_admission.up.sql`, `ranking.ts` and the grid's
+  `SELECTED_CONFIGURATION_ID`.
+- OPT3 owns intent and filter hardening and does not need the v3 deploy to have
+  happened; it can read v3's SQL as text.
+- `judgments.json` is untouched and still 0/36 manually complete. Do not grade
+  it, and do not ask the owner to.

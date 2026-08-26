@@ -12,6 +12,10 @@ import {
 import { SEARCH_EMBEDDING_DIMENSIONS } from "../_shared/search/chunks.ts";
 import { OpenAIEmbeddingError } from "../_shared/search/openai.ts";
 import {
+  admitsSemanticCandidate,
+  SEARCH_CANDIDATE_ADMISSION_LEXICAL_COVERAGE,
+  SEARCH_CANDIDATE_ADMISSION_SIMILARITY,
+  SEARCH_RANKING_ROLLBACK_VERSION,
   SEARCH_RANKING_VERSION,
   SEARCH_SEMANTIC_ADMISSION_LEXICAL_COVERAGE,
   SEARCH_SEMANTIC_ADMISSION_SIMILARITY,
@@ -60,7 +64,7 @@ test("runs a contextual query as hybrid search and returns the exact public cont
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.equal(body.mode, "hybrid");
-  assert.equal(body.searchVersion, "pleni-search-v2");
+  assert.equal(body.searchVersion, "pleni-search-v3");
   assert.equal(body.results[0].matchKind, "both");
   assert.equal(fake.searches.length, 1);
   assert.equal(fake.searches[0].topic, "elsparkcyklar");
@@ -484,7 +488,7 @@ test("migration 027 adds calibrated admission and an additive rollback path", ()
     "utf8",
   );
 
-  assert.equal(SEARCH_RANKING_VERSION, "pleni-search-v2");
+  assert.equal(SEARCH_RANKING_ROLLBACK_VERSION, "pleni-search-v2");
   assert.equal(SEARCH_SEMANTIC_ADMISSION_SIMILARITY, 0.53);
   assert.equal(SEARCH_SEMANTIC_ADMISSION_LEXICAL_COVERAGE, 0.67);
   assert.match(up, /top_similarity >= 0\.53/iu);
@@ -697,3 +701,252 @@ const RESULT: SearchClipResult = {
   matchExcerpt: "Ett tal om elsparkcyklar och skatter.",
   matchKind: "both",
 };
+
+// --- OPT2 candidate-level admission ------------------------------------------
+
+// The captured scores of the three elflyg rows that entered a scooter search as
+// context-only filler. They are the known weak-filler failure class OPT2 owns.
+const ELFLYG_FALSE_POSITIVES = [
+  "HD10398_27_c02",
+  "HD10401_27_c02",
+  "HD10406_27_c02",
+] as const;
+const ELFLYG_SIMILARITY = 0.416605;
+const ELFLYG_LEXICAL_COVERAGE = 0;
+
+test("a keyword-matched candidate is never subject to candidate admission", () => {
+  // Keyword matches survive on their own evidence, whatever the semantic side
+  // says, so an exact Swedish match can never be filtered out.
+  assert.equal(
+    admitsSemanticCandidate({
+      keywordMatched: true,
+      similarity: 0,
+      lexicalCoverage: 0,
+    }),
+    true,
+  );
+  assert.equal(
+    admitsSemanticCandidate({
+      keywordMatched: true,
+      similarity: null,
+      lexicalCoverage: null,
+    }),
+    true,
+  );
+});
+
+test("a semantic-only candidate must clear its own similarity or coverage bar", () => {
+  const weak = {
+    keywordMatched: false,
+    similarity: SEARCH_CANDIDATE_ADMISSION_SIMILARITY - 0.01,
+    lexicalCoverage: SEARCH_CANDIDATE_ADMISSION_LEXICAL_COVERAGE - 0.01,
+  };
+  assert.equal(admitsSemanticCandidate(weak), false);
+  assert.equal(
+    admitsSemanticCandidate({ ...weak, similarity: SEARCH_CANDIDATE_ADMISSION_SIMILARITY }),
+    true,
+  );
+  assert.equal(
+    admitsSemanticCandidate({
+      ...weak,
+      lexicalCoverage: SEARCH_CANDIDATE_ADMISSION_LEXICAL_COVERAGE,
+    }),
+    true,
+  );
+});
+
+test("a strong candidate never admits a weaker candidate in the same query", () => {
+  const strong = { keywordMatched: false, similarity: 0.95, lexicalCoverage: 1 };
+  const weak = { keywordMatched: false, similarity: 0.2, lexicalCoverage: 0 };
+
+  // Admission reads one candidate at a time. The query-level gate is what the
+  // strong candidate can open; it cannot carry the weak one past its own bar.
+  assert.equal(admitsSemanticCandidate(strong), true);
+  assert.equal(admitsSemanticCandidate(weak), false);
+  assert.deepEqual(
+    [strong, weak].filter((candidate) => admitsSemanticCandidate(candidate)),
+    [strong],
+  );
+});
+
+test("the three known elflyg context rows fail candidate admission", () => {
+  for (const clipId of ELFLYG_FALSE_POSITIVES) {
+    assert.equal(
+      admitsSemanticCandidate({
+        keywordMatched: false,
+        similarity: ELFLYG_SIMILARITY,
+        lexicalCoverage: ELFLYG_LEXICAL_COVERAGE,
+      }),
+      false,
+      clipId,
+    );
+  }
+  // They still cleared v2's query-level gate, which is why v2 served them: the
+  // scooter query had a keyword anchor elsewhere in the result list.
+  assert.ok(ELFLYG_SIMILARITY < SEARCH_CANDIDATE_ADMISSION_SIMILARITY);
+  assert.ok(ELFLYG_LEXICAL_COVERAGE < SEARCH_CANDIDATE_ADMISSION_LEXICAL_COVERAGE);
+});
+
+test("candidate admission keeps the query-level gate rather than replacing it", () => {
+  // The query-level floors are unchanged; the candidate floors are additional.
+  assert.equal(SEARCH_SEMANTIC_ADMISSION_SIMILARITY, 0.53);
+  assert.equal(SEARCH_SEMANTIC_ADMISSION_LEXICAL_COVERAGE, 0.67);
+  assert.equal(SEARCH_CANDIDATE_ADMISSION_SIMILARITY, 0.5);
+  assert.equal(SEARCH_CANDIDATE_ADMISSION_LEXICAL_COVERAGE, 0.67);
+});
+
+test("a shorter result list is served as-is and no quota is filled", async () => {
+  const three = [resultAt("a", "2026-05-01"), resultAt("b", "2026-05-02"), resultAt(
+    "c",
+    "2026-05-03",
+  )];
+  const fake = fakeDependencies({ candidate: envelope(three, true) });
+  const response = await handler(fake.dependencies)(
+    requestWithLimit("elsparkcyklar", 20),
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(fake.searches[0].limit, 20);
+  assert.equal(body.results.length, 3);
+  assert.equal(fake.logs[0].resultCount, 3);
+  assert.equal(fake.searches.length, 1);
+});
+
+test("server order is handed to the client unchanged", async () => {
+  // Ties are broken in SQL and the Edge Function must not re-sort. Dates here
+  // ascend so any client-side recency sort would be visible.
+  const ordered = [
+    resultAt("first", "2026-01-01"),
+    resultAt("second", "2026-06-01"),
+    resultAt("third", "2026-12-01"),
+  ];
+  const fake = fakeDependencies({ candidate: envelope(ordered, true) });
+  const response = await handler(fake.dependencies)(request("elsparkcyklar"));
+  const body = await response.json();
+
+  assert.deepEqual(
+    body.results.map((result: SearchClipResult) => result.clip.id),
+    ordered.map((result) => result.clip.id),
+  );
+});
+
+test("no ranking score reaches the public response", async () => {
+  const fake = fakeDependencies();
+  const response = await handler(fake.dependencies)(request("elsparkcyklar"));
+  const body = await response.json();
+
+  const rendered = JSON.stringify(body);
+  for (const leak of ["similarity", "lexicalCoverage", "fusionScore", "fusion_score", "strength"]) {
+    assert.equal(rendered.includes(leak), false, leak);
+  }
+});
+
+test("the v2 rollback envelope still parses unchanged", async () => {
+  // v3 returns the same envelope as v2, so redeploying the previous Edge commit
+  // is a pure rollback with no SQL change.
+  const v2Envelope = {
+    indexVersion: "openai:text-embedding-3-large:1024:v1",
+    semanticAvailable: true,
+    results: [RESULT],
+  };
+  const fake = fakeDependencies({ candidate: v2Envelope });
+  const response = await handler(fake.dependencies)(request("elsparkcyklar"));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.mode, "hybrid");
+  assert.equal(body.indexVersion, v2Envelope.indexVersion);
+  assert.equal(body.results.length, 1);
+});
+
+test("rejects a malformed v3 candidate envelope", async () => {
+  for (
+    const malformed of [
+      { indexVersion: "", semanticAvailable: true, results: [] },
+      { indexVersion: "v1", semanticAvailable: "yes", results: [] },
+      { indexVersion: "v1", semanticAvailable: true, results: {} },
+      { indexVersion: "v1", semanticAvailable: true },
+      { results: [] },
+    ]
+  ) {
+    const fake = fakeDependencies({ candidate: malformed });
+    const response = await handler(fake.dependencies)(request("elsparkcyklar"));
+    assert.equal(response.status, 503, JSON.stringify(malformed));
+    assert.deepEqual(await response.json(), { error: "search_unavailable" });
+  }
+});
+
+test("rejects a missing v3 candidate envelope", async () => {
+  // Injected directly: the fake's `??` default would swallow a null here.
+  const fake = fakeDependencies();
+  const dependencies: ClipSearchDependencies = {
+    ...fake.dependencies,
+    searchCandidates: async (search) => {
+      fake.searches.push(search);
+      return null;
+    },
+  };
+  const response = await handler(dependencies)(request("elsparkcyklar"));
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "search_unavailable" });
+  assert.equal(fake.logs[0].resultCount, 0);
+});
+
+test("migration 029 adds candidate-level admission with an additive rollback path", () => {
+  const up = readFileSync(
+    new URL("../../../migrations/029_search_candidate_admission.up.sql", import.meta.url),
+    "utf8",
+  );
+  const down = readFileSync(
+    new URL("../../../migrations/029_search_candidate_admission.down.sql", import.meta.url),
+    "utf8",
+  );
+
+  // The selected constants must not drift between SQL and TypeScript.
+  assert.equal(SEARCH_CANDIDATE_ADMISSION_SIMILARITY, 0.5);
+  assert.equal(SEARCH_CANDIDATE_ADMISSION_LEXICAL_COVERAGE, 0.67);
+  assert.match(up, /candidate\.similarity >= 0\.50/iu);
+  assert.match(up, /candidate\.lexical_coverage >= 0\.67/iu);
+  // The v2 query-level gate is kept, not replaced.
+  assert.match(up, /top_similarity >= 0\.53/iu);
+  assert.match(up, /top_lexical_coverage >= 0\.67/iu);
+  // Keyword-matched candidates are exempt from candidate admission.
+  assert.match(up, /exists \(\s*select 1\s*from keyword_ranked keyword/iu);
+  // Structured filters stay in `eligible`, ahead of retrieval.
+  assert.match(up, /with eligible as \([\s\S]{0,900}p_politician_id is null/iu);
+  assert.match(up, /eligible[\s\S]{0,4000}keyword_candidates as \(/iu);
+  // Unchanged retrieval and fusion: no recency boost, same weights and floor.
+  assert.match(up, /1\.5 \/ \(50 \+ keyword\.retrieval_rank\)/iu);
+  assert.match(up, /1\.0 \/ \(50 \+ semantic\.retrieval_rank\)/iu);
+  assert.match(up, />= 0\.35/iu);
+  assert.match(up, /limit 120/iu);
+  assert.doesNotMatch(up, /published_at/iu);
+  // Date stays a filter and a deterministic tie break only.
+  assert.match(up, /order by\s+fused\.fusion_score desc,\s+fused\.debate_date desc,/iu);
+  // Additive: v3 is created, nothing earlier is dropped or rewritten.
+  assert.match(up, /create or replace function public\.search_clip_candidates_v3\(/iu);
+  assert.doesNotMatch(up, /drop function/iu);
+  assert.doesNotMatch(up, /alter table/iu);
+  assert.doesNotMatch(up, /drop table/iu);
+  assert.match(up, /revoke all on function public\.search_clip_candidates_v3[\s\S]+from public, anon, authenticated/iu);
+  assert.doesNotMatch(up, /grant execute[\s\S]{0,120}\b(?:anon|authenticated)\b/iu);
+  assert.match(up, /to service_role/iu);
+  // The down path removes v3 only; v2 stays deployed for rollback.
+  assert.match(down, /drop function if exists public\.search_clip_candidates_v3\(/iu);
+  assert.doesNotMatch(down, /search_clip_candidates_v2/iu);
+  assert.doesNotMatch(down, /drop table/iu);
+});
+
+test("the Edge Function calls the RPC version its constants name", () => {
+  const edgeFunction = readFileSync(
+    new URL("../clip-search/index.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.equal(SEARCH_RANKING_VERSION, "pleni-search-v3");
+  assert.equal(SEARCH_RANKING_ROLLBACK_VERSION, "pleni-search-v2");
+  assert.match(edgeFunction, /search_clip_candidates_v3/u);
+  assert.doesNotMatch(edgeFunction, /search_clip_candidates_v2/u);
+});

@@ -26,7 +26,7 @@ const handler = createClipSearchHandler(
       return result.embeddings[0];
     },
     searchCandidates: (request) => callServiceRpc(
-      "search_clip_candidates_v2",
+      "search_clip_candidates_v3",
       {
         p_topic: request.topic,
         p_query_embedding: request.queryEmbedding,

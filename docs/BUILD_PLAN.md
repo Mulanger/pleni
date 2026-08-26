@@ -1761,6 +1761,107 @@ production build, PWA verification, Function deployment and live probes pass.
 
 ---
 
+## OPT1 — Lean automatic smoke baseline — DONE 2026-08-26
+
+**Depends on:** deployed UI16.15 and
+`docs/TOPIC_SEARCH_FINISHED_OPTIMIZATION_ROADMAP.md`. Not on OPT0's optional
+grade importer and not on any human relevance review. **Size:** small.
+
+**Objective:** create a small, reproducible, offline before/after snapshot that
+protects the deployed topic-search behavior while later chunks change ranking.
+This is ordinary regression testing. It is not model training, not a topic
+whitelist, not a synonym table and not a source of ranking decisions. The ten
+committed phrases are test data only; the live endpoint never reads them.
+
+**Scope — may modify:** `scripts/evaluate_topic_search.py` and focused offline
+search fixtures under `tests/fixtures/search/`;
+`tests/unit/test_topic_search_evaluation.py`;
+`docs/privacy/TOPIC_SEARCH_RELEASE_EVIDENCE.md`;
+`docs/TOPIC_SEARCH_FINISHED_OPTIMIZATION_ROADMAP.md`; this file and
+`PROGRESS.md`. **Must not modify:** production ranking or its thresholds, Edge
+Functions, migrations, frontend code, the embedding model/index, the public
+`clip-search-v1` contract, pipeline stages or `src/contracts.py`. No OpenAI
+call, no live call and no deploy occurs. No dependency is added.
+
+**Acceptance:** an offline `smoke` command replays the ten committed phrases
+against the existing frozen capture, records server order, result count, clip
+ids, debate dates, interpretation/facets, date-broadening metadata and the
+search/index/ranking versions, and emits byte-identical output for identical
+inputs. The eight positive phrases keep their known non-empty or structured
+behavior; both negative phrases stay empty; `22 juni` stays an exact date with
+no broadening notice; `30 mars` broadens only from an empty exact result and
+returns no row from the excluded range. Phrases with no offline evidence are
+reported as explicitly blocked rather than guessed. The three known elflyg
+false positives are recorded as forbidden scooter examples. A compact top-five
+title/excerpt report is written under the ignored `test_outputs/` directory and
+is labelled engineering smoke evidence, never human-validated relevance
+evidence. Output never contains credentials, client addresses, raw user
+queries, embeddings or private ranking scores. No grade, nDCG target,
+tuning/holdout split or owner review queue is created.
+
+---
+
+## OPT2 — Ranking v3 with candidate-level admission — DONE 2026-08-26
+
+**Depends on:** OPT1's committed smoke baseline and
+`docs/TOPIC_SEARCH_FINISHED_OPTIMIZATION_ROADMAP.md`. **Size:** large.
+
+**Objective:** remove weak semantic filler from valid result lists without
+damaging exact keyword matches, longer descriptive semantic queries, Swedish
+compounds, structured person/party/date/event filters, keyword fallback or
+automatic date broadening. A result list may be shorter than the requested
+limit; nothing is ever backfilled to reach a quota.
+
+**Scope — may modify:** `supabase/functions/_shared/search/ranking.ts`;
+`supabase/functions/clip-search/index.ts`; one new additive migration pair;
+`scripts/evaluate_topic_search.py` and focused fixtures/tests; Edge and live
+search tests; search evidence docs, this file and `PROGRESS.md`. **Must not
+modify:** the public `clip-search-v1` response shape, embedding dimensions,
+index contents, frontend code, `src/contracts.py` or migrations 022-028.
+
+**Ranking design.** The v2 query-level semantic safety gate is kept unchanged: a
+keyword anchor exists, or the query's best cosine similarity is at least 0.53,
+or its best Swedish lexical coverage is at least 0.67. Candidate-level admission
+is added after it. Every keyword-matched candidate stays eligible. A
+semantic-only candidate is admitted only when its own similarity is at least
+0.50 or its own lexical coverage is at least 0.67, so a strong candidate
+elsewhere in the query can never admit a weaker one. Structured filters stay
+inside the `eligible` CTE ahead of keyword and vector retrieval. No recency
+boost is added; date remains a filter and a deterministic tie break. Semantic
+retrieval ranks are assigned before admission, so dropping a row never reorders
+or promotes the rows that remain. Scores stay absent from the public JSON.
+
+**Threshold selection.** `scripts/evaluate_topic_search.py admission-grid`
+replays the roadmap's 180-point grid offline against the frozen capture. There
+is no human-judged denominator, so no configuration is called best and no nDCG
+or precision is produced; selection uses observable membership only. Candidate
+similarity 0.40 is discarded because it keeps the elflyg filler, and 0.53 is
+discarded because it starves a positive search below `min(5, baseline)`. Of the
+108 survivors the conservative order selects `sim0.50-lex0.67-kw1.50-sem1.00-k50`.
+The three fusion axes change order rather than admission, and the frozen capture
+preserves only the top-N the deployed weights produced, so they are held at the
+deployed constants.
+
+**Acceptance:** the additive `029_search_candidate_admission` pair creates
+`public.search_clip_candidates_v3` with v2's arguments and response envelope,
+keeps v2 deployed for rollback, and its down migration drops v3 only. The
+selected constants are mirrored in `ranking.ts` and both an Edge test and a unit
+test fail on drift. `SEARCH_RANKING_VERSION` becomes `pleni-search-v3` and the
+Edge Function calls v3. Unit, migration and Edge tests cover candidate-specific
+admission, a strong candidate not admitting weaker ones, keyword preservation,
+absent quota fill, deterministic order, structured filters, exact dates, date
+broadening, keyword fallback, provider failure, semantic outage, malformed
+envelopes, the negative phrases, the three elflyg ids and the v2 rollback
+envelope. A compact top-five before/after report is written under the ignored
+`test_outputs/` directory and labelled engineering evidence, never
+human-validated relevance evidence. Date broadening still fetches at most 60
+candidates, excludes the whole original range, preserves server order and makes
+no second OpenAI call. Nothing is deployed and nothing is pushed to `main`; the
+migration and the Edge switch are prepared and tested locally only, and both
+require explicit owner authority at the time they are performed.
+
+---
+
 ## Phase 2 backlog (not chunked yet)
 
 Deliberately deferred. Do not pull these forward.

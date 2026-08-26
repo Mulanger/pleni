@@ -1,0 +1,152 @@
+{
+  "evidenceKind": "engineering_smoke_evidence",
+  "evidenceNote": "Engineering smoke evidence produced automatically from frozen offline fixtures. It records observable retrieval behavior only. It is not human-validated relevance evidence, it contains no relevance grade, and it must never be reported as nDCG, precision or judged quality.",
+  "forbiddenExamples": {
+    "scooterElflygContextFiller": {
+      "clipIds": [
+        "HD10398_27_c02",
+        "HD10401_27_c02",
+        "HD10406_27_c02"
+      ],
+      "currentlyPresentInCapture": true,
+      "identifiedFrom": {
+        "capturedQuery": "elsparkcyklar",
+        "matchKind": "context",
+        "mode": "hybrid",
+        "ranks": [
+          8,
+          9,
+          10
+        ],
+        "runId": "q01"
+      },
+      "ownedBy": "OPT2",
+      "reason": "Electric-aviation clips that entered a scooter search as context-only filler with zero Swedish lexical coverage. They are the known weak-filler failure class and must not appear in an elsparkcykel result list.",
+      "status": "known_open_defect",
+      "statusNote": "OPT1 records this as the before state and may not change ranking to remove it. A later ranking chunk owns the fix; the smoke run reports it rather than failing on it."
+    }
+  },
+  "purposeNote": "These ten phrases are committed regression test data. They are never derived from logged user searches and the live endpoint never reads them. They are not a topic whitelist, a synonym table, a list of permitted user searches, training data or a source of ranking decisions.",
+  "schemaVersion": 1,
+  "searches": [
+    {
+      "evidence": {
+        "kind": "not_captured_offline",
+        "reason": "The frozen 2026-08-25 capture holds no run for this exact phrase, and capturing one needs a live Supabase read plus one OpenAI query embedding, which OPT1 is not permitted to perform."
+      },
+      "expectation": "non_empty",
+      "forbiddenExample": "scooterElflygContextFiller",
+      "id": "s01",
+      "query": "elsparkcykel"
+    },
+    {
+      "date": {
+        "from": "2026-03-30",
+        "label": "30 mars 2026",
+        "to": "2026-03-30"
+      },
+      "evidence": {
+        "kind": "not_captured_offline",
+        "reason": "The frozen 2026-08-25 capture holds no run for this exact phrase, and it records no debate date, interpretation facet or date-broadening metadata for any phrase. Capturing them needs a live Supabase read plus one OpenAI query embedding, which OPT1 is not permitted to perform."
+      },
+      "expectation": "broadened_from_empty_exact",
+      "forbiddenExample": "scooterElflygContextFiller",
+      "id": "s02",
+      "query": "elsparkcykel 30 mars"
+    },
+    {
+      "date": {
+        "from": "2026-06-22",
+        "label": "22 juni 2026",
+        "to": "2026-06-22"
+      },
+      "evidence": {
+        "kind": "not_captured_offline",
+        "reason": "The frozen 2026-08-25 capture holds no run for this exact phrase, and it records no debate date, interpretation facet or date-broadening metadata for any phrase. Capturing them needs a live Supabase read plus one OpenAI query embedding, which OPT1 is not permitted to perform."
+      },
+      "expectation": "exact_date_no_broadening",
+      "forbiddenExample": "scooterElflygContextFiller",
+      "id": "s03",
+      "query": "elsparkcykel 22 juni"
+    },
+    {
+      "evidence": {
+        "capturedQuery": "trafiksäkerhet för små elektriska hyrfordon",
+        "kind": "offline_capture",
+        "runId": "q02"
+      },
+      "expectation": "non_empty",
+      "id": "s04",
+      "query": "trafiksäkerhet för små elektriska hyrfordon"
+    },
+    {
+      "evidence": {
+        "capturedQuery": "barnfattigdom",
+        "kind": "offline_capture",
+        "runId": "q03"
+      },
+      "expectation": "non_empty",
+      "id": "s05",
+      "query": "barnfattigdom"
+    },
+    {
+      "evidence": {
+        "capturedQuery": "äldreomsorg bemanning",
+        "kind": "offline_capture",
+        "runId": "q05"
+      },
+      "expectation": "non_empty",
+      "id": "s06",
+      "query": "äldreomsorg bemanning"
+    },
+    {
+      "evidence": {
+        "capturedQuery": "havsbaserad vindkraft i Kattegatt",
+        "kind": "offline_capture",
+        "runId": "q09"
+      },
+      "expectation": "non_empty",
+      "id": "s07",
+      "query": "havsbaserad vindkraft i Kattegatt"
+    },
+    {
+      "evidence": {
+        "capturedQuery": "hur ska gängkriminaliteten stoppas",
+        "kind": "offline_capture",
+        "runId": "q24"
+      },
+      "expectation": "non_empty",
+      "id": "s08",
+      "query": "hur ska gängkriminaliteten stoppas"
+    },
+    {
+      "evidence": {
+        "capturedQuery": "bananministeriet på månen",
+        "kind": "offline_capture",
+        "runId": "q35"
+      },
+      "expectation": "empty",
+      "id": "s09",
+      "query": "bananministeriet på månen"
+    },
+    {
+      "evidence": {
+        "capturedQuery": "kvantdatorer på varje förskola",
+        "kind": "offline_capture",
+        "runId": "q36"
+      },
+      "expectation": "empty",
+      "id": "s10",
+      "query": "kvantdatorer på varje förskola"
+    }
+  ],
+  "versions": {
+    "captureSource": "tests/fixtures/search/documents.json",
+    "capturedAt": "2026-08-25T17:00:10Z",
+    "indexVersion": "openai:text-embedding-3-large:1024:v1",
+    "interpretationYearBasis": "2026",
+    "rankingVersion": "pleni-search-v2",
+    "searchVersion": "pleni-search-v2",
+    "versionNote": "searchVersion and rankingVersion name the version that produced this frozen capture, which the public clip-search-v1 response returns as searchVersion. OPT2 introduced pleni-search-v3 with candidate-level admission, so this baseline is the v2 before-state of that change and now mirrors SEARCH_RANKING_ROLLBACK_VERSION in supabase/functions/_shared/search/ranking.ts. Relabelling it v3 would falsify which ranking produced the capture. indexVersion and capturedAt are copied from the frozen capture. interpretationYearBasis is the UTC year an unqualified Swedish day-month phrase resolves against; it is pinned here so the baseline cannot drift with the wall clock."
+  }
+}
