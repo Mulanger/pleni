@@ -5063,3 +5063,36 @@ queries still reflect the dates and speakers currently backfilled.
 **Next agent should know:** the normal URL `https://pleni.se/` is now the only URL
 needed for search testing, and sign-in is not required. Verify the first public
 Android search with `elsparkcyklar`, then verify an absent topic stays empty.
+
+## UI16.12 — public browser preflight repair — DEPLOYED 2026-08-26
+
+**Built:** corrected `clip-search` CORS so its allowed-origin `OPTIONS` response
+permits the public Supabase `apikey` header sent by `web/src/search/api.ts`, in
+addition to `content-type` and `x-client-info`. Added an exact browser-preflight
+regression. Disallowed origins and the existing POST-only behavior are
+unchanged.
+
+**Tests:** all **100 Edge tests** pass, including the new preflight regression;
+all **67 frontend tests** pass; `git diff --check` passes.
+
+**Contracts touched:** none. The search request/response contract, ranking,
+embeddings, database state, frontend layout, player/PWA behavior and
+`src/contracts.py` are unchanged.
+
+**Production:** fix commit `78c29af` was pushed to `origin/main`, then the
+`clip-search` Function was deployed with JWT verification disabled as before.
+The real browser preflight returns 204 with
+`Access-Control-Allow-Headers: apikey, content-type, x-client-info`. A following
+public `elsparkcyklar` request returned HTTP 200 with ten results and “6 500
+skadades i olyckor med elsparkcyklar” first.
+
+**Decisions made:** fixed the Function's narrow CORS declaration rather than
+changing the browser client or bypassing the publishable-key header.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** direct server probes do not enforce CORS. Any future
+public Function acceptance must include an actual preflight that requests every
+non-simple header used by the browser client.

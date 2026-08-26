@@ -159,3 +159,11 @@ Release commit `082fbb7` was pushed to `origin/main` and the resulting InstaPods
 bundle was verified at `https://pleni.se/`. The production bundle contains the
 public search UI and no longer contains the beta URL marker or confirmation
 dialog copy.
+
+The first owner browser test exposed a CORS preflight defect: the Function
+allowed `content-type` but omitted the Vite client's required public `apikey`
+header, so browsers blocked a healthy endpoint response. UI16.12 commit
+`78c29af` adds that header and a regression test. The corrected Function was
+deployed and verified with a 204 preflight explicitly allowing
+`apikey, content-type, x-client-info`, followed by a 200 public query returning
+ten `elsparkcyklar` results.

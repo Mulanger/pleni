@@ -1671,7 +1671,7 @@ dialog. The concise provider disclosure remains inline. Focused frontend,
 TypeScript, production build, PWA and Edge regression checks pass before `main`
 is deployed.
 
-## UI16.12 — Public browser preflight repair — IN PROGRESS 2026-08-26
+## UI16.12 — Public browser preflight repair — DONE 2026-08-26
 
 **Depends on:** UI16.11. **Size:** small.
 
