@@ -474,7 +474,7 @@ is separately reviewed.
 
 ## OPT3 — Intent and filter correctness hardening
 
-**Status:** DONE 2026-08-26, offline release candidate. **Size:** medium.
+**Status:** DONE AND DEPLOYED 2026-08-27. **Size:** medium.
 **Depends on:** OPT2 (deployed).
 
 ### Objective
@@ -554,8 +554,8 @@ database change, deploy or push was made; release remains a separate decision.
 
 ## OPT4 — Latency, cost and embedding/index decision
 
-**Status:** IMPLEMENTED OFFLINE 2026-08-27; three-day production evidence
-pending. **Size:** large. **Depends on:** OPT2 and OPT3.
+**Status:** DEPLOYED 2026-08-27; day 1 of the required three-day production
+latency evidence captured. **Size:** large. **Depends on:** OPT2 and OPT3.
 
 ### Objective
 
@@ -645,8 +645,9 @@ pending evidence rather than an implementation defect or an inferred pass.
 
 ## OPT5 — Future backfill resilience, privacy-safe operations and closeout
 
-**Status:** IMPLEMENTED OFFLINE 2026-08-27; production lifecycle evidence
-pending. **Size:** large. **Depends on:** OPT0–OPT4.
+**Status:** DEPLOYED 2026-08-27; production closeout and rollback rehearsal pass.
+The time-bound 20-new-clip lifecycle sample remains pending real publications.
+**Size:** large. **Depends on:** OPT0–OPT4.
 
 ### Objective
 

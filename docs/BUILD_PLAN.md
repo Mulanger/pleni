@@ -1913,7 +1913,7 @@ entries. No live/OpenAI call, deploy or push was made.
 
 ---
 
-## OPT4 — Latency, cost and embedding/index decision — CODE COMPLETE 2026-08-27; LIVE EVIDENCE PENDING
+## OPT4 — Latency, cost and embedding/index decision — DEPLOYED 2026-08-27; DAY 1/3 CAPTURED
 
 **Depends on:** OPT2 and OPT3. **Size:** large.
 
@@ -1950,7 +1950,7 @@ unpassed because they require three real UTC dates after deployment.
 
 ---
 
-## OPT5 — Future backfill resilience, privacy-safe operations and closeout — CODE COMPLETE 2026-08-27; LIVE EVIDENCE PENDING
+## OPT5 — Future backfill resilience, privacy-safe operations and closeout — DEPLOYED 2026-08-27; TIME-BOUND LAG SAMPLE PENDING
 
 **Depends on:** OPT0–OPT4. **Size:** large.
 

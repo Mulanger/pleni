@@ -433,3 +433,48 @@ source files, focused Ruff formatting is clean, both TypeScript projects pass,
 the Vite production build passes and PWA verification retains exactly nine
 same-origin app-shell entries with no video/private data. `git diff --check` is
 clean. The only Python warning is the already documented `audioop` deprecation.
+
+## OPT3–OPT5 production release — 2026-08-27
+
+The owner approved every release step except physical Android testing.
+Migration 030 was applied through the checksum migrator. Production now runs
+`search-embed` version 7 (SHA-256 `365dcc83440f5245257ad8cf5a717a713cd7272d23b10ce6cbdcc3f2736cee15`)
+and `clip-search` version 10 (SHA-256
+`7116ca04236d04ae8b645aa452a097e66059eafce5a379fd1b50dbb6c7a7450e`).
+`origin/main` contains release commit `8f55827`; InstaPods served bundle
+`/assets/index-Dusp71cV.js`. The manifest and service worker passed, with nine
+same-origin app-shell entries and no video, Supabase, Bunny, Clerk or private
+response caching.
+
+The final public matrix passed all ten frozen smoke phrases plus exact-day,
+date-broadening, month/range, verified-event, person/year and party/topic
+invariants. Both negative phrases remained empty. The three known elflyg ids
+were absent. After rollback restoration, `elsparkcykel` and exact 22 June each
+returned two 22 June clips; `elsparkcykel 30 mars` returned the same two clips
+with `30 mars 2026` broadening metadata and no 30 March row. The complete
+database privilege matrix passed 53/53 and five read-only search RPC contracts
+passed.
+
+The strict final closeout reports 3,188 eligible, keyword-current and
+semantic-current documents, zero pending/processing/failed rows and both
+queues empty. The catalogue is below the 10,000-document plan-audit threshold.
+A bounded worker dispatch correctly claimed zero work.
+
+The production rollback was genuinely rehearsed. The previous `af8238a`
+sources matched the recorded old hashes for both Functions, after which the
+current sources were restored to the hashes above. The post-restore live probes
+and strict closeout passed.
+
+The first privacy-safe 30-call benchmark completed with 30 HTTP 200 responses:
+client p50 921.691 ms, p95 1,539.333 ms and max 7,500.599 ms. Actual usage was
+201 tokens, costing approximately USD 0.000026 at USD 0.13/million-token input;
+10,000 similar monthly searches project to about USD 0.008710. Day 1 is an
+honest SLO miss by 39.333 ms. The required three-distinct-day decision cannot
+be completed on one UTC date, so no model, endpoint or timeout was changed.
+
+No new clip was published after the release checkpoint, so the future-lag
+report truthfully contains 0/20 samples. It is not marked pass and no synthetic
+publication was created. Physical Android acceptance was not run by explicit
+owner instruction. OpenAI account data-controls were reachable in the owner's
+authenticated dashboard, but the retention detail failed to render during the
+read-only check; no setting was changed and that evidence remains unclaimed.

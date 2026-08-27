@@ -900,8 +900,8 @@ path:
 2. Provider emergency: run `python scripts/backfill_topic_search.py stop`.
    Public topic search remains available and reports keyword fallback honestly;
    queued primary/backfill work remains durable.
-3. OPT3/OPT4/OPT5 Edge rollback: redeploy current accepted Function version 7
-   from commit `af8238a`. It keeps ranking v3 but removes the unreleased
+3. OPT3/OPT4/OPT5 Edge rollback: redeploy the accepted source from commit
+   `af8238a`. It keeps ranking v3 but removes the newer
    intent/timing/worker changes. For a deeper ranking rollback, use documented
    commit `16a4887`, which calls v2; migrations 029 and 030 may remain applied
    because their objects are additive and service-only.
@@ -916,12 +916,19 @@ path:
 
 Automated tests rehearse the flag-off decision, provider-off/keyword fallback,
 v2 response envelope, fresh-first claim order, queue idempotency and additive
-down paths. An actual production redeploy/rollback remains a separately
-authorised operation and must be recorded with timestamps before it can be
-called a production rehearsal pass.
+down paths.
 
-The rollback procedure is documented but has not been rehearsed against a
-staged production release. Documentation alone is not a pass.
+The production rehearsal passed on 2026-08-27. `search-embed` was temporarily
+redeployed from `af8238a` and matched SHA-256
+`cda92cd71ec52906ba83f1602673f44220b7c48aa4784322090e95b46accf7a9`;
+`clip-search` matched
+`4c2c2046550777188e3893a410301add7c519eb094cfebf3f1d2e014ce44aee0`.
+The current source was then restored and verified as `search-embed` version 7,
+SHA-256 `365dcc83440f5245257ad8cf5a717a713cd7272d23b10ce6cbdcc3f2736cee15`,
+and `clip-search` version 10, SHA-256
+`7116ca04236d04ae8b645aa452a097e66059eafce5a379fd1b50dbb6c7a7450e`.
+After restoration, the exact, broadened and plain scooter probes passed and the
+strict closeout remained 3,188/3,188 current with empty queues.
 
 ### Owner go/no-go record
 

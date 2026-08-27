@@ -5746,3 +5746,48 @@ test now asserts the exact five-signature role matrix rather than suppressing
 the check: two RPCs are anon+authenticated, three are authenticated-only and
 every other public `SECURITY DEFINER` Function remains forbidden. The complete
 production privilege matrix is **53 passed, 0 failed**. Release may resume.
+
+## OPT3–OPT5 — Production release — LIVE 2026-08-27
+
+**Built/released:** additive migration 030; fresh-first `search-embed`; OPT3
+intent parsing, OPT4 diagnostics/benchmarking and OPT5 operations in
+`clip-search`; frontend bundle from `main` commit `8f55827` through InstaPods.
+
+**Production versions:** `search-embed` version 7, SHA-256
+`365dcc83440f5245257ad8cf5a717a713cd7272d23b10ce6cbdcc3f2736cee15`;
+`clip-search` version 10, SHA-256
+`7116ca04236d04ae8b645aa452a097e66059eafce5a379fd1b50dbb6c7a7450e`;
+both `verify_jwt=false`. InstaPods served `/assets/index-Dusp71cV.js` and the
+nine-entry PWA app shell.
+
+**Tests/evidence:** offline closeout was 512 Python, 143 Edge and 71 frontend
+tests plus Ruff, mypy, both TypeScript projects, Vite and PWA verification.
+Production privilege checks are 53/53 and five read-only search RPC checks pass.
+All ten smoke phrases and the extended public matrix pass. Strict coverage is
+3,188 eligible = 3,188 keyword = 3,188 current semantic documents; no failures,
+in-flight work or queue backlog.
+
+**Rollback rehearsal:** temporarily deployed `af8238a`; old hashes matched
+`cda92cd71ec52906ba83f1602673f44220b7c48aa4784322090e95b46accf7a9`
+(`search-embed`) and
+`4c2c2046550777188e3893a410301add7c519eb094cfebf3f1d2e014ce44aee0`
+(`clip-search`). Restored the current hashes/versions above. Post-restore plain,
+exact-day and broadened searches plus strict closeout all pass.
+
+**Latency/cost day 1:** 30/30 HTTP 200; client p50 921.691 ms, p95 1,539.333
+ms, max 7,500.599 ms. 201 embedding tokens cost about USD 0.000026; a
+10,000-query/month scenario is about USD 0.008710 at USD 0.13/million tokens.
+The day is recorded as a 39.333 ms p95 miss; no model/timeout/endpoint was
+changed from one day's evidence.
+
+**Time-bound evidence still pending:** two more benchmark runs on distinct UTC
+dates and 20 genuinely new published clips. The first future-lag report has
+0/20 because no new clips were published after the release checkpoint; no fake
+sample was created. OpenAI's account-specific retention detail did not render
+during the read-only dashboard check, so it is not claimed. Android testing was
+explicitly excluded by the owner and remains the owner's device acceptance.
+
+**Next agent should know:** search is live and rollback-proven. Do not rewrite
+ranking or buy a shadow index from the single-day p95. Complete the two remaining
+daily reports, run `latency-decision`, and run the lag gate only after 20 real
+post-release clips exist.
