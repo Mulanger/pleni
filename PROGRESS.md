@@ -5700,3 +5700,43 @@ real newly published clips while workers are operating.
 rollback normally redeploys accepted Function version 7/source `af8238a` while
 leaving additive migrations 029/030 applied; provider-off keyword fallback and
 both-queue recovery are documented in `docs/RUNBOOK.md`.
+
+## OPT3–OPT5 production release attempt — BLOCKED 2026-08-27
+
+**Owner authority:** the owner explicitly approved applying migration 030,
+deploying the Functions, pushing OPT3–OPT5 to `main` and performing every live
+acceptance step except the Android device test.
+
+**Completed before the release gate stopped:** the checksum migrator reported
+001–029 `already-applied` and applied
+`030_search_future_resilience.up.sql` to project `nlooigmwuqqhhnontlgp`. Five
+read-only topic-search RPC contract tests passed. `closeout-status --strict`
+passed with 3,188 eligible documents, 3,188 keyword documents, 3,188 current
+semantic documents, zero pending/processing/failed rows and both fresh/backfill
+queues empty. The catalogue is below the first 10,000-document HNSW plan-audit
+threshold, so `plan-audit` correctly returned `due=false` without EXPLAIN.
+
+**Blocking gate:** the full live database privilege matrix reported **52
+passed, 1 failed**. The failing assertion predates comments and rejects every
+browser-callable `SECURITY DEFINER` RPC. Production intentionally exposes the
+five reviewed comment RPCs created later by migration 012:
+`list_video_comments`/`report_video_comment` to anonymous and authenticated
+roles, and `get_my_comment_profile`/`create_video_comment`/
+`delete_video_comment` to authenticated viewers. Migration 012 revokes default
+access first, grants those exact roles deliberately and has focused unit tests
+for its safe projection/authentication/ownership rules. Git history confirms
+the broad live assertion (`ab4f6dc`) predates the comment feature (`3007ae7`).
+No migration-030 Function appeared in the reachable list.
+
+**Release state:** stopped before deploying `search-embed` or `clip-search` and
+before pushing to `main`, as required by `AGENTS.md` when an unrelated existing
+test is red. Migration 030 is additive/service-only and remains applied; the
+currently deployed Functions do not call its new claim RPC, so normal
+production behavior remains on Function version 7/source `af8238a`.
+
+**Decision required:** repair `tests/live/test_db_privileges.py` in a separate
+security-test scope so it allows only the five intentional comment RPC grants,
+asserts their exact role matrix and continues rejecting every other public
+`SECURITY DEFINER` function. Then rerun the full privilege matrix before
+resuming Function deployment and the main push. Do not skip or suppress the
+gate.
