@@ -34,6 +34,17 @@ pytestmark = pytest.mark.live
 #: ships in the browser bundle.
 PUBLIC_ROLES = ("anon", "authenticated")
 
+#: The comment feature deliberately exposes five bounded RPCs while keeping its
+#: backing tables private. Every other public SECURITY DEFINER function remains
+#: forbidden to browser roles. Values are (anon, authenticated).
+REVIEWED_PUBLIC_DEFINER_RPCS = {
+    "create_video_comment(text,text,text)": (False, True),
+    "delete_video_comment(uuid)": (False, True),
+    "get_my_comment_profile()": (False, True),
+    "list_video_comments(text,integer)": (True, True),
+    "report_video_comment(uuid,text)": (True, True),
+}
+
 #: Tables that hold no viewer data and are public political content by design.
 PUBLIC_READ_TABLES = ("sources", "politicians", "speeches", "clips")
 
@@ -72,13 +83,15 @@ def sql() -> Any:
     return run
 
 
-def test_no_security_definer_function_is_executable_by_public_roles(sql: Any) -> None:
-    """P0-4. This must fail for *future* functions too — that is the point.
+def test_security_definer_browser_grants_match_reviewed_rpc_allowlist(sql: Any) -> None:
+    """P0-4. Only the reviewed comment RPC/role matrix may be browser-callable.
 
     Postgres grants EXECUTE on a new function to PUBLIC by default and PostgREST
     exposes `public` schema functions as RPC, so every `SECURITY DEFINER`
     function is publicly callable until someone revokes it. Migration 002 fixed
-    the one that existed; this catches the next one.
+    the original default grant. Migration 012 later introduced a deliberately
+    bounded comment API; exact signatures and roles are asserted so this still
+    catches every new or widened grant.
     """
 
     rows = sql(
@@ -95,12 +108,17 @@ def test_no_security_definer_function_is_executable_by_public_roles(sql: Any) ->
     )
 
     assert rows, "expected at least publish_clip_batch to be SECURITY DEFINER"
-    reachable = [
-        row["signature"]
+    reachable = {
+        str(row["signature"]): (
+            row.get("anon") in (True, "true"),
+            row.get("authenticated") in (True, "true"),
+        )
         for row in rows
         if row.get("anon") in (True, "true") or row.get("authenticated") in (True, "true")
-    ]
-    assert not reachable, f"SECURITY DEFINER functions callable from a browser: {reachable}"
+    }
+    assert reachable == REVIEWED_PUBLIC_DEFINER_RPCS, (
+        f"browser-callable SECURITY DEFINER grants differ from the reviewed RPC matrix: {reachable}"
+    )
 
 
 def test_publish_rpc_is_service_role_only(sql: Any) -> None:
@@ -151,15 +169,11 @@ def test_protected_tables_grant_nothing_to_public_roles(
     grant is absent as well.
     """
 
-    rows = sql(
-        f"select has_table_privilege('{role}', 'public.{table}', '{verb}') as allowed;"
-    )
+    rows = sql(f"select has_table_privilege('{role}', 'public.{table}', '{verb}') as allowed;")
     if not rows:
         pytest.skip(f"public.{table} does not exist in this project")
 
-    assert rows[0]["allowed"] in (False, "false"), (
-        f"{role} holds {verb} on public.{table}"
-    )
+    assert rows[0]["allowed"] in (False, "false"), f"{role} holds {verb} on public.{table}"
 
 
 @pytest.mark.parametrize("table", PUBLIC_READ_TABLES)

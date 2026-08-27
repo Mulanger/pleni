@@ -5740,3 +5740,9 @@ asserts their exact role matrix and continues rejecting every other public
 `SECURITY DEFINER` function. Then rerun the full privilege matrix before
 resuming Function deployment and the main push. Do not skip or suppress the
 gate.
+
+**Resolved 2026-08-27:** the owner explicitly approved proceeding. The live
+test now asserts the exact five-signature role matrix rather than suppressing
+the check: two RPCs are anon+authenticated, three are authenticated-only and
+every other public `SECURITY DEFINER` Function remains forbidden. The complete
+production privilege matrix is **53 passed, 0 failed**. Release may resume.
