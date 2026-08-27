@@ -1,17 +1,16 @@
 # Privacy, safety and legal operating policy
 
-Decision record for the current release, updated 2026-08-26.
+Decision record for the current release, updated 2026-08-27.
 
 Implementation note, 2026-08-14: the owner approved the explicit-choice V1
 policy and its production release. It excludes playback history, inference and
 exploration. `VITE_RECOMMENDATIONS_ENABLED=false` is now an emergency kill
 switch rather than the normal release state.
 
-Topic search remains default-off for ordinary visitors. The owner approved a
-signed-in Android beta reached through an explicit production URL marker. It
-shows the OpenAI/private-information warning and requires confirmation before
-the first submitted query in each page session. This is not approval for a
-general viewer release.
+Topic search is part of the normal anonymous Search tab after the owner's
+2026-08-26 public release decision. The concise OpenAI/private-information
+warning remains visible. `VITE_TOPIC_SEARCH_ENABLED=false` is the emergency
+frontend kill switch; it is not the normal production state.
 
 ## Topic-search query handling
 
@@ -32,6 +31,12 @@ general viewer release.
 - Raw queries must not be reused to fine-tune models, create aliases, populate
   “trending searches” or train a ranking system without a separate inventory,
   lawful-basis assessment, notice and owner decision.
+- Search health logs are an exact allowlist: HTTP status/mode, result-count
+  bucket, semantic/provider/date booleans, search/index versions, total/phase
+  durations and rate-limit reason. Raw/normalized query, embedding, exact
+  result count, person/party/event/source/date filters, address, HMAC and viewer
+  identity are forbidden. Actual prompt-token count may be returned to the
+  requesting client for cost measurement but is not added to the server log.
 
 ## Minors and onboarding (F0-7)
 

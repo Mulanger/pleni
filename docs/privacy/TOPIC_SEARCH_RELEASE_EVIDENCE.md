@@ -373,3 +373,63 @@ Automated evidence: 501 Python tests, 139 Edge tests and 71 frontend tests,
 including byte-identical browser/Edge contract fixtures, passed. TypeScript,
 production build and PWA verification also passed. No credential, live query,
 OpenAI request, deployment or database write occurred during OPT3.
+
+## OPT4 latency/cost instrumentation candidate — 2026-08-27
+
+The public JSON response remains `clip-search-v1`. The candidate adds only
+privacy-safe diagnostic response headers: aggregate phase durations and the
+actual prompt-token count returned by the one query-embedding request. The
+structured Function log was reduced from an exact result count/cache flag to an
+allowlisted result bucket, semantic/provider/date booleans, search/index
+versions, durations and rate-limit reason. Automated tests compare the complete
+top-level key set and reject query/topic, vector, client address/key,
+person/party/event/source/date-filter and exact-result-count fields.
+
+`benchmark-live` is prepared but was not run. It makes exactly 30 serial public
+requests over the ten committed smoke phrases, waits at least seven seconds,
+keeps the first request and failures, and writes query ids rather than phrase
+text. `latency-decision` requires three complete reports from distinct UTC
+dates. It recomputes each run's failures/percentiles, aggregate phase p95s and
+token total from all 90 call rows rather than trusting a stored pass flag. It
+retains the large 1024-dimensional index unless that evidence and a separate
+paid-shadow approval justify comparison. No model, endpoint, timeout, index,
+OpenAI setting or rate limit changed.
+
+**Evidence state:** implementation and synthetic/offline regression pass;
+three-day production p50/p95/max, actual production tokens/cost and the final
+latency/index decision are pending real reports. No live/provider call was made
+for OPT4 in this session.
+
+## OPT5 future-index and operations candidate — 2026-08-27
+
+Additive migration 030 and the matching worker code are prepared locally, not
+applied. The existing publication trigger remains on `search_embeddings`.
+Historical operator enqueue uses `search_embeddings_backfill`; the v2 claim RPC
+first asks the existing primary claim for all available capacity, reads backlog
+only for the unused remainder, promotes those rows into the primary queue, then
+claims them through the unchanged completion/failure path. The active index,
+HNSW access path, source-hash idempotency, dimensions and provider model are
+unchanged.
+
+New service-only evidence paths contain no query data:
+
+- future lag: clip id, index version, publication/keyword/semantic timestamps,
+  duration, state and matching-chunk boolean;
+- closeout: eligible/keyword/current/failure/in-flight and two-queue counts;
+- plan audit: sanitized node/index names, row counts, timings and buffers, due
+  only after the 10,000/50,000 catalogue thresholds.
+
+Automated rollback evidence covers explicit frontend false, provider failure
+to honest keyword fallback, v2 response parsing, fresh-first claim order,
+bounded retry/idempotency and the additive 030 down path. The runbook records
+the executable production sequence. No production migration, worker/Function
+deploy, provider toggle, queue write, clip publication, HNSW probe, rollback or
+Android action occurred, so the real 20-clip lag, final 100% coverage, production
+rehearsal and device rows remain pending rather than being labelled pass.
+
+Offline closeout evidence for OPT4/OPT5: **512 Python tests**, **143 Edge
+tests** and **71 frontend tests** passed. Ruff is clean, mypy is clean over 83
+source files, focused Ruff formatting is clean, both TypeScript projects pass,
+the Vite production build passes and PWA verification retains exactly nine
+same-origin app-shell entries with no video/private data. `git diff --check` is
+clean. The only Python warning is the already documented `audioop` deprecation.

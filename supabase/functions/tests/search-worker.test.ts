@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { SEARCH_EMBEDDING_DIMENSIONS } from "../_shared/search/chunks.ts";
 import {
+  createSupabaseSearchEmbeddingDatabase,
   processSearchEmbeddingBatch,
   type CompletedSearchEmbeddingChunk,
   type FailureStatus,
@@ -156,6 +157,59 @@ test("migration 025 repairs applied runtime expressions without editing 024", ()
   assert.match(up, /provider-off claim runtime check/iu);
   assert.match(down, /'greatest', 'pg_catalog\.greatest'/iu);
   assert.match(down, /'least',\s*'pg_catalog\.least'/iu);
+});
+
+test("worker claims through OPT5 fresh-first RPC without changing completion RPCs", async () => {
+  const urls: string[] = [];
+  const bodies: unknown[] = [];
+  const database = createSupabaseSearchEmbeddingDatabase({
+    supabaseUrl: "https://project.supabase.co",
+    serviceRoleKey: "service-role-test",
+    fetcher: async (input, init) => {
+      urls.push(String(input));
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify([
+        {
+          msg_id: 7,
+          read_ct: 1,
+          clip_id: "clip-fresh",
+          source_hash: "a".repeat(64),
+          index_version: "openai:text-embedding-3-large:1024:v1",
+          title: "Titel",
+          transcript: "Text",
+        },
+      ]), { status: 200, headers: { "Content-Type": "application/json" } });
+    },
+  });
+
+  const jobs = await database.claim(5, 120);
+
+  assert.equal(urls[0], "https://project.supabase.co/rest/v1/rpc/claim_search_embedding_jobs_v2");
+  assert.deepEqual(bodies[0], { p_limit: 5, p_visibility_timeout_seconds: 120 });
+  assert.equal(jobs[0].clipId, "clip-fresh");
+});
+
+test("migration 030 isolates historical backlog and leaves primary rollback intact", () => {
+  const up = readFileSync(
+    new URL("../../../migrations/030_search_future_resilience.up.sql", import.meta.url),
+    "utf8",
+  );
+  const down = readFileSync(
+    new URL("../../../migrations/030_search_future_resilience.down.sql", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(up, /pgmq\.create\('search_embeddings_backfill'\)/iu);
+  assert.match(up, /claim_search_embedding_jobs_v2/iu);
+  assert.match(up, /enqueue_search_embedding_backfill_batch/iu);
+  assert.match(up, /search_embedding_future_lag_sample/iu);
+  assert.match(up, /from public, anon, authenticated/iu);
+  assert.doesNotMatch(
+    up,
+    /grant\s+(?:select|insert|update|delete|execute)[\s\S]{0,100}\b(?:anon|authenticated)\b/iu,
+  );
+  assert.match(down, /drop_queue\('search_embeddings_backfill'\)/iu);
+  assert.doesNotMatch(down, /drop_queue\('search_embeddings'\)/iu);
 });
 
 class FakeDatabase implements SearchEmbeddingDatabase {

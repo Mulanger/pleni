@@ -5611,3 +5611,92 @@ reverting the OPT3 frontend commit; migration 029 remains applied.
 **Next agent should know:** OPT4 is next and must measure before changing
 latency/cost architecture. Do not fold OPT4 into this release and do not create
 human grading work or topic aliases.
+
+## OPT4 — Latency, cost and embedding/index decision — CODE COMPLETE 2026-08-27; LIVE EVIDENCE PENDING
+
+**Built:** privacy-safe `Server-Timing` and actual prompt-token response headers
+in `supabase/functions/_shared/search/api.ts`; preservation of OpenAI usage in
+`supabase/functions/clip-search/index.ts`; exact allowlisted search-health logs;
+and the `benchmark-live`/`latency-decision` operator gates in
+`scripts/evaluate_topic_search.py` with focused Edge/Python regressions.
+
+**Tests:** the full offline closeout after OPT4 and OPT5 is **512 Python tests
+passed** with one pre-existing `audioop` warning, Ruff clean, focused Ruff
+formatting clean and mypy clean over 83 source files. All Edge tests are **143
+passed, 0 failed** and all frontend tests are **71 passed, 0 failed**. Frontend
+and Edge TypeScript pass; the Vite production build and PWA verification pass
+with exactly nine same-origin app-shell entries and no video/private data.
+`git diff --check` is clean.
+
+**Contracts touched:** no public JSON contract and no pipeline contract.
+`clip-search-v1`, `src/contracts.py`, ranking order/thresholds, provider model,
+1024 dimensions and active index version are unchanged. The internal embedding
+adapter now carries OpenAI's numeric prompt-token usage with the vector.
+
+**Decisions made:** the benchmark is exactly 30 serial requests—the ten frozen
+smoke phrases repeated three times—with at least seven seconds between calls.
+It keeps the cold candidate and all failures and writes only query ids. The
+three-day decision independently recomputes failures, total p50/p95/max, every
+server-phase p95 and token totals from all 90 call rows. It retains
+`text-embedding-3-large:1024:v1`; it cannot silently select a small model,
+change endpoint/timeout or authorize a paid shadow backfill.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** implementation is not blocked. The SLO gate is
+real production evidence and needs one 30-call report on each of three distinct
+UTC dates after this Function candidate is explicitly deployed. OpenAI
+region/retention evidence and any small-model shadow spend are also separate
+owner-controlled actions. No live/OpenAI call, endpoint change, deploy or push
+occurred in this chunk.
+
+**Next agent should know:** run the three commands documented in
+`docs/RUNBOOK.md` only after release authority. A failed daily gate retains the
+large model and requires an owner SLO decision or separate paid-shadow approval;
+it never weakens search to manufacture a pass.
+
+## OPT5 — Future backfill resilience, privacy-safe operations and closeout — CODE COMPLETE 2026-08-27; PRODUCTION EVIDENCE PENDING
+
+**Built:** additive `030_search_future_resilience` up/down migration; isolated
+`search_embeddings_backfill`; service-only fresh-first
+`claim_search_embedding_jobs_v2`; two-queue status, future-publication lag and
+closeout evidence RPCs; the matching worker claim; historical-backfill,
+20-clip lag, 10k/50k HNSW plan-audit and strict closeout commands in
+`scripts/backfill_topic_search.py`; exact privacy-log, migration, worker and
+operator regressions; and full runbook/roadmap/privacy evidence.
+
+**Tests:** same complete release gate as OPT4: **512 Python**, **143 Edge** and
+**71 frontend** tests passed; Ruff, focused formatting, mypy over 83 files,
+both TypeScript projects, Vite production build, nine-entry PWA verification
+and `git diff --check` are green.
+
+**Contracts touched:** no `src/contracts.py`, public search JSON, RPC ranking
+signature, embedding model/dimensions or pipeline-stage contract. Migration 030
+is additive and service-role-only. The existing primary queue, completion/
+failure RPCs and HNSW index remain intact for rollback.
+
+**Decisions made:** C11's existing trigger continues to enqueue normal
+publication in the primary queue. Historical work enters a separate backlog;
+the worker claims fresh work first and promotes only unused batch capacity into
+the unchanged primary completion path. The lag clock starts at committed
+`clips.published_at` and ends only at current source hash/index version with a
+matching chunk. Plan evidence is read-only, sanitized and due at 10,000 and
+50,000 documents. Closeout requires exact eligible/keyword equality, all
+semantics current, no pending/processing/failed rows and both queues empty.
+
+**Observations (not fixed, out of scope):** the local worker being asleep can
+inflate publication-to-index time; the report must label that as an operating
+availability condition rather than relabeling it search latency.
+
+**Blocked / needs a decision:** code is complete, but migration 030 and the
+matching Functions have not been deployed. Therefore no queue mutation, HNSW
+probe, provider call, 20-new-clip lifecycle sample, final production coverage,
+production rollback rehearsal or Android acceptance was fabricated. Those
+operations require an explicit release instruction and, for the lag gate, 20
+real newly published clips while workers are operating.
+
+**Next agent should know:** release order is migration 030, `search-embed`, then
+`clip-search`, followed by closeout/status and the live matrix. Incident
+rollback normally redeploys accepted Function version 7/source `af8238a` while
+leaving additive migrations 029/030 applied; provider-off keyword fallback and
+both-queue recovery are documented in `docs/RUNBOOK.md`.

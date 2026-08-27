@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterator
+from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -12,17 +14,21 @@ from scripts.evaluate_topic_search import (
     SMOKE_PRIVATE_DOCUMENT_FIELDS,
     SMOKE_QUERIES,
     EvaluationError,
+    PublicSearchObservation,
     _capture_plan,
     _capture_sql,
     _load_json,
     _secret,
     admission_grid,
+    benchmark_live,
     dcg,
     evaluate,
+    latency_decision,
     main,
     ndcg,
     percentile,
     render_admission_grid_report,
+    render_latency_decision_report,
     render_smoke_report,
     smoke_baseline,
 )
@@ -105,6 +111,151 @@ def test_dcg_ndcg_and_nearest_rank_percentile() -> None:
     assert ndcg([], {}) == 1.0
     assert percentile([1, 5, 3, 2, 4], 0.95) == 5
     assert percentile([], 0.95) is None
+
+
+def _benchmark_report(day: int, *, failure_call: int | None = None) -> dict[str, Any]:
+    calls = 0
+
+    def request_fn(
+        endpoint: str,
+        key: str,
+        origin: str,
+        query: str,
+    ) -> PublicSearchObservation:
+        nonlocal calls
+        calls += 1
+        assert endpoint == "https://example.test/functions/v1/clip-search"
+        assert key == "publishable-test-key"
+        assert origin == "https://pleni.se"
+        assert query in SMOKE_QUERIES
+        failed = calls == failure_call
+        return PublicSearchObservation(
+            status=503 if failed else 200,
+            headers={
+                "Server-Timing": (
+                    "total;dur=900, preflight;dur=80, provider-budget;dur=40, "
+                    "embedding;dur=600, retrieval;dur=180"
+                ),
+                "X-Pleni-Search-Embedding-Tokens": "5",
+            },
+            body=(
+                {"error": "search_unavailable"}
+                if failed
+                else {
+                    "mode": "hybrid",
+                    "searchVersion": "pleni-search-v3",
+                    "indexVersion": INDEX_VERSION,
+                    "results": [{"clip": {"id": "public-result"}}],
+                }
+            ),
+            total_ms=3_000.0 if calls == 1 else 1_000.0,
+        )
+
+    sleeps: list[float] = []
+    report = benchmark_live(
+        endpoint="https://example.test/functions/v1/clip-search",
+        publishable_key="publishable-test-key",
+        origin="https://pleni.se",
+        price_per_million_usd=Decimal("0.13"),
+        projected_monthly_queries=10_000,
+        request_fn=request_fn,
+        sleep_fn=sleeps.append,
+        now_fn=lambda: datetime(2026, 8, day, 12, 0, tzinfo=UTC),
+    )
+    assert calls == 30
+    assert sleeps == [7.0] * 29
+    return report
+
+
+def test_live_benchmark_keeps_cold_call_failures_phases_and_actual_tokens() -> None:
+    report = _benchmark_report(27)
+
+    assert report["sampleCount"] == 30
+    assert report["calls"][0]["coldCandidate"] is True
+    assert report["latency"] == {
+        "sampleCount": 30,
+        "p50Ms": 1_000.0,
+        "p95Ms": 1_000.0,
+        "maxMs": 3_000.0,
+    }
+    assert report["phases"]["embedding"]["p95Ms"] == 600.0
+    assert report["embeddingUsage"]["actualPromptTokens"] == 150
+    assert report["embeddingUsage"]["actualSampleCostUsd"] == "0.000020"
+    assert report["embeddingUsage"]["projectedMonthlyCostUsd"] == "0.006500"
+    assert report["slo"]["passed"] is True
+    rendered = json.dumps(report, ensure_ascii=False)
+    assert all(query not in rendered for query in SMOKE_QUERIES)
+    assert "publishable-test-key" not in rendered
+
+
+def test_live_benchmark_counts_an_http_failure_instead_of_discarding_it() -> None:
+    report = _benchmark_report(27, failure_call=2)
+
+    assert report["failureCount"] == 1
+    assert report["calls"][1]["status"] == 503
+    assert report["calls"][1]["errorCode"] == "search_unavailable"
+    assert report["slo"]["passed"] is False
+
+
+def test_latency_decision_requires_three_distinct_days_and_retains_large_model() -> None:
+    reports = [_benchmark_report(day) for day in (27, 28, 29)]
+
+    decision = latency_decision(reports)
+
+    assert decision["distinctUtcDates"] == 3
+    assert decision["sampleCount"] == 90
+    assert decision["latencyGatePassed"] is True
+    assert decision["aggregatePhaseP95Ms"] == {
+        "total": 900.0,
+        "preflight": 80.0,
+        "provider-budget": 40.0,
+        "embedding": 600.0,
+        "retrieval": 180.0,
+    }
+    assert decision["indexDecision"] == "retain_text_embedding_3_large_1024"
+    assert decision["smallModelSelected"] is False
+    rendered = render_latency_decision_report(decision)
+    assert "Engineering operations evidence" in rendered
+    assert "elsparkcykel" not in rendered
+
+    same_day = [_benchmark_report(27) for _ in range(3)]
+    with pytest.raises(EvaluationError, match="three distinct UTC dates"):
+        latency_decision(same_day)
+
+
+def test_latency_decision_recomputes_failures_and_rejects_token_drift() -> None:
+    reports = [_benchmark_report(day) for day in (27, 28, 29)]
+    reports[0]["calls"][0]["status"] = 503
+    reports[0]["calls"][0]["success"] = False
+    reports[0]["failureCount"] = 0
+    reports[0]["slo"]["passed"] = True
+
+    decision = latency_decision(reports)
+
+    assert decision["runs"][0]["failureCount"] == 1
+    assert decision["runs"][0]["sloPassed"] is False
+    assert decision["latencyGatePassed"] is False
+
+    reports[0]["embeddingUsage"]["actualPromptTokens"] += 1
+    with pytest.raises(EvaluationError, match="token total"):
+        latency_decision(reports)
+
+
+def test_live_benchmark_rejects_fast_intervals_and_cli_requires_confirmation(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(EvaluationError, match="at least seven seconds"):
+        benchmark_live(
+            endpoint="https://example.test",
+            publishable_key="key",
+            origin="https://pleni.se",
+            price_per_million_usd=Decimal("0.13"),
+            projected_monthly_queries=1,
+            delay_seconds=6.99,
+        )
+
+    assert main(["benchmark-live"]) == 2
+    assert "requires --confirm-live-requests" in capsys.readouterr().err
 
 
 def test_complete_evidence_can_pass_every_release_gate() -> None:

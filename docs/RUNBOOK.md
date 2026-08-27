@@ -628,6 +628,57 @@ every current document has at least one chunk matching its source hash and the
 active index version. Re-running both dry-run and enqueue at completion must
 report zero remaining cost/candidates and perform no writes.
 
+### OPT5 fresh-first queues and future evidence
+
+After migration 030 and the matching `search-embed` Function are explicitly
+approved and deployed, ordinary publication keeps using the primary
+`search_embeddings` queue. `enqueue` and `retry-failed` use the isolated
+`search_embeddings_backfill` queue. The worker claims primary work first and
+promotes at most the unused claim capacity from backlog only when no more fresh
+row is claimable. A catalogue-sized backfill therefore cannot sit ahead of a
+new publication.
+
+Use the v2 status/closeout commands after migration 030:
+
+```powershell
+python scripts/backfill_topic_search.py status
+python scripts/backfill_topic_search.py closeout-status --strict
+```
+
+`closeout-status` passes only when eligible clips and keyword documents match,
+every document is semantic-current for the active source hash/index version,
+there are no pending/processing/failed rows, and both queues are empty. It
+contains counts and versions only.
+
+Begin a future-publication sample at a recorded UTC timestamp while the worker
+is operational. Once at least 20 normal publications have entered through C11,
+run:
+
+```powershell
+python scripts/backfill_topic_search.py lag-report `
+  --published-after 2026-08-27T00:00:00Z `
+  --minimum-sample 20 --strict
+```
+
+The report retains clip id, active version, lifecycle timestamps and durations
+only. It never contains a search query, embedding, person, party, address or
+viewer identity. `published_at` is the start; semantic completion with a
+matching source hash, active index version and at least one chunk is the end.
+Workstation sleep is an operating-availability gap, not index latency, and must
+be reported separately.
+
+At 10,000 eligible documents and again after crossing 50,000, run the read-only
+plan audit:
+
+```powershell
+python scripts/backfill_topic_search.py plan-audit
+```
+
+Below 10,000 it reports `due=false` without running `EXPLAIN ANALYZE`. At a
+threshold it uses one already stored current vector as the probe and retains
+only plan node/index names, row counts, timings and buffer counts. It makes no
+OpenAI call and never writes a vector or query.
+
 ---
 
 ## Topic-search quality gate and controlled release
@@ -736,6 +787,49 @@ through the normal pipeline, record the document source-hash change time and the
 first current matching chunk time, and repeat enough times to establish a p95.
 The gate is below 120,000 ms. UI16.8 does not authorise this mutation by itself.
 
+### OPT4 serial latency and cost benchmark
+
+The final benchmark uses the public Function path and the ten committed smoke
+phrases. The phrase text exists transiently only in each request. Reports use
+`s01`–`s10`, result-count buckets and versions; no raw query, address,
+credential or embedding is written. The Function exposes aggregate phases in
+`Server-Timing` and actual prompt-token usage in
+`X-Pleni-Search-Embedding-Tokens`; its JSON contract is unchanged.
+
+Run exactly once on each of three separate UTC dates. Each run takes at least
+203 seconds because the command enforces seven seconds between its 30 requests:
+
+```powershell
+python scripts/evaluate_topic_search.py benchmark-live `
+  --confirm-live-requests `
+  --price-per-million-usd 0.13 `
+  --projected-monthly-queries 10000 `
+  --output test_outputs/topic_search_latency_2026-08-27.json
+```
+
+Look up the current official embedding input price and use a real projected
+monthly request count; the values above are examples, not product constants.
+The first request is retained as a cold candidate, every HTTP/network failure
+is retained, and the report contains total p50/p95/max plus preflight,
+provider-budget, embedding and retrieval phase summaries.
+
+After three dates, make the offline decision:
+
+```powershell
+python scripts/evaluate_topic_search.py latency-decision `
+  --benchmark-report test_outputs/topic_search_latency_2026-08-27.json `
+  --benchmark-report test_outputs/topic_search_latency_2026-08-28.json `
+  --benchmark-report test_outputs/topic_search_latency_2026-08-29.json `
+  --strict-release
+```
+
+The command refuses duplicate dates, incomplete call sequences or a
+sub-seven-second interval. If all daily p95 gates pass, it retains
+`text-embedding-3-large:1024`; no paid shadow is justified. Otherwise it still
+retains the current model and asks for an owner SLO decision or separate paid
+shadow-index approval. It never silently selects the small model, shortens the
+provider timeout or forces keyword-only search.
+
 ### Privacy/account verification
 
 Before release, capture account-side evidence—not marketing claims—for:
@@ -795,6 +889,36 @@ Rollback order:
    separate destructive change has been reviewed and approved.
 4. Record flag/build/commit times, observed impact, provider state and recovery
    verification in `PROGRESS.md`.
+
+OPT4/OPT5 extend that sequence without making migration rollback the incident
+path:
+
+1. Frontend entry-point stop: set `VITE_TOPIC_SEARCH_ENABLED=false`, rebuild
+   using the pinned InstaPods commands and verify `Senaste`, person and party
+   search. The feature-flag unit test rehearses default-on production and
+   explicit-false behavior on every full test run.
+2. Provider emergency: run `python scripts/backfill_topic_search.py stop`.
+   Public topic search remains available and reports keyword fallback honestly;
+   queued primary/backfill work remains durable.
+3. OPT3/OPT4/OPT5 Edge rollback: redeploy current accepted Function version 7
+   from commit `af8238a`. It keeps ranking v3 but removes the unreleased
+   intent/timing/worker changes. For a deeper ranking rollback, use documented
+   commit `16a4887`, which calls v2; migrations 029 and 030 may remain applied
+   because their objects are additive and service-only.
+4. Index-version rollback: this release does not create or activate a shadow
+   index. If a later approved shadow exists, restore the previously recorded
+   active version atomically only after its matching chunks/coverage pass; do
+   not overwrite or delete the former index during activation.
+5. Queue recovery: inspect `status`, leave the provider off while diagnosing,
+   use bounded `retry-failed` only after reviewing safe error codes, then
+   `start` and `dispatch --workers 1`. Fresh primary work remains ahead of the
+   historical backlog throughout recovery.
+
+Automated tests rehearse the flag-off decision, provider-off/keyword fallback,
+v2 response envelope, fresh-first claim order, queue idempotency and additive
+down paths. An actual production redeploy/rollback remains a separately
+authorised operation and must be recorded with timestamps before it can be
+called a production rehearsal pass.
 
 The rollback procedure is documented but has not been rehearsed against a
 staged production release. Documentation alone is not a pass.

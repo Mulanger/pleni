@@ -13,6 +13,12 @@ not human relevance judgment: it produces no grade and no judged metric.
 ``admission-grid`` is offline and provider-free too.  It replays OPT2's
 candidate-level admission grid against the same capture and selects one
 configuration by the roadmap's conservative order, never by a judged metric.
+
+``benchmark-live`` sends exactly 30 serial public requests over the ten frozen
+smoke phrases and records only query IDs, aggregate timings, result-count
+buckets, versions and actual provider token counts. ``latency-decision`` is
+offline and refuses to decide until it receives three complete reports from
+distinct UTC dates. Neither command stores raw user queries or embeddings.
 """
 
 from __future__ import annotations
@@ -28,6 +34,8 @@ import urllib.error
 import urllib.request
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -38,8 +46,14 @@ DEFAULT_EXPECTED = ROOT / "tests" / "fixtures" / "search" / "expected.json"
 DEFAULT_SMOKE = ROOT / "tests" / "fixtures" / "search" / "smoke.json"
 DEFAULT_SMOKE_REPORT = ROOT / "test_outputs" / "topic_search_smoke_baseline.md"
 DEFAULT_GRID_REPORT = ROOT / "test_outputs" / "topic_search_admission_before_after.md"
+DEFAULT_LATENCY_REPORT = ROOT / "test_outputs" / "topic_search_latency_decision.md"
 MODES = ("keyword", "semantic", "hybrid")
 MAX_RANK = 10
+LATENCY_SAMPLE_CALLS = 30
+LATENCY_QUERY_REPEATS = 3
+LATENCY_MIN_DELAY_SECONDS = 7.0
+LATENCY_SLO_MS = 1_500.0
+LATENCY_PHASES = ("total", "preflight", "provider-budget", "embedding", "retrieval")
 
 # The served order is the hybrid list; keyword-only and semantic-only pools are
 # diagnostics and are never what a viewer sees.
@@ -94,6 +108,14 @@ class ModeMetrics:
     mean_ndcg_at_10: float
     relevant_top_three: int
     evaluated_queries: int
+
+
+@dataclass(frozen=True)
+class PublicSearchObservation:
+    status: int
+    headers: Mapping[str, str]
+    body: Mapping[str, Any]
+    total_ms: float
 
 
 def _load_json(path: Path) -> Mapping[str, Any]:
@@ -1339,6 +1361,14 @@ def _secret(name: str, env_file: Mapping[str, str]) -> str:
     return value
 
 
+def _first_secret(names: Sequence[str], env_file: Mapping[str, str]) -> str:
+    for name in names:
+        value = env_file.get(name) or os.environ.get(name)
+        if value:
+            return value
+    raise EvaluationError(f"missing required environment value: {' or '.join(names)}")
+
+
 def _post_json(url: str, headers: Mapping[str, str], payload: object) -> Any:
     request_headers = {
         "Accept": "application/json",
@@ -1700,11 +1730,422 @@ select
     }
 
 
+def _parse_server_timing(value: str | None) -> dict[str, float]:
+    if not value:
+        return {}
+    timings: dict[str, float] = {}
+    for item in value.split(","):
+        parts = [part.strip() for part in item.split(";")]
+        if len(parts) != 2 or not parts[0] or not parts[1].startswith("dur="):
+            raise EvaluationError("public search returned malformed Server-Timing")
+        name = parts[0]
+        if name not in LATENCY_PHASES or name in timings:
+            raise EvaluationError("public search returned unknown or duplicate timing phase")
+        try:
+            duration = float(parts[1][4:])
+        except ValueError as exc:
+            raise EvaluationError("public search returned a non-numeric timing phase") from exc
+        if not math.isfinite(duration) or duration < 0:
+            raise EvaluationError("public search returned an invalid timing duration")
+        timings[name] = duration
+    return timings
+
+
+def _embedding_tokens(value: str | None) -> int:
+    try:
+        tokens = int(value or "0")
+    except ValueError as exc:
+        raise EvaluationError("public search returned invalid embedding token usage") from exc
+    if tokens < 0:
+        raise EvaluationError("public search returned negative embedding token usage")
+    return tokens
+
+
+def _public_result_bucket(body: Mapping[str, Any]) -> str:
+    results = body.get("results")
+    if not isinstance(results, list):
+        return "0"
+    count = len(results)
+    if count == 0:
+        return "0"
+    if count <= 5:
+        return "1-5"
+    if count <= 10:
+        return "6-10"
+    if count <= 20:
+        return "11-20"
+    return "21-60"
+
+
+def _post_public_search(
+    endpoint: str,
+    publishable_key: str,
+    origin: str,
+    query: str,
+) -> PublicSearchObservation:
+    request = urllib.request.Request(
+        endpoint,
+        data=json.dumps({"query": query, "limit": 20}, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Origin": origin,
+            "User-Agent": "Pleni-Topic-Search-Latency/1.0",
+            "apikey": publishable_key,
+        },
+        method="POST",
+    )
+    started = time.perf_counter()
+    status = 0
+    headers: Mapping[str, str] = {}
+    raw = b"{}"
+    try:
+        with urllib.request.urlopen(request, timeout=45) as response:
+            status = response.status
+            headers = dict(response.headers.items())
+            raw = response.read()
+    except urllib.error.HTTPError as exc:
+        status = exc.code
+        headers = dict(exc.headers.items())
+        raw = exc.read()
+    except (urllib.error.URLError, TimeoutError) as exc:
+        total_ms = round((time.perf_counter() - started) * 1000, 3)
+        return PublicSearchObservation(
+            status=0,
+            headers={},
+            body={"error": type(exc).__name__.lower()},
+            total_ms=total_ms,
+        )
+    total_ms = round((time.perf_counter() - started) * 1000, 3)
+    try:
+        parsed = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        parsed = {"error": "invalid_json_response"}
+    body = parsed if isinstance(parsed, Mapping) else {"error": "invalid_response"}
+    return PublicSearchObservation(status=status, headers=headers, body=body, total_ms=total_ms)
+
+
+def _case_insensitive_header(headers: Mapping[str, str], name: str) -> str | None:
+    lowered = name.casefold()
+    return next((value for key, value in headers.items() if key.casefold() == lowered), None)
+
+
+def _metric_summary(values: Sequence[float]) -> dict[str, float | int | None]:
+    return {
+        "sampleCount": len(values),
+        "p50Ms": percentile(values, 0.50),
+        "p95Ms": percentile(values, 0.95),
+        "maxMs": max(values) if values else None,
+    }
+
+
+def _usd(tokens: int, price_per_million_usd: Decimal) -> str:
+    return str(
+        (Decimal(tokens) * price_per_million_usd / Decimal(1_000_000)).quantize(Decimal("0.000001"))
+    )
+
+
+def benchmark_live(
+    *,
+    endpoint: str,
+    publishable_key: str,
+    origin: str,
+    price_per_million_usd: Decimal,
+    projected_monthly_queries: int,
+    delay_seconds: float = LATENCY_MIN_DELAY_SECONDS,
+    request_fn: Any = _post_public_search,
+    sleep_fn: Any = time.sleep,
+    now_fn: Any = lambda: datetime.now(UTC),
+) -> dict[str, Any]:
+    """Measure 30 serial public smoke requests without persisting query text."""
+
+    if delay_seconds < LATENCY_MIN_DELAY_SECONDS:
+        raise EvaluationError("live benchmark delay must be at least seven seconds")
+    if projected_monthly_queries < 0:
+        raise EvaluationError("projected monthly queries must not be negative")
+    if price_per_million_usd < 0:
+        raise EvaluationError("embedding price must not be negative")
+
+    observations: list[dict[str, Any]] = []
+    totals: list[float] = []
+    phase_values: dict[str, list[float]] = {phase: [] for phase in LATENCY_PHASES}
+    actual_tokens = 0
+    failures = 0
+    for call_index in range(LATENCY_SAMPLE_CALLS):
+        query_index = call_index % len(SMOKE_QUERIES)
+        observation = request_fn(
+            endpoint,
+            publishable_key,
+            origin,
+            SMOKE_QUERIES[query_index],
+        )
+        server_timing = _parse_server_timing(
+            _case_insensitive_header(observation.headers, "Server-Timing")
+        )
+        tokens = _embedding_tokens(
+            _case_insensitive_header(
+                observation.headers,
+                "X-Pleni-Search-Embedding-Tokens",
+            )
+        )
+        total_ms = observation.total_ms
+        totals.append(total_ms)
+        for phase, value in server_timing.items():
+            phase_values[phase].append(value)
+        actual_tokens += tokens
+        successful = observation.status == 200
+        if not successful:
+            failures += 1
+        error = observation.body.get("error")
+        observations.append(
+            {
+                "call": call_index + 1,
+                "queryId": f"s{query_index + 1:02d}",
+                "repeat": (call_index // len(SMOKE_QUERIES)) + 1,
+                "coldCandidate": call_index == 0,
+                "status": observation.status,
+                "success": successful,
+                "mode": observation.body.get("mode") if successful else None,
+                "resultCountBucket": _public_result_bucket(observation.body),
+                "searchVersion": observation.body.get("searchVersion") if successful else None,
+                "indexVersion": observation.body.get("indexVersion") if successful else None,
+                "errorCode": error if isinstance(error, str) else None,
+                "totalMs": total_ms,
+                "serverPhaseMs": server_timing,
+                "embeddingTokens": tokens,
+            }
+        )
+        if call_index + 1 < LATENCY_SAMPLE_CALLS:
+            sleep_fn(delay_seconds)
+
+    captured_at = now_fn()
+    if not isinstance(captured_at, datetime) or captured_at.tzinfo is None:
+        raise EvaluationError("benchmark clock must return a timezone-aware datetime")
+    successful_modes = {
+        str(row["mode"]) for row in observations if isinstance(row.get("mode"), str)
+    }
+    projected_tokens = round(actual_tokens / LATENCY_SAMPLE_CALLS * projected_monthly_queries)
+    total_summary = _metric_summary(totals)
+    latency_gate = (
+        failures == 0
+        and total_summary["sampleCount"] == LATENCY_SAMPLE_CALLS
+        and isinstance(total_summary["p95Ms"], float)
+        and total_summary["p95Ms"] < LATENCY_SLO_MS
+    )
+    return {
+        "schemaVersion": 1,
+        "captureKind": "privacy-safe serial public search latency",
+        "capturedAt": captured_at.astimezone(UTC).isoformat().replace("+00:00", "Z"),
+        "captureDateUtc": captured_at.astimezone(UTC).date().isoformat(),
+        "sampleCount": LATENCY_SAMPLE_CALLS,
+        "queryCount": len(SMOKE_QUERIES),
+        "repeats": LATENCY_QUERY_REPEATS,
+        "configuredDelaySeconds": delay_seconds,
+        "coldCandidateIncluded": True,
+        "failureCount": failures,
+        "modesObserved": sorted(successful_modes),
+        "latency": total_summary,
+        "phases": {phase: _metric_summary(values) for phase, values in phase_values.items()},
+        "embeddingUsage": {
+            "actualPromptTokens": actual_tokens,
+            "pricePerMillionUsd": str(price_per_million_usd),
+            "actualSampleCostUsd": _usd(actual_tokens, price_per_million_usd),
+            "projectedMonthlyQueries": projected_monthly_queries,
+            "projectedMonthlyPromptTokens": projected_tokens,
+            "projectedMonthlyCostUsd": _usd(projected_tokens, price_per_million_usd),
+        },
+        "slo": {"p95BelowMs": LATENCY_SLO_MS, "passed": latency_gate},
+        "calls": observations,
+    }
+
+
+def latency_decision(reports: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Require three separate-day samples before making an index decision."""
+
+    if len(reports) < 3:
+        raise EvaluationError("latency decision requires at least three reports")
+    dates: set[str] = set()
+    summaries: list[dict[str, Any]] = []
+    all_totals: list[float] = []
+    all_phase_values: dict[str, list[float]] = {phase: [] for phase in LATENCY_PHASES}
+    total_tokens = 0
+    projected_costs: list[Decimal] = []
+    for report in reports:
+        if report.get("schemaVersion") != 1 or report.get("sampleCount") != 30:
+            raise EvaluationError(
+                "every latency report must be a complete schema-v1 30-call sample"
+            )
+        date_value = _required_string(report, "captureDateUtc")
+        dates.add(date_value)
+        calls = report.get("calls")
+        if not isinstance(calls, list) or len(calls) != LATENCY_SAMPLE_CALLS:
+            raise EvaluationError("latency report calls must contain all 30 observations")
+        if float(report.get("configuredDelaySeconds", 0)) < LATENCY_MIN_DELAY_SECONDS:
+            raise EvaluationError("latency report used an unsafe request interval")
+        if any(not isinstance(row, Mapping) for row in calls):
+            raise EvaluationError("latency report contains a malformed call observation")
+        call_rows = [row for row in calls if isinstance(row, Mapping)]
+        ids = [row.get("queryId") for row in call_rows]
+        expected_ids = [f"s{index + 1:02d}" for index in range(10)] * LATENCY_QUERY_REPEATS
+        if ids != expected_ids:
+            raise EvaluationError("latency report does not use the frozen smoke order")
+        values: list[float] = []
+        report_tokens = 0
+        report_failures = 0
+        for row in call_rows:
+            try:
+                total_value = float(row["totalMs"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise EvaluationError("latency report contains invalid request durations") from exc
+            if not math.isfinite(total_value) or total_value < 0:
+                raise EvaluationError("latency report contains invalid request durations")
+            values.append(total_value)
+
+            status_value = row.get("status")
+            successful = row.get("success") is True and status_value == 200
+            if not successful:
+                report_failures += 1
+
+            phase_values = row.get("serverPhaseMs")
+            if not isinstance(phase_values, Mapping):
+                raise EvaluationError("latency report contains invalid server phase timings")
+            if successful and set(phase_values) != set(LATENCY_PHASES):
+                raise EvaluationError("successful calls must contain every server timing phase")
+            for phase, candidate in phase_values.items():
+                if phase not in LATENCY_PHASES or isinstance(candidate, bool):
+                    raise EvaluationError("latency report contains invalid server phase timings")
+                try:
+                    phase_value = float(candidate)
+                except (TypeError, ValueError) as exc:
+                    raise EvaluationError(
+                        "latency report contains invalid server phase timings"
+                    ) from exc
+                if not math.isfinite(phase_value) or phase_value < 0:
+                    raise EvaluationError("latency report contains invalid server phase timings")
+                all_phase_values[phase].append(phase_value)
+
+            token_value = row.get("embeddingTokens")
+            if not isinstance(token_value, int) or isinstance(token_value, bool) or token_value < 0:
+                raise EvaluationError("latency report contains invalid call token usage")
+            report_tokens += token_value
+        all_totals.extend(values)
+        usage = report.get("embeddingUsage")
+        if not isinstance(usage, Mapping):
+            raise EvaluationError("latency report has no embedding usage")
+        tokens = usage.get("actualPromptTokens")
+        if not isinstance(tokens, int) or isinstance(tokens, bool) or tokens < 0:
+            raise EvaluationError("latency report has invalid actual token usage")
+        if tokens != report_tokens:
+            raise EvaluationError("latency report token total does not match its calls")
+        total_tokens += report_tokens
+        try:
+            projected_cost = Decimal(str(usage.get("projectedMonthlyCostUsd")))
+        except (InvalidOperation, ValueError) as exc:
+            raise EvaluationError("latency report has invalid projected cost") from exc
+        if not projected_cost.is_finite() or projected_cost < 0:
+            raise EvaluationError("latency report has invalid projected cost")
+        projected_costs.append(projected_cost)
+        latency = report.get("latency")
+        if not isinstance(latency, Mapping):
+            raise EvaluationError("latency report has no summary")
+        report_p50 = percentile(values, 0.50)
+        report_p95 = percentile(values, 0.95)
+        report_max = max(values)
+        report_gate = (
+            report_failures == 0 and report_p95 is not None and report_p95 < LATENCY_SLO_MS
+        )
+        summaries.append(
+            {
+                "captureDateUtc": date_value,
+                "failureCount": report_failures,
+                "p50Ms": report_p50,
+                "p95Ms": report_p95,
+                "maxMs": report_max,
+                "sloPassed": report_gate,
+            }
+        )
+    if len(dates) < 3:
+        raise EvaluationError("latency decision requires samples from three distinct UTC dates")
+    every_run_passed = all(row["sloPassed"] for row in summaries)
+    aggregate = _metric_summary(all_totals)
+    return {
+        "schemaVersion": 1,
+        "decisionKind": "three-day latency and embedding-index gate",
+        "distinctUtcDates": len(dates),
+        "sampleCount": len(all_totals),
+        "runs": summaries,
+        "aggregateLatency": aggregate,
+        "aggregatePhaseP95Ms": {
+            phase: percentile(values, 0.95) for phase, values in all_phase_values.items()
+        },
+        "actualPromptTokens": total_tokens,
+        "projectedMonthlyCostRangeUsd": {
+            "min": str(min(projected_costs)),
+            "max": str(max(projected_costs)),
+        },
+        "latencyGatePassed": every_run_passed,
+        "indexDecision": (
+            "retain_text_embedding_3_large_1024"
+            if every_run_passed
+            else "retain_large_pending_owner_slo_or_paid_shadow_decision"
+        ),
+        "smallModelSelected": False,
+        "reason": (
+            "All three complete daily samples pass; no paid shadow index is justified."
+            if every_run_passed
+            else (
+                "The latency gate is not closed. Do not switch models or weaken fallback; "
+                "request an owner SLO decision or separate approval for a paid shadow comparison."
+            )
+        ),
+    }
+
+
+def render_latency_decision_report(payload: Mapping[str, Any]) -> str:
+    lines = [
+        "# Topic search latency and index decision",
+        "",
+        "Engineering operations evidence. No user query text, address or embedding is retained.",
+        "",
+        f"- Distinct UTC dates: {payload.get('distinctUtcDates')}",
+        f"- Requests including failures: {payload.get('sampleCount')}",
+        f"- Latency gate passed: {payload.get('latencyGatePassed')}",
+        f"- Index decision: `{payload.get('indexDecision')}`",
+        f"- Actual prompt tokens: {payload.get('actualPromptTokens')}",
+        "",
+        "| UTC date | failures | p50 ms | p95 ms | max ms | gate |",
+        "|---|---:|---:|---:|---:|---|",
+    ]
+    runs = payload.get("runs")
+    if isinstance(runs, list):
+        for row in runs:
+            if isinstance(row, Mapping):
+                lines.append(
+                    f"| {row.get('captureDateUtc')} | {row.get('failureCount')} | "
+                    f"{row.get('p50Ms')} | {row.get('p95Ms')} | {row.get('maxMs')} | "
+                    f"{row.get('sloPassed')} |"
+                )
+    phase_p95 = payload.get("aggregatePhaseP95Ms")
+    if isinstance(phase_p95, Mapping):
+        lines.extend(["", "## Aggregate server phase p95", ""])
+        for phase in LATENCY_PHASES:
+            lines.append(f"- `{phase}`: {phase_p95.get(phase)} ms")
+    lines.extend(["", str(payload.get("reason") or "")])
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "command",
-        choices=("evaluate", "capture-live", "smoke", "admission-grid"),
+        choices=(
+            "evaluate",
+            "capture-live",
+            "smoke",
+            "admission-grid",
+            "benchmark-live",
+            "latency-decision",
+        ),
         nargs="?",
         default="evaluate",
     )
@@ -1714,9 +2155,16 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--smoke", type=Path, default=DEFAULT_SMOKE)
     parser.add_argument("--report", type=Path, default=DEFAULT_SMOKE_REPORT)
     parser.add_argument("--grid-report", type=Path, default=DEFAULT_GRID_REPORT)
+    parser.add_argument("--latency-report", type=Path, default=DEFAULT_LATENCY_REPORT)
+    parser.add_argument("--benchmark-report", action="append", type=Path, default=[])
     parser.add_argument("--env-file", type=Path, default=ROOT / ".env")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--confirm-provider-cost", action="store_true")
+    parser.add_argument("--confirm-live-requests", action="store_true")
+    parser.add_argument("--origin", default="https://pleni.se")
+    parser.add_argument("--delay-seconds", type=float, default=LATENCY_MIN_DELAY_SECONDS)
+    parser.add_argument("--price-per-million-usd", type=Decimal)
+    parser.add_argument("--projected-monthly-queries", type=int)
     parser.add_argument("--strict-release", action="store_true")
     return parser.parse_args(argv)
 
@@ -1725,7 +2173,40 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
         judgments = _load_json(args.judgments)
-        if args.command == "capture-live":
+        if args.command == "benchmark-live":
+            if not args.confirm_live_requests:
+                raise EvaluationError("benchmark-live requires --confirm-live-requests")
+            if args.price_per_million_usd is None:
+                raise EvaluationError("benchmark-live requires --price-per-million-usd")
+            if args.projected_monthly_queries is None:
+                raise EvaluationError("benchmark-live requires --projected-monthly-queries")
+            env_file = _read_env_file(args.env_file)
+            supabase_url = _first_secret(
+                ("VITE_SUPABASE_URL", "SUPABASE_URL"),
+                env_file,
+            ).rstrip("/")
+            publishable_key = _first_secret(
+                ("VITE_SUPABASE_PUBLISHABLE_KEY", "SUPABASE_ANON_KEY"),
+                env_file,
+            )
+            payload = benchmark_live(
+                endpoint=f"{supabase_url}/functions/v1/clip-search",
+                publishable_key=publishable_key,
+                origin=args.origin,
+                price_per_million_usd=args.price_per_million_usd,
+                projected_monthly_queries=args.projected_monthly_queries,
+                delay_seconds=args.delay_seconds,
+            )
+        elif args.command == "latency-decision":
+            payload = latency_decision([_load_json(path) for path in args.benchmark_report])
+            report = args.latency_report
+            report.parent.mkdir(parents=True, exist_ok=True)
+            report.write_text(
+                render_latency_decision_report(payload),
+                encoding="utf-8",
+                newline="\n",
+            )
+        elif args.command == "capture-live":
             if not args.confirm_provider_cost:
                 raise EvaluationError("capture-live requires --confirm-provider-cost")
             payload = capture_live(judgments, args.env_file)
@@ -1756,6 +2237,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1 if payload.get("failedSearches") else 0
         if args.command == "admission-grid":
             return 0 if payload.get("selected") else 1
+        if args.command == "benchmark-live":
+            return 0 if payload.get("slo", {}).get("passed") else 1
+        if args.command == "latency-decision":
+            return 0 if payload.get("latencyGatePassed") else 1
         if payload.get("readiness") != "ready":
             return 1
     return 0

@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
 from scripts.backfill_topic_search import (
     PassageEstimate,
     SearchDocument,
+    _sanitize_plan,
+    build_closeout_status,
     build_dry_run_report,
+    build_future_lag_report,
+    build_index_plan_audit,
     enqueue_backfill,
     load_documents,
     retry_failed,
@@ -202,9 +207,7 @@ def test_complete_catalogue_rerun_is_a_no_op_without_estimation_or_enqueue() -> 
 
 
 def test_keyset_pagination_collects_every_document_once() -> None:
-    repository = FakeRepository(
-        [document("clip-a"), document("clip-b"), document("clip-c")]
-    )
+    repository = FakeRepository([document("clip-a"), document("clip-b"), document("clip-c")])
 
     result = load_documents(repository, page_size=2, index_version=INDEX_VERSION)
 
@@ -229,3 +232,140 @@ def test_worker_dispatch_is_explicit_and_bounded_by_the_repository_contract() ->
     assert repository.dispatch(2) == 2
 
     assert repository.dispatched == [4, 2]
+
+
+def test_future_lag_report_requires_twenty_complete_real_lifecycle_samples() -> None:
+    published_after = datetime(2026, 8, 27, tzinfo=UTC)
+    rows = []
+    for index in range(20):
+        published = published_after + timedelta(minutes=index)
+        rows.append(
+            {
+                "clip_id": f"clip-{index:02}",
+                "index_version": INDEX_VERSION,
+                "published_at": published.isoformat(),
+                "keyword_current_at": (published + timedelta(seconds=1)).isoformat(),
+                "semantic_current_at": (published + timedelta(seconds=index + 1)).isoformat(),
+                "keyword_lag_ms": 1_000,
+                "semantic_lag_ms": (index + 1) * 1_000,
+                "semantic_state": "current",
+                "has_current_chunks": True,
+            }
+        )
+
+    report = build_future_lag_report(rows, published_after=published_after)
+
+    assert report["sampleCount"] == 20
+    assert report["incompleteSamples"] == 0
+    assert report["semanticLagP95Ms"] == 19_000
+    assert report["passed"] is True
+    assert set(report["samples"][0]) == {
+        "clipId",
+        "indexVersion",
+        "publishedAt",
+        "keywordCurrentAt",
+        "semanticCurrentAt",
+        "keywordLagMs",
+        "semanticLagMs",
+        "semanticState",
+        "hasCurrentChunks",
+    }
+    rendered = str(report)
+    for forbidden in ("query", "topic", "address", "person", "party"):
+        assert forbidden not in rendered.casefold()
+
+
+def test_future_lag_report_keeps_incomplete_work_visible_and_fails_the_gate() -> None:
+    published_after = datetime(2026, 8, 27, tzinfo=UTC)
+    report = build_future_lag_report(
+        [
+            {
+                "clip_id": "clip-pending",
+                "index_version": INDEX_VERSION,
+                "published_at": published_after.isoformat(),
+                "keyword_current_at": published_after.isoformat(),
+                "semantic_current_at": None,
+                "keyword_lag_ms": 0,
+                "semantic_lag_ms": None,
+                "semantic_state": "pending",
+                "has_current_chunks": False,
+            }
+        ],
+        published_after=published_after,
+    )
+
+    assert report["incompleteSamples"] == 1
+    assert report["semanticLagP95Ms"] is None
+    assert report["passed"] is False
+
+
+def test_plan_audit_keeps_only_safe_plan_fields_and_waits_for_threshold() -> None:
+    raw = [
+        {
+            "Plan": {
+                "Node Type": "Limit",
+                "Plan Rows": 60,
+                "Filter": "private query detail",
+                "Plans": [
+                    {
+                        "Node Type": "Index Scan",
+                        "Index Name": "clip_search_chunks_embedding_hnsw_idx",
+                        "Actual Total Time": 12.5,
+                        "Output": ["embedding"],
+                    }
+                ],
+            },
+            "Planning Time": 0.4,
+            "Execution Time": 12.7,
+        }
+    ]
+    plan = _sanitize_plan(raw)
+    rendered = str(plan)
+    assert "Index Scan" in rendered
+    assert "Filter" not in rendered
+    assert "Output" not in rendered
+    assert "private query detail" not in rendered
+
+    not_due = build_index_plan_audit(
+        {"documents": 9_999, "indexVersion": INDEX_VERSION},
+        None,
+    )
+    assert not_due["due"] is False
+    assert not_due["plan"] is None
+
+    due = build_index_plan_audit(
+        {"documents": 10_000, "indexVersion": INDEX_VERSION},
+        plan,
+    )
+    assert due["due"] is True
+    assert due["threshold"] == 10_000
+
+
+def test_closeout_status_requires_full_coverage_and_both_queues_idle() -> None:
+    complete = build_closeout_status(
+        {
+            "indexVersion": INDEX_VERSION,
+            "eligibleDocuments": 3_188,
+            "documents": 3_188,
+            "currentDocuments": 3_188,
+            "pendingDocuments": 0,
+            "processingDocuments": 0,
+            "failedDocuments": 0,
+            "freshQueuedMessages": 0,
+            "backfillQueuedMessages": 0,
+            "keywordCoverageComplete": True,
+        }
+    )
+    assert complete["passed"] is True
+
+    pending = build_closeout_status(
+        {
+            **complete,
+            "currentDocuments": 3_187,
+            "pendingDocuments": 1,
+            "backfillQueuedMessages": 1,
+        }
+    )
+    assert pending["semanticCoverageComplete"] is False
+    assert pending["queuesIdle"] is False
+    assert pending["passed"] is False

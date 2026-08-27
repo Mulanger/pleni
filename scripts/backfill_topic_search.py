@@ -2,8 +2,9 @@
 
 This script never creates embeddings itself. It estimates passages with the
 same TypeScript chunker used by the deployed worker, and enqueues clip IDs into
-the existing service-only database RPC in batches of at most 200. Provider
-start/stop remains an explicit, separate operator action.
+the service-only historical backlog in batches of at most 200. Fresh C11 work
+stays in the primary queue and is always claimed first. Provider start/stop
+remains an explicit, separate operator action.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Protocol
@@ -31,6 +33,9 @@ from src.publish.supabase import SupabaseManagementClient  # noqa: E402
 CHUNKS_MODULE = REPO_ROOT / "supabase/functions/_shared/search/chunks.ts"
 MAX_DATABASE_BATCH = 200
 DEFAULT_PAGE_SIZE = 200
+FUTURE_LAG_MIN_SAMPLE = 20
+FUTURE_LAG_SLO_MS = 120_000
+PLAN_AUDIT_THRESHOLDS = (10_000, 50_000)
 
 
 @dataclass(frozen=True)
@@ -81,6 +86,12 @@ class BackfillRepository(Protocol):
     def dispatch(self, workers: int) -> int:
         """Request a strictly bounded number of existing Edge workers."""
 
+    def future_lag(self, published_after: datetime, limit: int) -> list[Mapping[str, Any]]:
+        """Return privacy-safe lifecycle timestamps for newly published clips."""
+
+    def index_plan(self) -> Mapping[str, Any]:
+        """Return a sanitized, read-only HNSW access-plan observation."""
+
 
 class PassageEstimator(Protocol):
     def estimate(
@@ -109,8 +120,8 @@ class ManagementBackfillRepository:
         self, after_clip_id: str | None, limit: int, index_version: str
     ) -> list[SearchDocument]:
         effective_limit = _bounded_integer(limit, 1, 1000, "page size")
-        cursor = "true" if after_clip_id is None else (
-            f"document.clip_id > {_sql_text(after_clip_id)}"
+        cursor = (
+            "true" if after_clip_id is None else (f"document.clip_id > {_sql_text(after_clip_id)}")
         )
         version = _sql_text(index_version)
         rows = self._rows(
@@ -129,12 +140,21 @@ class ManagementBackfillRepository:
                   and chunk.source_hash = document.source_hash
                   and chunk.index_version = {version}
               ) as has_current_chunks,
-              exists (
-                select 1
-                from pgmq.q_search_embeddings message
-                where message.message ->> 'clipId' = document.clip_id
-                  and message.message ->> 'sourceHash' = document.source_hash
-                  and message.message ->> 'indexVersion' = {version}
+              (
+                exists (
+                  select 1
+                  from pgmq.q_search_embeddings message
+                  where message.message ->> 'clipId' = document.clip_id
+                    and message.message ->> 'sourceHash' = document.source_hash
+                    and message.message ->> 'indexVersion' = {version}
+                )
+                or exists (
+                  select 1
+                  from pgmq.q_search_embeddings_backfill message
+                  where message.message ->> 'clipId' = document.clip_id
+                    and message.message ->> 'sourceHash' = document.source_hash
+                    and message.message ->> 'indexVersion' = {version}
+                )
               ) as queued_for_current
             from private.clip_search_documents document
             where {cursor}
@@ -149,7 +169,7 @@ class ManagementBackfillRepository:
             raise ValueError("enqueue batch must contain 1 to 200 clip IDs")
         array = "array[" + ",".join(_sql_text(value) for value in clip_ids) + "]::text[]"
         rows = self._rows(
-            "select public.enqueue_search_embedding_batch("
+            "select public.enqueue_search_embedding_backfill_batch("
             f"{array}, {'true' if force else 'false'}"
             ") as accepted;"
         )
@@ -159,7 +179,7 @@ class ManagementBackfillRepository:
         return value
 
     def status(self) -> Mapping[str, Any]:
-        rows = self._rows("select public.search_embedding_index_status() as status;")
+        rows = self._rows("select public.search_embedding_index_status_v2() as status;")
         value = rows[0].get("status") if rows else None
         if not isinstance(value, Mapping):
             raise ExternalServiceError("Invalid semantic index status response")
@@ -191,6 +211,46 @@ class ManagementBackfillRepository:
         if not isinstance(value, int):
             raise ExternalServiceError("Invalid worker dispatch response")
         return value
+
+    def future_lag(self, published_after: datetime, limit: int) -> list[Mapping[str, Any]]:
+        if published_after.tzinfo is None:
+            raise ValueError("published after must be timezone-aware")
+        effective_limit = _bounded_integer(limit, 1, 200, "future lag limit")
+        timestamp = _sql_text(published_after.astimezone(UTC).isoformat().replace("+00:00", "Z"))
+        return self._rows(
+            "select * from public.search_embedding_future_lag_sample("
+            f"{timestamp}::timestamptz, {effective_limit});"
+        )
+
+    def index_plan(self) -> Mapping[str, Any]:
+        rows = self._rows(
+            """
+            explain (analyze, buffers, format json)
+            with state as (
+              select semantic_index_version as version
+              from private.search_system_state where singleton
+            ), probe as (
+              select chunk.embedding
+              from private.clip_search_chunks chunk
+              cross join state
+              where chunk.index_version = state.version
+              order by chunk.clip_id, chunk.chunk_no
+              limit 1
+            )
+            select chunk.clip_id
+            from private.clip_search_chunks chunk
+            cross join state
+            cross join probe
+            where chunk.index_version = state.version
+            order by chunk.embedding operator(extensions.<=>) probe.embedding,
+              chunk.clip_id, chunk.chunk_no
+            limit 60;
+            """
+        )
+        if len(rows) != 1:
+            raise ExternalServiceError("Invalid semantic plan response")
+        raw = rows[0].get("QUERY PLAN", rows[0].get("query_plan"))
+        return _sanitize_plan(raw)
 
     def _rows(self, query: str) -> list[Mapping[str, Any]]:
         response = self._client.execute_sql(query)
@@ -314,16 +374,12 @@ def build_dry_run_report(
     if price_per_million_usd < 0:
         raise ValueError("price per million tokens must not be negative")
     index_version = repository.index_version()
-    documents = load_documents(
-        repository, page_size=page_size, index_version=index_version
-    )
+    documents = load_documents(repository, page_size=page_size, index_version=index_version)
     remaining = [row for row in documents if not row.is_current(index_version)]
     estimates = estimator.estimate(remaining, index_version) if remaining else []
     input_bytes = sum(value.input_utf8_bytes for value in estimates)
     estimated_tokens = math.ceil(input_bytes / 3)
-    estimated_cost = (
-        Decimal(estimated_tokens) * price_per_million_usd / Decimal(1_000_000)
-    )
+    estimated_cost = Decimal(estimated_tokens) * price_per_million_usd / Decimal(1_000_000)
     return {
         "dryRun": True,
         "indexVersion": index_version,
@@ -333,8 +389,7 @@ def build_dry_run_report(
         "remainingSemanticDocuments": len(remaining),
         "alreadyQueuedDocuments": sum(row.queued_for_current for row in remaining),
         "enqueueCandidates": sum(
-            not row.queued_for_current and row.semantic_state != "failed"
-            for row in remaining
+            not row.queued_for_current and row.semantic_state != "failed" for row in remaining
         ),
         "failedDocuments": sum(row.semantic_state == "failed" for row in documents),
         "missingTitles": sum(not row.title.strip() for row in documents),
@@ -354,6 +409,198 @@ def build_dry_run_report(
     }
 
 
+def _nearest_rank(values: Sequence[int], percentile: float) -> int | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    return ordered[max(0, math.ceil(percentile * len(ordered)) - 1)]
+
+
+def build_future_lag_report(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    published_after: datetime,
+    minimum_sample: int = FUTURE_LAG_MIN_SAMPLE,
+) -> dict[str, Any]:
+    if published_after.tzinfo is None:
+        raise ValueError("published after must be timezone-aware")
+    minimum = _bounded_integer(minimum_sample, 1, 200, "minimum sample")
+    samples: list[dict[str, Any]] = []
+    semantic_lags: list[int] = []
+    incomplete = 0
+    for row in rows:
+        clip_id = row.get("clip_id")
+        index_version = row.get("index_version")
+        keyword_lag = row.get("keyword_lag_ms")
+        semantic_lag = row.get("semantic_lag_ms")
+        semantic_state = row.get("semantic_state")
+        if (
+            not isinstance(clip_id, str)
+            or not clip_id
+            or not isinstance(index_version, str)
+            or not index_version
+            or not isinstance(keyword_lag, int)
+            or isinstance(keyword_lag, bool)
+            or keyword_lag < 0
+            or not isinstance(semantic_state, str)
+        ):
+            raise ExternalServiceError("Invalid future-index lag row")
+        complete = (
+            isinstance(semantic_lag, int)
+            and not isinstance(semantic_lag, bool)
+            and semantic_lag >= 0
+            and semantic_state == "current"
+            and row.get("has_current_chunks") is True
+        )
+        if complete:
+            semantic_lags.append(semantic_lag)
+        else:
+            incomplete += 1
+        samples.append(
+            {
+                "clipId": clip_id,
+                "indexVersion": index_version,
+                "publishedAt": row.get("published_at"),
+                "keywordCurrentAt": row.get("keyword_current_at"),
+                "semanticCurrentAt": row.get("semantic_current_at") if complete else None,
+                "keywordLagMs": keyword_lag,
+                "semanticLagMs": semantic_lag if complete else None,
+                "semanticState": semantic_state,
+                "hasCurrentChunks": row.get("has_current_chunks") is True,
+            }
+        )
+    p95 = _nearest_rank(semantic_lags, 0.95)
+    gate = (
+        len(samples) >= minimum and incomplete == 0 and p95 is not None and p95 < FUTURE_LAG_SLO_MS
+    )
+    return {
+        "schemaVersion": 1,
+        "evidenceKind": "privacy-safe future publication index lag",
+        "publishedAfter": published_after.astimezone(UTC).isoformat().replace("+00:00", "Z"),
+        "minimumSample": minimum,
+        "sampleCount": len(samples),
+        "completeSemanticSamples": len(semantic_lags),
+        "incompleteSamples": incomplete,
+        "semanticLagP95Ms": p95,
+        "targetMs": FUTURE_LAG_SLO_MS,
+        "passed": gate,
+        "samples": samples,
+    }
+
+
+_PLAN_KEYS = {
+    "Plan",
+    "Planning Time",
+    "Execution Time",
+    "Node Type",
+    "Relation Name",
+    "Index Name",
+    "Plan Rows",
+    "Actual Rows",
+    "Actual Total Time",
+    "Shared Hit Blocks",
+    "Shared Read Blocks",
+    "Plans",
+}
+
+
+def _sanitize_plan(value: Any) -> Mapping[str, Any]:
+    if isinstance(value, list):
+        if len(value) != 1:
+            raise ExternalServiceError("Invalid semantic plan response")
+        return _sanitize_plan(value[0])
+    if not isinstance(value, Mapping):
+        raise ExternalServiceError("Invalid semantic plan response")
+    output: dict[str, Any] = {}
+    for key, candidate in value.items():
+        if key not in _PLAN_KEYS:
+            continue
+        if key == "Plans":
+            if not isinstance(candidate, list):
+                raise ExternalServiceError("Invalid semantic plan response")
+            output[key] = [_sanitize_plan(item) for item in candidate]
+        elif key == "Plan":
+            output[key] = _sanitize_plan(candidate)
+        elif isinstance(candidate, str | int | float) and not isinstance(candidate, bool):
+            output[key] = candidate
+    if not output:
+        raise ExternalServiceError("Semantic plan response contained no safe fields")
+    return output
+
+
+def build_index_plan_audit(
+    status: Mapping[str, Any],
+    plan: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    documents = status.get("documents")
+    if not isinstance(documents, int) or isinstance(documents, bool) or documents < 0:
+        raise ExternalServiceError("Invalid document count for plan audit")
+    reached = [threshold for threshold in PLAN_AUDIT_THRESHOLDS if documents >= threshold]
+    threshold = max(reached) if reached else PLAN_AUDIT_THRESHOLDS[0]
+    due = bool(reached)
+    if due and plan is None:
+        raise ExternalServiceError("A read-only plan is required at this catalogue size")
+    return {
+        "schemaVersion": 1,
+        "evidenceKind": "read-only semantic HNSW plan audit",
+        "catalogueDocuments": documents,
+        "threshold": threshold,
+        "due": due,
+        "indexVersion": status.get("indexVersion"),
+        "plan": plan if due else None,
+    }
+
+
+def build_closeout_status(status: Mapping[str, Any]) -> dict[str, Any]:
+    required_counts = (
+        "eligibleDocuments",
+        "documents",
+        "currentDocuments",
+        "pendingDocuments",
+        "processingDocuments",
+        "failedDocuments",
+        "freshQueuedMessages",
+        "backfillQueuedMessages",
+    )
+    counts: dict[str, int] = {}
+    for key in required_counts:
+        value = status.get(key)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise ExternalServiceError(f"Invalid closeout status field: {key}")
+        counts[key] = value
+    keyword_complete = (
+        status.get("keywordCoverageComplete") is True
+        and counts["documents"] == counts["eligibleDocuments"]
+    )
+    semantic_complete = (
+        counts["currentDocuments"] == counts["documents"]
+        and counts["pendingDocuments"] == 0
+        and counts["processingDocuments"] == 0
+        and counts["failedDocuments"] == 0
+    )
+    queues_idle = counts["freshQueuedMessages"] == 0 and counts["backfillQueuedMessages"] == 0
+    return {
+        "schemaVersion": 1,
+        "evidenceKind": "topic search index closeout status",
+        "indexVersion": status.get("indexVersion"),
+        **counts,
+        "keywordCoverageComplete": keyword_complete,
+        "semanticCoverageComplete": semantic_complete,
+        "queuesIdle": queues_idle,
+        "passed": keyword_complete and semantic_complete and queues_idle,
+    }
+
+
+def _parse_timestamp(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("published after must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        raise ValueError("published after must include a timezone")
+    return parsed.astimezone(UTC)
+
+
 def enqueue_backfill(
     repository: BackfillRepository,
     *,
@@ -362,9 +609,7 @@ def enqueue_backfill(
     max_enqueue: int | None,
 ) -> dict[str, Any]:
     index_version = repository.index_version()
-    documents = load_documents(
-        repository, page_size=page_size, index_version=index_version
-    )
+    documents = load_documents(repository, page_size=page_size, index_version=index_version)
     candidates = [
         row.clip_id
         for row in documents
@@ -391,9 +636,7 @@ def retry_failed(
     max_enqueue: int | None,
 ) -> dict[str, Any]:
     index_version = repository.index_version()
-    documents = load_documents(
-        repository, page_size=page_size, index_version=index_version
-    )
+    documents = load_documents(repository, page_size=page_size, index_version=index_version)
     candidates = [
         row.clip_id
         for row in documents
@@ -420,9 +663,7 @@ def _enqueue_candidates(
     operation: str,
     index_version: str,
 ) -> dict[str, Any]:
-    effective_batch = _bounded_integer(
-        batch_size, 1, MAX_DATABASE_BATCH, "batch size"
-    )
+    effective_batch = _bounded_integer(batch_size, 1, MAX_DATABASE_BATCH, "batch size")
     if max_enqueue is not None and max_enqueue < 0:
         raise ValueError("max enqueue must not be negative")
     selected = list(candidates[:max_enqueue] if max_enqueue is not None else candidates)
@@ -475,6 +716,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Request 1-4 existing Edge workers; the database queue remains authoritative",
     )
     dispatch.add_argument("--workers", type=int, default=1)
+    lag = subparsers.add_parser(
+        "lag-report",
+        help="Measure privacy-safe publish-to-keyword/semantic lag for new clips",
+    )
+    lag.add_argument("--published-after", required=True)
+    lag.add_argument("--limit", type=int, default=200)
+    lag.add_argument("--minimum-sample", type=int, default=FUTURE_LAG_MIN_SAMPLE)
+    lag.add_argument("--strict", action="store_true")
+    subparsers.add_parser(
+        "plan-audit",
+        help="Capture a sanitized read-only HNSW plan when a size threshold is due",
+    )
+    closeout = subparsers.add_parser(
+        "closeout-status",
+        help="Verify keyword/semantic coverage and both queues without query data",
+    )
+    closeout.add_argument("--strict", action="store_true")
     return parser
 
 
@@ -508,6 +766,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         output = dict(repository.set_provider(enabled=True))
     elif args.command == "stop":
         output = dict(repository.set_provider(enabled=False))
+    elif args.command == "lag-report":
+        published_after = _parse_timestamp(args.published_after)
+        output = build_future_lag_report(
+            repository.future_lag(published_after, args.limit),
+            published_after=published_after,
+            minimum_sample=args.minimum_sample,
+        )
+    elif args.command == "plan-audit":
+        status = repository.status()
+        documents = status.get("documents")
+        due = isinstance(documents, int) and not isinstance(documents, bool) and documents >= 10_000
+        output = build_index_plan_audit(status, repository.index_plan() if due else None)
+    elif args.command == "closeout-status":
+        output = build_closeout_status(repository.status())
     else:
         workers = _bounded_integer(args.workers, 1, 4, "workers")
         output = {
@@ -516,15 +788,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             "dispatchedWorkers": repository.dispatch(workers),
         }
     print(json.dumps(output, indent=2, sort_keys=True, ensure_ascii=False))
+    if args.command == "lag-report" and args.strict and not output.get("passed"):
+        return 1
+    if args.command == "closeout-status" and args.strict and not output.get("passed"):
+        return 1
     return 0
 
 
 def _production_repository() -> ManagementBackfillRepository:
     settings = get_settings()
     if not settings.supabase_project_ref or not settings.supabase_access_token:
-        raise ConfigurationError(
-            "Set RIKET_SUPABASE_PROJECT_REF and RIKET_SUPABASE_ACCESS_TOKEN"
-        )
+        raise ConfigurationError("Set RIKET_SUPABASE_PROJECT_REF and RIKET_SUPABASE_ACCESS_TOKEN")
     return ManagementBackfillRepository(
         SupabaseManagementClient(
             project_ref=settings.supabase_project_ref,

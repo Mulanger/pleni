@@ -23,7 +23,10 @@ const handler = createClipSearchHandler(
         baseUrl: Deno.env.get("OPENAI_EMBEDDINGS_BASE_URL"),
         timeoutMs: 10_000,
       });
-      return result.embeddings[0];
+      return {
+        embedding: result.embeddings[0],
+        promptTokens: result.usage.promptTokens,
+      };
     },
     searchCandidates: (request) => callServiceRpc(
       "search_clip_candidates_v3",

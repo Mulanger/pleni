@@ -43,7 +43,10 @@ export interface ClipSearchDependencies {
   prepareRequest(keyHash: string): Promise<unknown>;
   consumeRequestLimit(keyHash: string): Promise<unknown>;
   reserveProviderTokens(tokenCount: number): Promise<unknown>;
-  embedTopic(topic: string): Promise<readonly number[]>;
+  embedTopic(topic: string): Promise<{
+    embedding: readonly number[];
+    promptTokens: number;
+  }>;
   searchCandidates(request: SearchCandidateRequest): Promise<unknown>;
   loadEventDestination(eventId: string): Promise<unknown>;
   log(summary: SearchLogSummary): void;
@@ -61,16 +64,20 @@ export interface SearchLogSummary {
   event: "clip_search_request";
   status: number;
   mode: ClipSearchResponse["mode"] | "none";
-  resultCount: number;
-  rateLimited: boolean;
+  resultCountBucket: "0" | "1-5" | "6-10" | "11-20" | "21-60";
+  semanticAvailable: boolean;
+  providerFallback: boolean;
+  dateBroadening: boolean;
+  searchVersion: typeof SEARCH_RANKING_VERSION;
+  indexVersion: string;
   durationMs: number;
-  catalogCacheHit: boolean;
   phaseMs: {
     preflight: number;
     providerBudget: number;
     embedding: number;
     retrieval: number;
   };
+  rateLimitReason: "none" | "request" | "provider_budget";
 }
 
 interface SearchCandidateEnvelope {
@@ -117,9 +124,13 @@ export function createClipSearchHandler(
     const started = performance.now();
     let mode: SearchLogSummary["mode"] = "none";
     let resultCount = 0;
-    let rateLimited = false;
     let status = 500;
-    let catalogCacheHit = false;
+    let semanticAvailable = false;
+    let providerFallback = false;
+    let dateBroadened = false;
+    let indexVersion = "semantic-index-not-used";
+    let embeddingPromptTokens = 0;
+    let rateLimitReason: SearchLogSummary["rateLimitReason"] = "none";
     let preflightMs = 0;
     let providerBudgetMs = 0;
     let embeddingMs = 0;
@@ -133,6 +144,7 @@ export function createClipSearchHandler(
       "Access-Control-Allow-Origin": origin,
       "Access-Control-Allow-Headers": "apikey, content-type, x-client-info",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Expose-Headers": "Server-Timing, X-Pleni-Search-Embedding-Tokens",
       "Access-Control-Max-Age": "86400",
       Vary: "Origin",
     });
@@ -161,18 +173,19 @@ export function createClipSearchHandler(
       const preflightStarted = performance.now();
       let catalog: SearchEntityCatalog;
       if (cachedCatalog && requestNow.getTime() < catalogExpiresAtMs) {
-        catalogCacheHit = true;
-        enforceRateLimit(
-          parseSearchRateLimitDecision(
-            await dependencies.consumeRequestLimit(clientKey),
-          ),
+        const decision = parseSearchRateLimitDecision(
+          await dependencies.consumeRequestLimit(clientKey),
         );
+        if (!decision.allowed) rateLimitReason = "request";
+        enforceRateLimit(decision);
         catalog = cachedCatalog;
       } else {
         const prepared = parsePreparedRequest(
           await dependencies.prepareRequest(clientKey),
         );
-        enforceRateLimit(parseSearchRateLimitDecision(prepared.rateLimit));
+        const decision = parseSearchRateLimitDecision(prepared.rateLimit);
+        if (!decision.allowed) rateLimitReason = "request";
+        enforceRateLimit(decision);
         catalog = parseEntityCatalog(prepared.catalog);
         cachedCatalog = catalog;
         catalogExpiresAtMs = requestNow.getTime() + catalogCacheTtlMs;
@@ -200,26 +213,35 @@ export function createClipSearchHandler(
           dateBroadening: null,
         });
         status = 200;
-        return jsonResponse(response, status, cors);
+        return jsonResponse(response, status, diagnosticHeaders(cors, {
+          started,
+          embeddingPromptTokens,
+          preflightMs,
+          providerBudgetMs,
+          embeddingMs,
+          retrievalMs,
+        }));
       }
 
       let queryEmbedding: string | null = null;
-      let providerFallback = false;
       if (interpretation.plan.topic) {
         const providerBudgetStarted = performance.now();
-        enforceRateLimit(
-          parseSearchRateLimitDecision(
-            await dependencies.reserveProviderTokens(
-              providerTokenReservation(interpretation.plan.topic),
-            ),
+        const decision = parseSearchRateLimitDecision(
+          await dependencies.reserveProviderTokens(
+            providerTokenReservation(interpretation.plan.topic),
           ),
         );
+        if (!decision.allowed) rateLimitReason = "provider_budget";
+        enforceRateLimit(decision);
         providerBudgetMs = elapsedMs(providerBudgetStarted);
         const embeddingStarted = performance.now();
         try {
-          queryEmbedding = embeddingToHalfvec(
-            await dependencies.embedTopic(interpretation.plan.topic),
-          );
+          const embedded = await dependencies.embedTopic(interpretation.plan.topic);
+          if (!Number.isSafeInteger(embedded.promptTokens) || embedded.promptTokens < 0) {
+            throw new Error("invalid_embedding_usage");
+          }
+          queryEmbedding = embeddingToHalfvec(embedded.embedding);
+          embeddingPromptTokens = embedded.promptTokens;
         } catch (error) {
           if (!(error instanceof OpenAIEmbeddingError)) throw error;
           providerFallback = true;
@@ -246,6 +268,8 @@ export function createClipSearchHandler(
           : Promise.resolve(null),
       ]);
       let candidates = parseCandidateEnvelope(candidateValue);
+      semanticAvailable = candidates.semanticAvailable;
+      indexVersion = candidates.indexVersion;
       let dateBroadening: SearchDateBroadening | null = null;
       let facets: SearchFacet[] = interpretation.facets;
       if (shouldBroadenDate(interpretation.plan, candidates)) {
@@ -266,6 +290,8 @@ export function createClipSearchHandler(
           .slice(0, limit);
         if (resultsFromOtherDates.length > 0) {
           candidates = { ...broadened, results: resultsFromOtherDates };
+          semanticAvailable = broadened.semanticAvailable;
+          indexVersion = broadened.indexVersion;
           const dateFacet = interpretation.facets.find(
             (facet): facet is Extract<SearchFacet, { kind: "date" }> => facet.kind === "date",
           );
@@ -277,6 +303,7 @@ export function createClipSearchHandler(
               to: dateFacet.to,
             };
             facets = interpretation.facets.filter((facet) => facet.kind !== "date");
+            dateBroadened = true;
           }
         }
       }
@@ -301,33 +328,86 @@ export function createClipSearchHandler(
       });
       resultCount = response.results.length;
       status = 200;
-      return jsonResponse(response, status, cors);
+      return jsonResponse(response, status, diagnosticHeaders(cors, {
+        started,
+        embeddingPromptTokens,
+        preflightMs,
+        providerBudgetMs,
+        embeddingMs,
+        retrievalMs,
+      }));
     } catch (error) {
       const handled = searchError(error);
       status = handled.status;
-      rateLimited = status === 429;
       const headers = handled.retryAfterSeconds > 0
         ? { "Retry-After": String(handled.retryAfterSeconds) }
         : undefined;
-      return jsonResponse({ error: handled.code }, status, cors, headers);
+      const responseHeaders = diagnosticHeaders(cors, {
+        started,
+        embeddingPromptTokens,
+        preflightMs,
+        providerBudgetMs,
+        embeddingMs,
+        retrievalMs,
+      });
+      if (headers) responseHeaders.set("Retry-After", headers["Retry-After"]);
+      return jsonResponse({ error: handled.code }, status, responseHeaders);
     } finally {
       dependencies.log({
         event: "clip_search_request",
         status,
         mode,
-        resultCount,
-        rateLimited,
+        resultCountBucket: resultCountBucket(resultCount),
+        semanticAvailable,
+        providerFallback,
+        dateBroadening: dateBroadened,
+        searchVersion: SEARCH_RANKING_VERSION,
+        indexVersion,
         durationMs: Math.max(0, Math.round(performance.now() - started)),
-        catalogCacheHit,
         phaseMs: {
           preflight: preflightMs,
           providerBudget: providerBudgetMs,
           embedding: embeddingMs,
           retrieval: retrievalMs,
         },
+        rateLimitReason,
       });
     }
   };
+}
+
+interface DiagnosticTiming {
+  started: number;
+  embeddingPromptTokens: number;
+  preflightMs: number;
+  providerBudgetMs: number;
+  embeddingMs: number;
+  retrievalMs: number;
+}
+
+function diagnosticHeaders(base: Headers, timing: DiagnosticTiming): Headers {
+  const headers = new Headers(base);
+  const totalMs = Math.max(0, Math.round(performance.now() - timing.started));
+  headers.set(
+    "Server-Timing",
+    [
+      `total;dur=${totalMs}`,
+      `preflight;dur=${timing.preflightMs}`,
+      `provider-budget;dur=${timing.providerBudgetMs}`,
+      `embedding;dur=${timing.embeddingMs}`,
+      `retrieval;dur=${timing.retrievalMs}`,
+    ].join(", "),
+  );
+  headers.set("X-Pleni-Search-Embedding-Tokens", String(timing.embeddingPromptTokens));
+  return headers;
+}
+
+function resultCountBucket(count: number): SearchLogSummary["resultCountBucket"] {
+  if (count <= 0) return "0";
+  if (count <= 5) return "1-5";
+  if (count <= 10) return "6-10";
+  if (count <= 20) return "11-20";
+  return "21-60";
 }
 
 function shouldBroadenDate(

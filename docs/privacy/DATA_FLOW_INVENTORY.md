@@ -1,26 +1,27 @@
 # Data-flow inventory
 
-Current release inventory, updated 2026-08-26. “Basis” is the project's in-house GDPR
+Current release inventory, updated 2026-08-27. “Basis” is the project's in-house GDPR
 analysis under the F0-2 risk acceptance; it has not been reviewed by counsel.
 
-The rule-based recommender is implemented but inactive behind
-`VITE_RECOMMENDATIONS_ENABLED=false`. The migrations and Edge Functions have
-not been applied/deployed by this change, so the current production data flows
-below remain unchanged.
+The rule-based recommender and submitted topic search are available in the
+normal public app. Their explicit `false` frontend flags are emergency kill
+switches, not the ordinary production state. Migration 030 and the OPT4/OPT5
+Function candidates have not been deployed by this change, so the current
+production data flows below remain unchanged until a separate release.
 
-Topic search remains off for ordinary visitors. A production URL marker exposes
-an owner-only Android beta to a signed-in viewer, and the first submitted search
-requires an explicit per-session OpenAI warning confirmation. The database,
-Edge Function and semantic index are deployed. The following rows describe that
-limited beta boundary, not a general viewer launch.
+Topic search is anonymous in the normal Search tab and shows the concise
+OpenAI/private-information warning. The database, Edge Function and semantic
+index are deployed. The following rows describe the public topic-search
+boundary.
 
-## Limited topic-search beta boundary
+## Public topic-search boundary
 
 | Data | Source → destination | Purpose | Basis / special-category position | Retention criterion |
 |---|---|---|---|---|
 | Submitted search text, maximum 120 characters | Viewer → Pleni `clip-search` Edge Function | Interpret a viewer-requested person, party, event, date or topic search | Article 6 legitimate-interest/service-request analysis is proposed but owner/legal sign-off is pending. A query about politics does not by itself prove the viewer's opinion, but free text can contain personal or Article 9 data; the UI must tell viewers not to enter personal information. | Request memory only. The raw query is not written to Pleni logs, database, URL, localStorage or Clerk. |
 | Residual topic text | Pleni Edge Function → OpenAI Embeddings API | Create a 1,024-dimension vector used transiently to retrieve related public parliamentary clips | Same purpose as the submitted search. OpenAI is a processor for this operation. The actual project's EEA/data-residency and retention configuration must be verified before release. | Pleni stores no query vector or raw query. OpenAI documents no application state for `/v1/embeddings`; default abuse-monitoring logs may be retained for up to 30 days unless approved controls change that. Actual project status remains unverified. |
 | Daily HMAC client key, global/client bucket, counts, bucket boundaries and expiry | Request network address → one-way daily HMAC inside Edge Function → `private.search_rate_limit_buckets` | Resist automated abuse and cap provider spend without storing a raw address | Legitimate interest in service security and cost control. The HMAC is deliberately not a stable viewer identifier. | Buckets expire after 48 hours and are deleted opportunistically. Raw address and query are not accepted by the storage RPC. |
+| Search health bucket/booleans, versions, phase durations, rate-limit reason and actual embedding-token count | Pleni `clip-search` Edge Function → transient response headers and allowlisted server health log | Measure latency, reliability and projected provider cost without observing what a viewer searched for | Legitimate interest in service reliability, security and cost control. Exact result count, query/topic, identity/filter selections, embedding, address and user identity are excluded by a tested allowlist. | Response headers last for the request. Operational log retention follows the hosting platform policy; no query text or stable viewer key is present. Engineering benchmark reports use only committed smoke query ids. |
 | Public catalogue document, deterministic passage, 1,024-dimension passage embedding and source/index hashes | Riksdagen/Pleni public clip metadata → private Supabase search tables | Keyword and semantic retrieval over already-public parliamentary material | Same public-catalogue legitimate interest as the source clip. Embeddings describe public speech content, not viewer behaviour. | While the eligible clip is published and current; update/reject/unpublish/delete triggers converge the private index. Stale source-hash/index-version rows are excluded. |
 
 Official OpenAI documentation used for this inventory states that API data is

@@ -14,6 +14,8 @@ RELEVANCE_UP = MIGRATIONS_DIR / "027_search_relevance_latency.up.sql"
 RELEVANCE_DOWN = MIGRATIONS_DIR / "027_search_relevance_latency.down.sql"
 CACHE_UP = MIGRATIONS_DIR / "028_search_catalog_cache.up.sql"
 CACHE_DOWN = MIGRATIONS_DIR / "028_search_catalog_cache.down.sql"
+RESILIENCE_UP = MIGRATIONS_DIR / "030_search_future_resilience.up.sql"
+RESILIENCE_DOWN = MIGRATIONS_DIR / "030_search_future_resilience.down.sql"
 
 DEPLOYED_PREREQUISITE_HASHES = {
     "020_recommendation_launch_controls.up.sql": (
@@ -264,3 +266,43 @@ def test_ui169_catalog_cache_refreshes_from_entities_and_rolls_back_cleanly() ->
     assert "catalog := public.load_search_entity_catalog()" in down
     assert "drop column if exists entity_catalog" in down
     assert "drop table" not in down
+
+
+def test_opt5_separates_historical_backfill_and_claims_fresh_work_first() -> None:
+    up = _sql(RESILIENCE_UP)
+    down = _sql(RESILIENCE_DOWN)
+
+    assert "pgmq.create('search_embeddings_backfill')" in up
+    assert "public.enqueue_search_embedding_backfill_batch" in up
+    assert "public.claim_search_embedding_jobs_v2" in up
+    claim = up[up.index("create or replace function public.claim_search_embedding_jobs_v2") :]
+    first_fresh = claim.index("public.claim_search_embedding_jobs(")
+    backlog_read = claim.index("pgmq.read(")
+    second_fresh = claim.index("public.claim_search_embedding_jobs(", first_fresh + 1)
+    assert first_fresh < backlog_read < second_fresh
+    assert "remaining := effective_limit - fresh_count" in claim
+    assert "pgmq.delete('search_embeddings_backfill'" in claim
+    assert "private.enqueue_search_embedding(" in claim
+    assert "provider_enabled" in claim and "provider_kill_switch" in claim
+
+    assert "drop_queue('search_embeddings_backfill')" in down
+    assert "drop_queue('search_embeddings')" not in down
+    assert "drop function if exists public.claim_search_embedding_jobs(" not in down
+    assert "drop table" not in down
+
+
+def test_opt5_lag_evidence_is_service_only_and_uses_publication_time() -> None:
+    up = _sql(RESILIENCE_UP)
+    function = up[
+        up.index("create or replace function public.search_embedding_future_lag_sample") :
+    ]
+
+    assert "clip.published_at >= p_published_after" in function
+    assert "document.keyword_indexed_at - clip.published_at" in function
+    assert "document.semantic_updated_at - clip.published_at" in function
+    assert "chunk.source_hash = document.source_hash" in function
+    assert "chunk.index_version = state.semantic_index_version" in function
+    assert "from public, anon, authenticated" in function
+    assert "to service_role" in function
+    for forbidden in ("raw_query", "normalized_topic", "client_address", "query_embedding"):
+        assert forbidden not in function

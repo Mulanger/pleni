@@ -1913,6 +1913,82 @@ entries. No live/OpenAI call, deploy or push was made.
 
 ---
 
+## OPT4 — Latency, cost and embedding/index decision — CODE COMPLETE 2026-08-27; LIVE EVIDENCE PENDING
+
+**Depends on:** OPT2 and OPT3. **Size:** large.
+
+**Objective:** make the existing production search path measurable without
+persisting queries, weakening provider/rate-limit behavior or buying a second
+service. Produce a deterministic decision gate that requires three separate-day
+30-request samples before any embedding/index architecture change.
+
+**Scope — may modify:** the public search Edge handler and its internal provider
+adapter; the offline/live search evaluator; focused Python and Edge tests;
+search evidence/runbook docs, this file and `PROGRESS.md`. **Must not modify:**
+the public JSON search contract, ranking thresholds/order, migrations 001–029,
+`src/contracts.py`, index contents, pipeline stages, Bunny/player/PWA media
+behavior or frontend search semantics.
+
+**Acceptance:** each successful/error response exposes privacy-safe aggregate
+phase timing and actual embedding-token count through diagnostic headers, while
+the structured server log contains only the OPT5 allowlisted health fields.
+The benchmark runs exactly 30 serial public requests over the ten committed
+smoke phrases, waits at least seven seconds between live calls, retains the
+first/cold candidate and every failure, and persists query IDs rather than
+query text. An offline decision command refuses fewer than three distinct UTC
+dates and reports p50/p95/max, phase p95s, actual tokens and caller-supplied
+cost projections. No small-model shadow backfill or endpoint switch occurs
+without the evidence and approvals required by the roadmap.
+
+**Delivered:** privacy-safe response timing/token diagnostics, a strict
+30-request serial benchmark and a three-distinct-day decision command. The
+decision recomputes failures, total percentiles, every server-phase p95 and
+token totals from all 90 call rows; it never trusts a stored pass flag and never
+selects the small model automatically. The current large 1024-dimensional
+index remains unchanged. The three live samples are deliberately still
+unpassed because they require three real UTC dates after deployment.
+
+---
+
+## OPT5 — Future backfill resilience, privacy-safe operations and closeout — CODE COMPLETE 2026-08-27; LIVE EVIDENCE PENDING
+
+**Depends on:** OPT0–OPT4. **Size:** large.
+
+**Objective:** keep fresh publications searchable during arbitrarily large
+historical backfills, measure future-index lag without query data, lock the
+privacy-safe log contract and leave every rollback/recovery path executable and
+documented.
+
+**Scope — may modify/create:** one additive search migration pair after 029;
+the search embedding worker/RPC adapter; the existing search backfill operator
+script; focused migration/worker/backfill/observability tests; search runbook,
+roadmap/evidence docs, this file and `PROGRESS.md`. **Must not modify:** prior
+migrations, `src/contracts.py`, public browser database access, search ranking,
+embedding dimensions/model/index contents, C11 or any video stage, Bunny,
+player/media scheduling or service-worker boundaries.
+
+**Acceptance:** normal publication remains on the primary queue while bounded
+historical work uses a separate backlog queue that is promoted only when no
+fresh job is claimable. Source-hash/index-version idempotency, keyword-first
+availability, retry/failure semantics and one-provider-call behavior remain
+intact. Service-only read paths produce a privacy-safe 20-clip future-lag sample
+and threshold-triggered read-only HNSW plan evidence. Exact log-shape tests fail
+on raw query, topic, embedding, identity/filter/address or exact result-count
+fields. Runbook tests/evidence cover the frontend kill switch, v2 Edge rollback,
+provider-off keyword fallback, index-version restoration and queue recovery.
+All offline/full gates pass; live lag, three-day latency, provider-account,
+production deployment and Android evidence remain explicitly unpassed until
+their separately authorized real operations occur.
+
+**Delivered:** additive migration 030, a fresh-first worker claim, an isolated
+historical backlog, two-queue status/recovery, strict future-lag and closeout
+reports, thresholded sanitized HNSW plan evidence, exact privacy log allowlist
+tests and the complete operator/rollback runbook. Offline release gates are
+green. Migration/deployment and real-world acceptance remain separately
+authorized operations rather than inferred passes.
+
+---
+
 ## Phase 2 backlog (not chunked yet)
 
 Deliberately deferred. Do not pull these forward.

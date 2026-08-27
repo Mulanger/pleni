@@ -554,7 +554,8 @@ database change, deploy or push was made; release remains a separate decision.
 
 ## OPT4 — Latency, cost and embedding/index decision
 
-**Status:** PLANNED. **Size:** large. **Depends on:** OPT2 and OPT3.
+**Status:** IMPLEMENTED OFFLINE 2026-08-27; three-day production evidence
+pending. **Size:** large. **Depends on:** OPT2 and OPT3.
 
 ### Objective
 
@@ -620,9 +621,32 @@ manufacture a pass.
 - Actual embedding tokens and projected monthly cost are reported without
   logging user query text.
 
+### Delivered implementation
+
+- `clip-search` emits `Server-Timing` for total/preflight/provider-budget/
+  embedding/retrieval and an actual prompt-token header. The public JSON
+  contract is unchanged.
+- The internal provider adapter preserves OpenAI's actual `prompt_tokens`
+  instead of discarding it. Date broadening still reuses that one call.
+- `benchmark-live` enforces 30 serial calls, the ten frozen phrases repeated
+  three times, at least seven seconds between calls, the first/cold candidate
+  retained and every failure retained. Output stores query ids only.
+- `latency-decision` refuses fewer than three distinct UTC dates or incomplete
+  sequences, aggregates p50/p95/max and phase p95s, and reports actual/projected
+  token cost using an operator-supplied current price and traffic projection.
+- The safe decision default is to retain
+  `text-embedding-3-large:1024:v1`. No EU endpoint, timeout, model, index or
+  provider setting changed, and no shadow backfill was bought.
+
+The code and synthetic/offline gates are complete. The required three daily
+production samples cannot truthfully be collapsed into one session; until
+those reports exist, OPT4's latency SLO and any small-model comparison remain
+pending evidence rather than an implementation defect or an inferred pass.
+
 ## OPT5 — Future backfill resilience, privacy-safe operations and closeout
 
-**Status:** PLANNED. **Size:** large. **Depends on:** OPT0–OPT4.
+**Status:** IMPLEMENTED OFFLINE 2026-08-27; production lifecycle evidence
+pending. **Size:** large. **Depends on:** OPT0–OPT4.
 
 ### Objective
 
@@ -708,6 +732,35 @@ Document and rehearse:
 8. Update `docs/privacy/TOPIC_SEARCH_RELEASE_EVIDENCE.md`, this roadmap and
    `PROGRESS.md` with exact versions, counts, metrics, commit, deployment and
    rollback evidence.
+
+### Delivered implementation
+
+- Additive migration 030 creates an isolated historical backlog. C11's
+  existing trigger remains on the fresh queue; the v2 worker claim drains
+  fresh work first and promotes only unused claim capacity from backlog.
+- Backfill enqueue/retry, status and deduplication see both queues. Existing
+  source-hash/index-version validation, completion/failure RPCs and active HNSW
+  index remain unchanged.
+- A service-only future-lag sample reports clip id, version, lifecycle
+  timestamps and durations from `published_at` through matching current chunks.
+  The strict operator report requires 20 complete rows and p95 below 120 s.
+- A closeout status requires 100% eligible/keyword equality, 100% current
+  semantics, zero failures/in-flight work and both queues idle. A read-only,
+  sanitized HNSW plan audit becomes due at 10,000 and 50,000 documents.
+- Search logs now have an exact tested allowlist: status, mode, result bucket,
+  semantic/provider/date booleans, versions, phase/total durations and
+  rate-limit reason. Exact counts, query/topic, embedding, identity/filter,
+  address and user fields are absent.
+- The runbook covers and automatically rehearses the frontend kill switch,
+  provider-off keyword fallback, v2 envelope rollback, index-version policy and
+  both-queue recovery. Production rollback itself stays pending until an
+  explicitly approved deploy/rehearsal actually occurs.
+
+No migration, Function, provider setting, index or frontend bundle was deployed
+by this implementation. The 20-new-clip sample, final coverage capture,
+three-day latency evidence, account region/retention evidence, production
+rollback and Android matrix remain real-world acceptance work; they are not
+fabricated as passing tests.
 
 ## Required final live query matrix
 

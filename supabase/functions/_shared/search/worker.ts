@@ -194,7 +194,7 @@ export function createSupabaseSearchEmbeddingDatabase(
 
   return {
     async claim(limit, visibilityTimeoutSeconds) {
-      const payload = await rpc("claim_search_embedding_jobs", {
+      const payload = await rpc("claim_search_embedding_jobs_v2", {
         p_limit: limit,
         p_visibility_timeout_seconds: visibilityTimeoutSeconds,
       });

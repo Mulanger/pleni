@@ -30,6 +30,7 @@ const RATE_SECRET = "test-search-rate-secret-that-is-at-least-32-bytes";
 const MAGDALENA_ID = "11111111-1111-4111-8111-111111111111";
 const EVENT_ID = "22222222-2222-4222-8222-222222222222";
 const SOURCE_ID = "33333333-3333-4333-8333-333333333333";
+const INDEX_VERSION = "openai:text-embedding-3-large:1024:v1";
 const VECTOR = Array.from({ length: SEARCH_EMBEDDING_DIMENSIONS }, () => 0.125);
 
 const CATALOG = {
@@ -70,7 +71,60 @@ test("runs a contextual query as hybrid search and returns the exact public cont
   assert.equal(fake.searches[0].topic, "elsparkcyklar");
   assert.match(String(fake.searches[0].queryEmbedding), /^\[[\d.,-]+\]$/u);
   assert.equal(fake.reservations.length, 1);
-  assert.equal(fake.logs[0].resultCount, 1);
+  assert.equal(fake.logs[0].resultCountBucket, "1-5");
+  assert.equal(response.headers.get("X-Pleni-Search-Embedding-Tokens"), "7");
+  assert.match(
+    response.headers.get("Server-Timing") ?? "",
+    /^total;dur=\d+, preflight;dur=\d+, provider-budget;dur=\d+, embedding;dur=\d+, retrieval;dur=\d+$/u,
+  );
+  assert.match(
+    response.headers.get("Access-Control-Expose-Headers") ?? "",
+    /Server-Timing, X-Pleni-Search-Embedding-Tokens/u,
+  );
+});
+
+test("search health logs use the exact privacy-safe OPT5 allowlist", async () => {
+  const fake = fakeDependencies();
+  await handler(fake.dependencies)(request("elsparkcyklar"));
+
+  assert.deepEqual(Object.keys(fake.logs[0]).sort(), [
+    "dateBroadening",
+    "durationMs",
+    "event",
+    "indexVersion",
+    "mode",
+    "phaseMs",
+    "providerFallback",
+    "rateLimitReason",
+    "resultCountBucket",
+    "searchVersion",
+    "semanticAvailable",
+    "status",
+  ]);
+  const rendered = JSON.stringify(fake.logs[0]);
+  for (const forbidden of [
+    "query",
+    "topic",
+    "queryEmbedding",
+    '"embedding":[',
+    "clientAddress",
+    "clientKey",
+    "politicianId",
+    "party",
+    "eventId",
+    "sourceIds",
+    "dateFrom",
+    "dateTo",
+    "resultCount\"",
+  ]) {
+    assert.equal(rendered.includes(forbidden), false, forbidden);
+  }
+  assert.equal(fake.logs[0].semanticAvailable, true);
+  assert.equal(fake.logs[0].providerFallback, false);
+  assert.equal(fake.logs[0].dateBroadening, false);
+  assert.equal(fake.logs[0].searchVersion, "pleni-search-v3");
+  assert.equal(fake.logs[0].indexVersion, INDEX_VERSION);
+  assert.equal(fake.logs[0].rateLimitReason, "none");
 });
 
 test("uses the request year for an unqualified Swedish day-month filter", async () => {
@@ -522,6 +576,22 @@ test("enforces request budgets before loading the catalogue", async () => {
   assert.deepEqual(await response.json(), { error: "rate_limited" });
   assert.equal(fake.catalogLoads, 0);
   assert.equal(fake.searches.length, 0);
+  assert.equal(fake.logs[0].rateLimitReason, "request");
+  assert.equal(fake.logs[0].resultCountBucket, "0");
+});
+
+test("records only a provider-budget reason code when that budget rejects", async () => {
+  const fake = fakeDependencies({
+    providerDecision: { allowed: false, reason: "provider_daily", retryAfterSeconds: 120 },
+  });
+  const response = await handler(fake.dependencies)(request("elsparkcyklar"));
+
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get("Retry-After"), "120");
+  assert.equal(fake.logs[0].rateLimitReason, "provider_budget");
+  assert.equal(fake.logs[0].providerFallback, false);
+  assert.deepEqual(fake.embeddedTopics, []);
+  assert.deepEqual(fake.searches, []);
 });
 
 test("reuses a valid catalogue for one minute without bypassing request budgets", async () => {
@@ -532,8 +602,6 @@ test("reuses a valid catalogue for one minute without bypassing request budgets"
   assert.equal((await search(request("järnvägsunderhåll"))).status, 200);
   assert.equal(fake.catalogLoads, 1);
   assert.equal(fake.rateKeys.length, 2);
-  assert.equal(fake.logs[0].catalogCacheHit, false);
-  assert.equal(fake.logs[1].catalogCacheHit, true);
   assert.ok(fake.logs.every((log) => Object.values(log.phaseMs).every(Number.isFinite)));
 });
 
@@ -734,6 +802,7 @@ function fakeDependencies(options: {
   candidateFor?: (search: SearchCandidateRequest) => unknown;
   embedError?: OpenAIEmbeddingError;
   requestDecision?: unknown;
+  providerDecision?: unknown;
 } = {}) {
   const searches: SearchCandidateRequest[] = [];
   const embeddedTopics: string[] = [];
@@ -770,12 +839,12 @@ function fakeDependencies(options: {
     },
     async reserveProviderTokens(count) {
       reservations.push(count);
-      return { allowed: true, reason: null, retryAfterSeconds: 0 };
+      return options.providerDecision ?? { allowed: true, reason: null, retryAfterSeconds: 0 };
     },
     async embedTopic(topic) {
       embeddedTopics.push(topic);
       if (options.embedError) throw options.embedError;
-      return VECTOR;
+      return { embedding: VECTOR, promptTokens: 7 };
     },
     async searchCandidates(search) {
       searches.push(search);
@@ -970,7 +1039,7 @@ test("a shorter result list is served as-is and no quota is filled", async () =>
   assert.equal(response.status, 200);
   assert.equal(fake.searches[0].limit, 20);
   assert.equal(body.results.length, 3);
-  assert.equal(fake.logs[0].resultCount, 3);
+  assert.equal(fake.logs[0].resultCountBucket, "1-5");
   assert.equal(fake.searches.length, 1);
 });
 
@@ -1052,7 +1121,7 @@ test("rejects a missing v3 candidate envelope", async () => {
 
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), { error: "search_unavailable" });
-  assert.equal(fake.logs[0].resultCount, 0);
+  assert.equal(fake.logs[0].resultCountBucket, "0");
 });
 
 test("migration 029 adds candidate-level admission with an additive rollback path", () => {
