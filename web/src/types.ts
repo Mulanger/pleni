@@ -103,6 +103,8 @@ export interface PersonProfile {
 export interface ClipItem {
   id: string;
   speechId: string;
+  /** Public source/debate identity. Null only for opt-in demo clips. */
+  sourceId: string | null;
   /**
    * Stable identity of the speaker — `public.politicians.id` (`Q-2`, a GATE).
    *

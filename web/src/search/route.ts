@@ -25,6 +25,9 @@ export function createSearchFeedCollection(
 ): SearchFeedCollection {
   const clips = results.map(({ clip, speakerNameAtSpeech, partyAtSpeech }) => ({
     ...clip,
+    // Search's public payload predates UI17's debate identity. Desktop search
+    // remains gated, so do not infer an identity from its source URL.
+    sourceId: null,
     // Search carries explicit historical byline fields. Keep them authoritative
     // inside this collection without changing current politician destinations.
     speakerName: speakerNameAtSpeech,

@@ -60,6 +60,7 @@ function mapCandidate(value: unknown): CandidateClip | null {
   const clip = {
     id,
     speechId: text(row, "speech_id"),
+    sourceId: nullableText(row, "source_id"),
     politicianId,
     politicianName: nullableText(row, "politician_name"),
     politicianRole: nullableText(row, "politician_role"),

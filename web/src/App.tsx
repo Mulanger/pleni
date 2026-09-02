@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import {
+  ArrowDown,
+  ArrowUp,
   ArrowUpRight,
   Bookmark,
   CheckCircle2,
@@ -80,6 +82,11 @@ import {
   snapEaseOut,
   snapScrollTop
 } from "./feed/snap-policy";
+import {
+  adjacentClipIndex,
+  viewportSurface,
+  type ViewportSurface
+} from "./desktop/layout-policy";
 import { Onboarding } from "./onboarding";
 import { EMPTY_ONBOARDING, readOnboarding, writeOnboarding } from "./onboarding-store";
 import { EMPTY_LIBRARY, readLibrary, toggleInList, writeLibrary } from "./library-store";
@@ -132,6 +139,7 @@ import type {
 } from "./search/types";
 import {
   loadClipsByIds,
+  loadDebateClips,
   loadClipsForParty,
   loadClipsForPolitician,
   loadPartyProfile,
@@ -328,8 +336,21 @@ type FeedSnapAnimation = {
   targetIndex: number;
 };
 
+function useViewportSurface(): ViewportSurface {
+  const [surface, setSurface] = useState(() => viewportSurface(window.innerWidth));
+
+  useEffect(() => {
+    const update = () => setSurface(viewportSurface(window.innerWidth));
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  return surface;
+}
+
 function App() {
   const { route, navigate, backTo } = useAppNavigation();
+  const viewport = useViewportSurface();
   const tab = route.tab;
   const feedMode = route.feedMode;
   const [searchFeedCollection, setSearchFeedCollection] =
@@ -344,11 +365,12 @@ function App() {
     route.view === "tab" &&
     tab === "sok";
   const darkSurface =
-    showingSearchFeed ||
-    (route.view === "tab" && tab === "hem") ||
-    route.view === "person-clips" ||
-    route.view === "party-clips" ||
-    route.view === "saved-clips";
+    viewport === "mobile" &&
+    (showingSearchFeed ||
+      (route.view === "tab" && tab === "hem") ||
+      route.view === "person-clips" ||
+      route.view === "party-clips" ||
+      route.view === "saved-clips");
   // Starts empty, not seeded with demo clips (FE-1). A brief loading state is
   // honest; a flash of fabricated content that then becomes real is not.
   const [clips, setClips] = useState<ClipItem[]>([]);
@@ -1194,7 +1216,7 @@ function App() {
 
   return (
     <>
-      <WideScreenMessage />
+      {viewport === "tablet-gate" && <WideScreenMessage />}
       <PwaStatusStack pwa={pwa} />
       {viewer.signedIn && showOnboarding && (
         <Onboarding
@@ -1252,6 +1274,44 @@ function App() {
           }}
         />
       )}
+      {viewport === "desktop" ? (
+        <main className="desktop-app" aria-label="Pleni desktop">
+          <DesktopSidebar
+            active={tab}
+            signedIn={viewer.signedIn}
+            onSignIn={viewer.requireSignIn}
+            onChange={(nextTab) => navigate({ view: "tab", tab: nextTab, feedMode })}
+          />
+          <div className="desktop-content">
+            {route.view === "tab" && tab === "hem" ? (
+              <FeedScreen
+                presentation="desktop"
+                clips={clips}
+                feedMode={feedMode}
+                setFeedMode={changeFeedMode}
+                playbackSuspended={showOnboarding}
+                muted={muted}
+                setMuted={setMuted}
+                liked={liked}
+                saved={saved}
+                following={following}
+                loading={loading}
+                clipSource={clipSource}
+                feedError={feedError}
+                onLike={toggleLikeClip}
+                onSave={toggleSaveClip}
+                onToggleFollow={toggleFollowPolitician}
+                onOpenPerson={openPerson}
+              />
+            ) : (
+              <DesktopComingSoon
+                tab={tab}
+                onHome={() => navigate({ view: "tab", tab: "hem", feedMode })}
+              />
+            )}
+          </div>
+        </main>
+      ) : viewport === "mobile" ? (
       <main className="mobile-app" aria-label="Pleni">
         {showingSearchFeed && searchFeedCollection !== null ? (
           <CollectionScreen
@@ -1440,6 +1500,7 @@ function App() {
           </>
         )}
       </main>
+      ) : null}
     </>
   );
 }
@@ -1452,6 +1513,81 @@ function WideScreenMessage() {
         <h1>Öppna appen på en mobilskärm.</h1>
         <p>Den första versionen är byggd för en fullskärms 9:16-feed. Surfa från mobilen för hela upplevelsen.</p>
       </div>
+    </section>
+  );
+}
+
+function DesktopSidebar({
+  active,
+  signedIn,
+  onSignIn,
+  onChange
+}: {
+  active: Tab;
+  signedIn: boolean;
+  onSignIn: () => void;
+  onChange: (tab: Tab) => void;
+}) {
+  const items: Array<{ tab: Tab; label: string; icon: ReactNode }> = [
+    { tab: "hem", label: "Hem", icon: <Home size={21} /> },
+    { tab: "foljer", label: "Följer", icon: <Users size={21} /> },
+    { tab: "sok", label: "Sök", icon: <Search size={21} /> },
+    { tab: "profil", label: "Profil", icon: <UserRound size={21} /> }
+  ];
+
+  return (
+    <aside className="desktop-sidebar" aria-label="Huvudmeny">
+      <button className="desktop-brand" type="button" onClick={() => onChange("hem")}>
+        <img src="/brand/pleni-logo.png" alt="" />
+        <span>Pleni</span>
+      </button>
+      <nav>
+        {items.map((item) => (
+          <button
+            key={item.tab}
+            type="button"
+            className={active === item.tab ? "active" : ""}
+            aria-current={active === item.tab ? "page" : undefined}
+            onClick={() => onChange(item.tab)}
+          >
+            {item.icon}
+            <span>{item.label}</span>
+          </button>
+        ))}
+      </nav>
+      <div className="desktop-account">
+        {clerkEnabled && signedIn ? (
+          <>
+            <UserButton appearance={{ elements: { userButtonAvatarBox: { width: 38, height: 38 } } }} />
+            <span>Mitt konto</span>
+          </>
+        ) : (
+          <button type="button" onClick={onSignIn} disabled={!clerkEnabled}>
+            <UserRound size={18} />
+            <span>{clerkEnabled ? "Logga in" : "Konto ej anslutet"}</span>
+          </button>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function DesktopComingSoon({ tab, onHome }: { tab: Tab; onHome: () => void }) {
+  const labels: Record<Tab, string> = {
+    hem: "Hem",
+    foljer: "Följer",
+    sok: "Sök",
+    profil: "Profil"
+  };
+  return (
+    <section className="desktop-coming-soon">
+      <span>Pleni på desktop</span>
+      <h1>{labels[tab]} kommer snart</h1>
+      <p>Den här sidan är fortfarande optimerad för mobilen. Videoflödet är redo här på desktop.</p>
+      <button type="button" onClick={onHome}>
+        <Home size={17} />
+        Till videoflödet
+      </button>
     </section>
   );
 }
@@ -1673,8 +1809,8 @@ function FeedItemRow({
          checkable from outside without reading React state. Empty
          string means the speaker has no stable id. */
       data-politician-id={clip.politicianId ?? ""}
-      onClick={onTogglePlayback}
     >
+      <div className="feed-video-frame" onClick={onTogglePlayback}>
       {posterSrc && !frameReady && <img className="feed-poster" src={posterSrc} alt="" />}
       {mediaMounted && (
         /* The overlay owns the cold-load fallback. A native `poster` would sit
@@ -1782,16 +1918,6 @@ function FeedItemRow({
       >
         {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
       </button>
-      <ActionRail
-        clip={clip}
-        liked={liked}
-        saved={saved}
-        onLike={onLike}
-        onComments={onComments}
-        onSave={onSave}
-        onShare={onShare}
-        shareFeedback={shareFeedback}
-      />
       <ClipMeta
         clip={clip}
         person={person}
@@ -1809,12 +1935,24 @@ function FeedItemRow({
           }
         }}
       />
+      </div>
+      <ActionRail
+        clip={clip}
+        liked={liked}
+        saved={saved}
+        onLike={onLike}
+        onComments={onComments}
+        onSave={onSave}
+        onShare={onShare}
+        shareFeedback={shareFeedback}
+      />
     </article>
   );
 }
 
 function FeedScreen({
-  clips,
+  clips: suppliedClips,
+  presentation = "mobile",
   feedMode,
   setFeedMode,
   playbackSuspended = false,
@@ -1837,6 +1975,7 @@ function FeedScreen({
   emptyMessage
 }: {
   clips: ClipItem[];
+  presentation?: "mobile" | "desktop";
   feedMode: FeedMode;
   setFeedMode: (mode: FeedMode) => void;
   /** Keeps the visible frame in place while a modal surface covers the feed. */
@@ -1862,6 +2001,15 @@ function FeedScreen({
   initialClipId?: string | null;
   emptyMessage?: string;
 }) {
+  const [debateContext, setDebateContext] = useState<{
+    clips: ClipItem[];
+    startId: string;
+    title: string;
+  } | null>(null);
+  const clips = presentation === "desktop" && debateContext
+    ? debateContext.clips
+    : suppliedClips;
+  const mainFeedActiveId = useRef<string | null>(initialClipId);
   const [activeId, setActiveId] = useState(initialClipId ?? clips[0]?.id ?? "");
   const [paused, setPaused] = useState<BooleanMap>({});
   /**
@@ -1943,8 +2091,9 @@ function FeedScreen({
   useEffect(() => {
     // A collection opened from a grid starts on the clip that was tapped, not
     // at the top; falling back to the first clip if that id is not in the set.
-    const wanted = initialClipId && clips.some((clip) => clip.id === initialClipId)
-      ? initialClipId
+    const openingClipId = debateContext?.startId ?? mainFeedActiveId.current ?? initialClipId;
+    const wanted = openingClipId && clips.some((clip) => clip.id === openingClipId)
+      ? openingClipId
       : clips[0]?.id ?? "";
     setActiveId(wanted);
     setPaused({});
@@ -1956,7 +2105,13 @@ function FeedScreen({
     autoplayMutedClipIdRef.current = null;
     setAutoplayMutedClipId(null);
     loopCounts.current = {};
-  }, [clips, initialClipId]);
+  }, [clips, debateContext, initialClipId]);
+
+  useEffect(() => {
+    if (debateContext === null && activeId) {
+      mainFeedActiveId.current = activeId;
+    }
+  }, [activeId, debateContext]);
 
   useEffect(() => {
     const scroll = feedScrollRef.current;
@@ -2032,12 +2187,13 @@ function FeedScreen({
   // Scroll the opening clip into view once, so the feed does not start at the
   // top and then jump.
   useEffect(() => {
-    if (!initialClipId) {
+    const openingClipId = debateContext?.startId ?? mainFeedActiveId.current ?? initialClipId;
+    if (!openingClipId) {
       return;
     }
-    const node = document.querySelector(`article[data-clip-id="${CSS.escape(initialClipId)}"]`);
+    const node = document.querySelector(`article[data-clip-id="${CSS.escape(openingClipId)}"]`);
     node?.scrollIntoView({ block: "start" });
-  }, [initialClipId, clips]);
+  }, [clips, debateContext, initialClipId]);
 
   /**
    * Autoplay policy refuses an unmuted `play()` until the origin has earned a
@@ -2257,6 +2413,13 @@ function FeedScreen({
   });
 
   useEffect(() => {
+    if (commentClip && commentClip.id !== activeId) {
+      resumeAfterComments.current = false;
+      setCommentClip(null);
+    }
+  }, [activeId, commentClip]);
+
+  useEffect(() => {
     return () => {
       if (flashTimer.current !== null) {
         window.clearTimeout(flashTimer.current);
@@ -2328,6 +2491,46 @@ function FeedScreen({
     },
     [clips.length, finishControlledSnap]
   );
+
+  const moveOneClip = useCallback(
+    (direction: -1 | 1) => {
+      if (commentClipRef.current !== null) return;
+      const currentIndex = Math.max(
+        clips.findIndex((clip) => clip.id === activeIdRef.current),
+        0
+      );
+      const targetIndex = adjacentClipIndex(currentIndex, clips.length, direction);
+      const targetId = clips[targetIndex]?.id;
+      if (!targetId || targetIndex === currentIndex) return;
+      activateClip(targetId);
+      settleControlledSnap(targetIndex);
+    },
+    [activateClip, clips, settleControlledSnap]
+  );
+
+  useEffect(() => {
+    if (presentation !== "desktop") return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.isContentEditable ||
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT"
+      ) {
+        return;
+      }
+      if (event.key === "ArrowUp" || event.key === "PageUp") {
+        event.preventDefault();
+        moveOneClip(-1);
+      } else if (event.key === "ArrowDown" || event.key === "PageDown") {
+        event.preventDefault();
+        moveOneClip(1);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [moveOneClip, presentation]);
 
   const cancelControlledGesture = useCallback(() => {
     const gesture = swipeGestureRef.current;
@@ -2707,6 +2910,7 @@ function FeedScreen({
   // keeps one clip behind, then stages the immediate and second destination.
   const activeIndex = clips.findIndex((clip) => clip.id === activeId);
   const windowCentre = activeIndex >= 0 ? activeIndex : 0;
+  const activeClip = clips[windowCentre] ?? null;
   const immediateCandidateIndex = windowCentre + predictedDirection;
   const immediateCandidateId = clips[immediateCandidateIndex]?.id ?? "";
   const mediaGeneration = `${activeId}:${predictedDirection}:${immediateCandidateId}`;
@@ -2734,7 +2938,8 @@ function FeedScreen({
   }, [clips, immediatePlayable, mediaGeneration, mediaWindow.immediateIndex]);
 
   return (
-    <section className="feed-screen">
+    <section className={`feed-screen feed-screen--${presentation}`}>
+      <div className="feed-stage">
       {onRefresh && (pullDistance > 0 || refreshing) && (
         <div
           className={refreshing ? "feed-refresh feed-refresh--loading" : "feed-refresh"}
@@ -2759,7 +2964,28 @@ function FeedScreen({
           </span>
         </div>
       )}
-      {header ?? (
+      {debateContext ? (
+        <div className="collection-bar desktop-debate-bar">
+          <button
+            type="button"
+            onClick={() => {
+              const returnId = mainFeedActiveId.current;
+              setDebateContext(null);
+              if (returnId) {
+                activeIdRef.current = returnId;
+                setActiveId(returnId);
+              }
+            }}
+            aria-label="Tillbaka till flödet"
+          >
+            <ChevronLeft size={22} />
+          </button>
+          <span className="collection-copy">
+            <strong>{debateContext.title}</strong>
+            <small>Tillbaka till flödet</small>
+          </span>
+        </div>
+      ) : header ?? (
         <div className="feed-tabs" role="tablist" aria-label="Flöde">
           <button className={feedMode === "fordig" ? "active" : ""} onClick={() => setFeedMode("fordig")}>
             För dig
@@ -2881,8 +3107,174 @@ function FeedScreen({
           );
         })}
       </div>
-      {COMMENTS_ENABLED && commentClip && <CommentSheet clip={commentClip} onClose={closeComments} />}
+      {presentation === "desktop" && (
+        <div className="desktop-feed-nav" aria-label="Byt klipp">
+          <button
+            type="button"
+            aria-label="Föregående klipp"
+            disabled={windowCentre <= 0}
+            onClick={() => moveOneClip(-1)}
+          >
+            <ArrowUp size={20} />
+          </button>
+          <button
+            type="button"
+            aria-label="Nästa klipp"
+            disabled={windowCentre >= clips.length - 1}
+            onClick={() => moveOneClip(1)}
+          >
+            <ArrowDown size={20} />
+          </button>
+        </div>
+      )}
+      </div>
+      {presentation === "desktop" && (
+        <aside className="desktop-inspector" aria-label="Om klippet">
+          {COMMENTS_ENABLED && commentClip ? (
+            <CommentSheet clip={commentClip} onClose={closeComments} presentation="inspector" />
+          ) : activeClip ? (
+            <DesktopClipInspector
+              clip={activeClip}
+              inDebateFeed={debateContext !== null}
+              onOpenPerson={onOpenPerson}
+              onOpenDebate={(debateClips, startId) => {
+                if (debateContext === null) {
+                  mainFeedActiveId.current = activeId;
+                }
+                setDebateContext({
+                  clips: debateClips,
+                  startId,
+                  title: activeClip.sourceTitle
+                });
+              }}
+            />
+          ) : (
+            <div className="desktop-inspector-empty">Klippinformation visas här.</div>
+          )}
+        </aside>
+      )}
+      {presentation === "mobile" && (
+        <>
+          {COMMENTS_ENABLED && commentClip && <CommentSheet clip={commentClip} onClose={closeComments} />}
+        </>
+      )}
     </section>
+  );
+}
+
+function DesktopClipInspector({
+  clip,
+  inDebateFeed,
+  onOpenPerson,
+  onOpenDebate
+}: {
+  clip: ClipItem;
+  inDebateFeed: boolean;
+  onOpenPerson: (personId: string) => void;
+  onOpenDebate: (clips: ClipItem[], startId: string) => void;
+}) {
+  const [debateClips, setDebateClips] = useState<ClipItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const person = personForClip(clip);
+  const party = PARTIES[clip.party];
+
+  useEffect(() => {
+    if (!clip.sourceId) {
+      setDebateClips([]);
+      setLoading(false);
+      setError(false);
+      return;
+    }
+    const controller = new AbortController();
+    setLoading(true);
+    setError(false);
+    void loadDebateClips(clip.sourceId, 60, controller.signal)
+      .then(setDebateClips)
+      .catch((loadError: unknown) => {
+        if (loadError instanceof DOMException && loadError.name === "AbortError") return;
+        setDebateClips([]);
+        setError(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [clip.sourceId]);
+
+  const activePosition = debateClips.findIndex((candidate) => candidate.id === clip.id);
+  const orderedRelated = activePosition >= 0
+    ? [...debateClips.slice(activePosition + 1), ...debateClips.slice(0, activePosition)]
+    : debateClips;
+  const related = orderedRelated.filter((candidate) => candidate.id !== clip.id).slice(0, 3);
+  const displayName = cleanName(clip.speakerName) || person?.name || clip.speakerName;
+  const excerpt = clip.transcript.trim() || clip.title;
+
+  return (
+    <div className="desktop-inspector-content" key={clip.id}>
+      <div className="desktop-inspector-kicker">Om klippet</div>
+      <button
+        type="button"
+        className="desktop-speaker"
+        disabled={!person}
+        onClick={() => person && onOpenPerson(person.id)}
+      >
+        <Avatar
+          name={displayName}
+          party={clip.party}
+          size="md"
+          imageUrl={person?.avatarUrl ?? clip.politicianAvatarUrl}
+        />
+        <span>
+          <strong>{displayName}</strong>
+          <small>
+            <i style={{ background: party.color }} />
+            {party.abbr !== "NONE" ? `${party.abbr} · ` : ""}
+            {clip.anforandetyp || clip.politicianRole || "Talare"}
+          </small>
+        </span>
+        {person && <ChevronRight size={18} aria-hidden="true" />}
+      </button>
+
+      <h1>{clip.title}</h1>
+      <p>{excerpt}</p>
+      <a className="desktop-source" href={clip.sourceUrl} target="_blank" rel="noreferrer">
+        <span>
+          <small>{formatDate(clip.debateDate)}</small>
+          <strong>{clip.sourceTitle}</strong>
+        </span>
+        <ArrowUpRight size={17} />
+      </a>
+
+      <div className="desktop-related-heading">
+        <strong>Fler klipp i debatten</strong>
+        {inDebateFeed && <span>Debattflöde</span>}
+      </div>
+      {loading ? (
+        <div className="desktop-related-status"><LoaderCircle size={17} /> Hämtar klipp…</div>
+      ) : error ? (
+        <div className="desktop-related-status">Kunde inte hämta fler klipp.</div>
+      ) : related.length === 0 ? (
+        <div className="desktop-related-status">Inga fler publicerade klipp från debatten.</div>
+      ) : (
+        <div className="desktop-related-list">
+          {related.map((candidate) => (
+            <button
+              type="button"
+              key={candidate.id}
+              onClick={() => onOpenDebate(debateClips, candidate.id)}
+            >
+              <img src={candidate.thumbUrl} alt="" loading="lazy" />
+              <span>
+                <strong>{candidate.title}</strong>
+                <small>{cleanName(candidate.speakerName)}</small>
+              </span>
+              <ChevronRight size={16} aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -3074,8 +3466,17 @@ const COMMENT_REPORT_OPTIONS: Array<{ reason: CommentReportReason; label: string
   { reason: "other", label: "Annat" }
 ];
 
-function CommentSheet({ clip, onClose }: { clip: ClipItem; onClose: () => void }) {
+function CommentSheet({
+  clip,
+  onClose,
+  presentation = "sheet"
+}: {
+  clip: ClipItem;
+  onClose: () => void;
+  presentation?: "sheet" | "inspector";
+}) {
   const viewer = useViewer();
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
   const [thread, setThread] = useState<CommentThread>(EMPTY_COMMENT_THREAD);
   const [loading, setLoading] = useState(true);
   const [profileReady, setProfileReady] = useState(!viewer.signedIn);
@@ -3228,19 +3629,22 @@ function CommentSheet({ clip, onClose }: { clip: ClipItem; onClose: () => void }
   const handleIsReady = commentUsername !== null || COMMENT_USERNAME_PATTERN.test(normalizedDraft);
   const canPost = body.trim().length > 0 && body.length <= COMMENT_MAX_LENGTH && handleIsReady;
 
-  return (
-    <div className="comment-backdrop" onClick={onClose}>
+  useEffect(() => {
+    titleRef.current?.focus();
+  }, []);
+
+  const sheet = (
       <section
-        className="comment-sheet"
-        role="dialog"
-        aria-modal="true"
+        className={`comment-sheet comment-sheet--${presentation}`}
+        role={presentation === "sheet" ? "dialog" : "region"}
+        aria-modal={presentation === "sheet" ? true : undefined}
         aria-labelledby="comment-sheet-title"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="comment-grabber" aria-hidden="true" />
         <header className="comment-header">
           <div>
-            <h2 id="comment-sheet-title">Kommentarer</h2>
+            <h2 ref={titleRef} tabIndex={-1} id="comment-sheet-title">Kommentarer</h2>
             <span>{thread.count === 1 ? "1 kommentar" : `${thread.count} kommentarer`}</span>
           </div>
           <button type="button" onClick={onClose} aria-label="Stäng kommentarer">
@@ -3389,7 +3793,10 @@ function CommentSheet({ clip, onClose }: { clip: ClipItem; onClose: () => void }
           )}
         </footer>
       </section>
-    </div>
+  );
+
+  return presentation === "inspector" ? sheet : (
+    <div className="comment-backdrop" onClick={onClose}>{sheet}</div>
   );
 }
 

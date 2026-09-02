@@ -2009,3 +2009,41 @@ Deliberately deferred. Do not pull these forward.
 C0, C3, C10 and C12 are the large ones — consider giving each its own session with nothing else. C5 and C9 are small and could share a session if the agent finishes early, **but only if the agent explicitly re-reads `BUILD_PLAN.md` for the second chunk** rather than continuing on momentum.
 
 The two chunks most likely to go wrong are **C7** (the two-scale scoring separation) and **C12** (resumption semantics). Budget accordingly.
+
+---
+
+## UI17 — Production desktop video feed
+
+**Depends on:** UI14.5, UI15 and the public catalogue view from F2a. **Size:** large.
+**Status:** IMPLEMENTED LOCALLY 2026-09-02; production migration and deploy pending.
+
+**Objective.** Add a desktop-first presentation for the existing feed without
+creating a second player, changing 9:16 media or reopening completed mobile/PWA
+work. The approved direction and release order are in
+`docs/DESKTOP_FEED_IMPLEMENTATION_PLAN.md`.
+
+**Scope — may create or modify:**
+
+```
+web/src/{App.tsx,styles.css,supabase.ts,types.ts,data.ts}
+web/src/desktop/*
+web/src/search/route.ts
+web/src/feed/snap-policy.ts              # restore origin/main dependency only
+web/tests/desktop-layout.test.mjs
+supabase/functions/feed-requests/index.ts
+migrations/031_desktop_debate_feed.{up,down}.sql
+tests/unit/test_desktop_feed_migration.py
+docs/{BUILD_PLAN,DESKTOP_FEED_IMPLEMENTATION_PLAN}.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** `src/contracts.py`, numbered pipeline stages,
+generated media, feed ranking, recommendation consent, service-worker video
+routing, Bunny objects or the mobile navigation/product surface.
+
+**Acceptance:** below 700 px remains the existing mobile app; 700–1099 px keeps
+the phone gate; 1100 px and above mounts one desktop `FeedScreen` with an exact
+9:16 player, external action rail, live inspector, inline comments and real
+same-debate clips. At most four media sources remain mounted. TypeScript, Node
+tests, production build, PWA verification, migration guards and the full project
+acceptance command must pass before release.

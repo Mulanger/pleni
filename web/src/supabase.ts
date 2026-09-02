@@ -11,6 +11,7 @@ import {
 import type { ClipFeed, ClipItem, PartyCode, PartyProfile, Politician } from "./types";
 
 interface RawSource {
+  id: string | null;
   title: string | null;
   debate_date: string | null;
   source_url: string | null;
@@ -89,6 +90,9 @@ interface RawFeedCatalogueClip {
   debate_date: string;
   published_at: string | null;
   rank_in_speech: number;
+  source_id: string | null;
+  speech_start_s?: number | string;
+  clip_start_s?: number | string;
 }
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, "") ?? "";
@@ -313,7 +317,7 @@ function clipSelect(): string {
     "published_at",
     "speeches!inner(speaker_name,party,anforandetyp,politician_id," +
       "politicians(id,name,party,role,constituency,avatar_url)," +
-      "sources(title,debate_date,source_url))"
+      "sources(id,title,debate_date,source_url))"
   ].join(",");
 }
 
@@ -412,6 +416,7 @@ function mapFeedCatalogueClip(row: RawFeedCatalogueClip): ClipItem {
   return {
     id: row.id,
     speechId: row.speech_id,
+    sourceId: row.source_id,
     politicianId: row.politician_id,
     politicianName: row.politician_name,
     politicianRole: row.politician_role,
@@ -743,6 +748,36 @@ export async function loadClipsByIds(ids: string[]): Promise<ClipItem[]> {
   return ids.map((id) => byId.get(id)).filter((clip): clip is ClipItem => clip !== undefined);
 }
 
+/**
+ * Every public clip in one debate, ordered by its position in the master video.
+ *
+ * The catalogue view carries the source id and master-relative start times so
+ * the desktop inspector does not infer debate identity from a URL or reorder
+ * speeches by publication time.
+ */
+export async function loadDebateClips(
+  sourceId: string,
+  limit = 60,
+  signal?: AbortSignal
+): Promise<ClipItem[]> {
+  if (!supabaseConfigured || sourceId.trim().length === 0) {
+    return [];
+  }
+  const query = new URLSearchParams({
+    select: "*",
+    source_id: `eq.${sourceId}`,
+    order: "speech_start_s.asc,clip_start_s.asc,id.asc",
+    limit: String(limit)
+  });
+  const response = await supabaseRest(`feed_clip_catalogue?${query.toString()}`, { signal });
+  if (!response.ok) {
+    throw new Error(`Supabase debate clip read failed: ${response.status}`);
+  }
+  return ((await response.json()) as RawFeedCatalogueClip[])
+    .map(mapFeedCatalogueClip)
+    .filter((clip) => clip.videoUrl.length > 0);
+}
+
 function mapClip(row: RawClip, index: number): ClipItem {
   const speech = first(row.speeches);
   const source = first(speech?.sources ?? null);
@@ -756,6 +791,7 @@ function mapClip(row: RawClip, index: number): ClipItem {
   return {
     id: row.id,
     speechId: row.speech_id,
+    sourceId: source?.id ?? null,
     // Null for the ~0.6% of clips whose speaker Riksdagen's `anforandelista`
     // gives no `intressent_id` — ministers who are not sitting MPs. Callers must
     // treat null as "not followable", never fall back to a name (Q-2).

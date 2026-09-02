@@ -143,6 +143,7 @@ export const SAMPLE_CLIPS: ClipItem[] = [
   {
     id: "HD10540_e0bb9ba6-5d6e-f111-bf27-6805cafeabf9_c02",
     speechId: "HD10540_e0bb9ba6-5d6e-f111-bf27-6805cafeabf9",
+    sourceId: null,
     politicianId: "demo-politician-gunnar-strommer",
     politicianName: "Justitieministern Gunnar Strömmer (M)",
     politicianRole: "minister",
@@ -169,6 +170,7 @@ export const SAMPLE_CLIPS: ClipItem[] = [
   {
     id: "HD10540_e0bb9ba6-5d6e-f111-bf27-6805cafeabf9_c01",
     speechId: "HD10540_e0bb9ba6-5d6e-f111-bf27-6805cafeabf9",
+    sourceId: null,
     politicianId: "demo-politician-gunnar-strommer",
     politicianName: "Justitieministern Gunnar Strömmer (M)",
     politicianRole: "minister",
@@ -195,6 +197,7 @@ export const SAMPLE_CLIPS: ClipItem[] = [
   {
     id: "HD10540_e3bb9ba6-5d6e-f111-bf27-6805cafeabf9_c01",
     speechId: "HD10540_e3bb9ba6-5d6e-f111-bf27-6805cafeabf9",
+    sourceId: null,
     politicianId: "demo-politician-mathias-tegner",
     politicianName: "Mathias Tegnér (S)",
     politicianRole: "ledamot",
@@ -221,6 +224,7 @@ export const SAMPLE_CLIPS: ClipItem[] = [
   {
     id: "HD10540_e4bb9ba6-5d6e-f111-bf27-6805cafeabf9_c02",
     speechId: "HD10540_e4bb9ba6-5d6e-f111-bf27-6805cafeabf9",
+    sourceId: null,
     politicianId: "demo-politician-gunnar-strommer",
     politicianName: "Justitieministern Gunnar Strömmer (M)",
     politicianRole: "minister",
