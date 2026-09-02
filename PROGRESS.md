@@ -5791,3 +5791,51 @@ explicitly excluded by the owner and remains the owner's device acceptance.
 ranking or buy a shadow index from the single-day p95. Complete the two remaining
 daily reports, run `latency-decision`, and run the lag gate only after 20 real
 post-release clips exist.
+
+## UI17 — Production desktop video feed — RELEASE CANDIDATE 2026-09-02
+
+**Built:** a mutually exclusive mobile/tablet/desktop shell; the existing
+bounded `FeedScreen` in desktop presentation mode; exact 9:16 playback with a
+separate action rail; desktop clip inspector, keyboard/one-step navigation and
+same-debate feed context; honest desktop waiting pages for Following, Search and
+Profile; `ClipItem.sourceId`; the public same-debate loader; migration 031 with
+up/down and restored grants; and the matching `feed-requests` projection.
+`docs/DESKTOP_FEED_IMPLEMENTATION_PLAN.md` records the approved layout and scope.
+
+**Tests:** **514 Python tests passed**, 79 deselected, with the one existing
+`audioop` warning; Ruff and strict mypy over 83 source files pass. All **74
+frontend Node tests**, frontend TypeScript, Vite production build and PWA
+verification pass; the service worker still contains exactly nine app-shell
+entries and no video/private data. Browser QA passed at 1100x720, 1440x900 and
+mobile/tablet widths: the video ratio is exactly 9:16, no horizontal overflow
+appears, one-step navigation remains aligned and at most four videos mount.
+
+**Contracts touched:** no `src/contracts.py` or pipeline artifact contract.
+The additive frontend field is `ClipItem.sourceId: string | null`; sample and
+legacy search clips use `null`.
+
+**Decisions made:** widths below 700 px retain the released mobile app, 700-1099
+px retain the phone gate and desktop begins at 1100 px. Mobile and desktop never
+mount together. The existing UI19 `COMMENTS_ENABLED=false` product switch is
+preserved: the desktop inspector uses the same comment implementation and
+pause/resume lifecycle, but no comment trigger or thread is exposed while that
+global switch remains off.
+
+**Production evidence:** migration `031_desktop_debate_feed.up.sql` is applied
+to project `nlooigmwuqqhhnontlgp`. An explicit `anon` role query read all 5,488
+rows and all 5,488 carried `source_id`, `speech_start_s` and `clip_start_s`; the
+view count exactly matched the 5,488 published, non-rejected, non-empty MP4 rows.
+The updated `feed-requests` Function was deployed successfully with the project
+configuration retaining `verify_jwt=false` and in-handler Clerk verification.
+
+**Observations (not fixed, out of scope):** the desktop comment surface remains
+intentionally unavailable for the same product reason as mobile UI19. Enabling
+comments later is one existing feature-switch decision, not a second desktop
+implementation.
+
+**Blocked / needs a decision:** none. Frontend push and live `pleni.se` smoke
+test are the remaining release steps for this candidate.
+
+**Next agent should know:** rollback frontend first. Migration 031 is additive
+and safe to leave applied; use its down file only after the UI17 frontend no
+longer reads the new projection fields.
