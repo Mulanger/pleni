@@ -5792,7 +5792,7 @@ ranking or buy a shadow index from the single-day p95. Complete the two remainin
 daily reports, run `latency-decision`, and run the lag gate only after 20 real
 post-release clips exist.
 
-## UI17 — Production desktop video feed — RELEASE CANDIDATE 2026-09-02
+## UI17 — Production desktop video feed — BACKEND LIVE; FRONTEND DEPLOY BLOCKED 2026-09-02
 
 **Built:** a mutually exclusive mobile/tablet/desktop shell; the existing
 bounded `FeedScreen` in desktop presentation mode; exact 9:16 playback with a
@@ -5833,8 +5833,15 @@ intentionally unavailable for the same product reason as mobile UI19. Enabling
 comments later is one existing feature-switch decision, not a second desktop
 implementation.
 
-**Blocked / needs a decision:** none. Frontend push and live `pleni.se` smoke
-test are the remaining release steps for this candidate.
+**Blocked / needs a decision:** commits `e7e5b3b` and `2644e7c` were pushed as a
+clean fast-forward to `origin/main`, but InstaPods did not start a new build.
+After repeated cache-busted checks of both public hostnames, production still
+served `/assets/index-Dusp71cV.js` with `Last-Modified: 2026-08-27 13:29:26 GMT`
+and no UI17 marker. The public site remains healthy on the previous frontend.
+The InstaPods control panel requires a fresh owner login and the connected
+Chrome session was unavailable, so no speculative credential or pod action was
+taken. The owner must sign in at `app.instapods.com`; then trigger/retry the
+`rikettv` Git deployment and complete the live `pleni.se` smoke test.
 
 **Next agent should know:** rollback frontend first. Migration 031 is additive
 and safe to leave applied; use its down file only after the UI17 frontend no
