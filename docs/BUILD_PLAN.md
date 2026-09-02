@@ -2012,7 +2012,7 @@ The two chunks most likely to go wrong are **C7** (the two-scale scoring separat
 
 ---
 
-## UI17 — Production desktop video feed
+## UI17 — Production desktop video feed — DONE 2026-09-02
 
 **Depends on:** UI14.5, UI15 and the public catalogue view from F2a. **Size:** large.
 **Status:** IMPLEMENTED LOCALLY 2026-09-02; production migration and deploy pending.
