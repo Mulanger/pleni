@@ -1405,6 +1405,21 @@ function App() {
                         onOpenTopicFeed={openTopicSearchFeed}
                       />
                     )
+                  ) : null,
+                following:
+                  route.view === "tab" && route.tab === "foljer" ? (
+                    <FollowingScreen
+                      presentation="desktop"
+                      signedIn={viewer.signedIn}
+                      onSignIn={viewer.requireSignIn}
+                      followedPoliticians={library.followedPoliticians}
+                      followedParties={library.followedParties}
+                      partyProfiles={partyProfiles}
+                      onOpenPerson={openPerson}
+                      onOpenParty={openParty}
+                      onTogglePerson={toggleFollowPolitician}
+                      onToggleParty={toggleFollowParty}
+                    />
                   ) : null
               }}
             />
@@ -1512,6 +1527,8 @@ function App() {
             )}
             {tab === "foljer" && (
               <FollowingScreen
+                signedIn={viewer.signedIn}
+                onSignIn={viewer.requireSignIn}
                 followedPoliticians={library.followedPoliticians}
                 followedParties={library.followedParties}
                 partyProfiles={partyProfiles}
@@ -4036,6 +4053,9 @@ function ProgressRow({
  * Följer tab for follows that genuinely existed.
  */
 function FollowingScreen({
+  presentation = "mobile",
+  signedIn,
+  onSignIn,
   followedPoliticians,
   followedParties,
   partyProfiles,
@@ -4044,6 +4064,9 @@ function FollowingScreen({
   onTogglePerson,
   onToggleParty
 }: {
+  presentation?: "mobile" | "desktop";
+  signedIn: boolean;
+  onSignIn: () => void;
   followedPoliticians: string[];
   followedParties: PartyCode[];
   partyProfiles: PartyProfile[];
@@ -4078,18 +4101,29 @@ function FollowingScreen({
   const empty = followedParties.length === 0 && followedPoliticians.length === 0;
 
   return (
-    <section className="panel-screen">
+    <section className={presentation === "desktop" ? "panel-screen following-screen following-screen--desktop" : "panel-screen following-screen"}>
       <Header
         title="Följer"
         subtitle={`${followedParties.length} partier · ${followedPoliticians.length} personer`}
       />
       <div className="panel-scroll">
-        {empty && (
+        {!signedIn && (
+          <div className="panel-empty following-sign-in" role="status">
+            <strong>Logga in för att se vilka du följer</strong>
+            <span>Följningar kopplas till ditt konto och visas inte som anonym exempeldata.</span>
+            <button type="button" className="account-button account-button--primary" onClick={onSignIn}>
+              Logga in
+            </button>
+          </div>
+        )}
+        {signedIn && empty && (
           <div className="panel-empty" role="status">
             <strong>Du följer ingen ännu</strong>
             <span>Följ en politiker från ett klipp eller via sök, så samlas de här.</span>
           </div>
         )}
+        {signedIn && (
+        <div className="following-groups">
         {followedParties.length > 0 && (
           <Group title="Partier">
             {followedParties.map((partyCode) => {
@@ -4154,6 +4188,8 @@ function FollowingScreen({
               />
             ))}
           </Group>
+        )}
+        </div>
         )}
       </div>
     </section>

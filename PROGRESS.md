@@ -6009,3 +6009,32 @@ smoke checks until all remaining desktop chunks are implemented locally.
 **Next agent should know:** continue with UI20.3 Following. Do not duplicate the
 library store or account guard; the desktop list must use the same follow arrays
 and mutation funnel as mobile.
+
+## UI20.3 — Desktop Following — IN PROGRESS 2026-09-03
+
+**Built:** the Following tab now has a real desktop presentation using the same
+account-scoped politician and party IDs, profile readers and follow mutation
+funnel as mobile. Signed-out visitors see an honest Clerk sign-in action rather
+than an anonymous empty library. Compact desktop uses one list flow and normal
+desktop places Party and Politician regions side by side when present. Row
+navigation and the explicit Avfölj controls remain separate interactions.
+
+**Tests:** 81 frontend Node tests and TypeScript pass. Focused coverage verifies
+the route is available, the shared library arrays and sign-in guard are wired,
+and both unfollow controls stop row navigation.
+
+**Contracts touched:** none. Clerk identity, local library keys and Supabase
+profile reads are unchanged.
+
+**Decisions made:** the signed-out state takes precedence over the ordinary
+empty state because follows are account-bound. No anonymous or example rows are
+created.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** no implementation blocker. Production evidence
+is intentionally deferred until the combined desktop release requested by the
+owner.
+
+**Next agent should know:** continue with UI20.4 Profile/account/onboarding,
+reusing every existing account, recommendation and PWA callback.

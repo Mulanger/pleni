@@ -8,7 +8,7 @@ import { routeFromHash } from "../src/navigation.ts";
 
 const routes = [
   { hash: "#/hem/fordig", id: "home", available: true, action: "home" },
-  { hash: "#/foljer", id: "following", available: false, action: "home" },
+  { hash: "#/foljer", id: "following", available: true, action: "home" },
   { hash: "#/sok", id: "search", available: true, action: "home" },
   { hash: "#/profil", id: "profile", available: false, action: "home" },
   { hash: "#/person/alice", id: "person", available: true, action: "history" },
@@ -109,4 +109,16 @@ test("desktop search reuses the public search state and bounded result player", 
   assert.match(app, /<CollectionScreen\s+presentation="desktop"\s+collection=\{searchFeedCollection\}/);
   assert.match(app, /presentation === "desktop" \? \(/);
   assert.match(app, /<Group title="Riksdagspartier">/);
+});
+
+test("desktop Following reuses account-bound library rows and split unfollow actions", () => {
+  const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+
+  assert.match(app, /following:\s*route\.view === "tab" && route\.tab === "foljer"/);
+  assert.match(app, /<FollowingScreen\s+presentation="desktop"/);
+  assert.match(app, /signedIn=\{viewer\.signedIn\}/);
+  assert.match(app, /onSignIn=\{viewer\.requireSignIn\}/);
+  assert.match(app, /event\.stopPropagation\(\);\s*onToggleParty/);
+  assert.match(app, /event\.stopPropagation\(\);\s*onTogglePerson/);
+  assert.match(app, /className="following-groups"/);
 });

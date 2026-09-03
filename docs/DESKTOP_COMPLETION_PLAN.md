@@ -41,7 +41,7 @@ by the nine listed rows, including the completed UI17 baseline.
 | UI20.0 | Shared desktop architecture and route outlet | IN PROGRESS | `2968d16` on `main`; InstaPods still served the prior bundle at the first release check |
 | UI20.1 | Politician and party pages | IN PROGRESS | Implementation and local production-data checks complete; release waits for the UI20.0 InstaPods gate |
 | UI20.2 | Search and search-result feed | IN PROGRESS | Locally implemented; production verification deferred until the combined desktop release |
-| UI20.3 | Following | NOT STARTED | — |
+| UI20.3 | Following | IN PROGRESS | Locally implemented; production verification deferred until the combined desktop release |
 | UI20.4 | Profile, account and onboarding | NOT STARTED | — |
 | UI20.5 | Saved clips and legal pages | NOT STARTED | — |
 | UI20.6 | Cross-route integration and quality | NOT STARTED | — |
@@ -199,7 +199,7 @@ styles, route/layout tests. Existing data readers stay authoritative.
 
 ## UI20.3 — Following
 
-**Status:** `NOT STARTED`  
+**Status:** `IN PROGRESS`  
 **Depends on:** UI20.0 and UI20.1.  
 **Primary scope:** shared Following presentation, desktop styles and account/
 navigation regressions. No new persistence layer.
