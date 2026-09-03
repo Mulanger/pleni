@@ -6164,7 +6164,7 @@ media checks and Clerk signed-out/signed-in production behavior.
 **Next agent should know:** push the accepted commits in order, verify the new
 InstaPods asset and update each roadmap row to `DONE` with live evidence.
 
-## UI20.8 — Light desktop navigation — IN PROGRESS 2026-09-03
+## UI20.8 — Light desktop navigation — DONE 2026-09-03
 
 **Built:** restored the approved light desktop sidebar palette: warm white
 background, navy Pleni identity, neutral inactive navigation and a restrained
@@ -6187,7 +6187,12 @@ choice as the current visual thesis.
 
 **Observations (not fixed, out of scope):** none.
 
+**Production evidence:** commit `c1319e5` is released from `main`. A fresh
+1440×900 load of `pleni.se` showed the light sidebar, navy Pleni identity,
+blue-grey active Home state, real production video and the normal inspector.
+A 390×844 production check mounted the mobile feed and bottom navigation only.
+
 **Blocked / needs a decision:** none.
 
-**Next agent should know:** release through `main`, verify the light sidebar on
-`pleni.se`, then mark this handoff `DONE`.
+**Next agent should know:** the light desktop navigation is the approved
+baseline. Do not restore the navy background unless the owner requests it.
