@@ -6616,6 +6616,20 @@ deployment completed successfully in 36 seconds.
 - At 390×844 the homepage loaded 60 feed rows, kept three video elements and
   played the active one (`readyState=4`, time advancing); the directional media
   window is unchanged.
+- The `pleni.se` domain property is accessible in Google Search Console.
+  `https://pleni.se/sitemap.xml` was submitted on 2026-09-03 and Google reports
+  it as a successfully read sitemap index. The first report still shows zero
+  discovered pages and videos while the new property data is processing.
+- URL Inspection reports `https://pleni.se/` as indexed. This confirms the
+  SEO0 baseline of **1 indexed URL** at submission time; the aggregate Pages
+  report says to check again after processing.
+- URL Inspection initially reported the representative watch URL above as
+  unknown to Google. Its live test then passed with “URL is available to
+  Google” and “Page can be indexed”, after which an indexing request added it
+  to Google's priority crawl queue.
+- The same live test detected the video and one valid `VideoObject`, including
+  its `.webp` `thumbnailUrl`, MP4 `contentUrl`, canonical URL and transcript.
+  The WebP thumbnail is accepted; no JPEG C10 change is indicated.
 
 **Tests:** merged release and slash-canonical hotfix both passed the full gates:
 514 Python tests with 79 deselected and the known `audioop` warning, Ruff,
@@ -6644,18 +6658,13 @@ exactly nine entries.
   it; changing nginx itself is unavailable in the panel.
 
 **Blocked / needs a decision:**
-- Google Search Console is signed in as `collab.bevsworld@gmail.com`. A pending
-  `pleni.se` domain property exists but this account has no access until its DNS
-  TXT verification record is added and Verify is pressed. The current indexed
-  URL baseline and video-thumbnail report are unavailable until then.
-- Bing Webmaster Tools is signed out. Account sign-in, site verification and
-  sitemap submission remain.
+- Bing Webmaster Tools sign-in, site verification and sitemap submission were
+  explicitly deferred by the owner on 2026-09-03.
 - SEO6 needs an owner-approved authenticated InstaPods API strategy or an
   explicit decision to remain manual; no panel deploy hook exists.
 
-**Next agent should know:** resume at the open Search Console DNS-verification
-dialog, then submit `https://pleni.se/sitemap.xml`, record the indexed-page
-baseline and inspect the video report. Sign in to Bing and submit the same
-sitemap. Do not expose the Google verification token or any future InstaPods
-API token in logs or documentation. SEO8's four-week comparison date is
-2026-10-01.
+**Next agent should know:** Google Search Console is complete for launch. Recheck
+the sitemap's discovered-page/video counts after Google's processing delay, and
+submit the sitemap to Bing when the owner resumes that work. Do not expose any
+future InstaPods API token in logs or documentation. SEO8's four-week comparison
+date is 2026-10-01.

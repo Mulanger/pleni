@@ -195,22 +195,23 @@ Allowed states: `NOT STARTED`, `IN PROGRESS`, `DONE`, `BLOCKED`. A row becomes
 
 | Chunk | Deliverable | Status | Production evidence |
 |---|---|---|---|
-| SEO0 | Crawl foundation, host facts, baseline | IN PROGRESS | `https://pleni.se/robots.txt` is 200 and the live homepage canonical is `https://pleni.se/` (2026-09-03). Search Console has a pending `pleni.se` domain property; DNS verification and the indexed-URL baseline remain |
+| SEO0 | Crawl foundation, host facts, baseline | DONE | `pleni.se` domain-property access confirmed in Google Search Console 2026-09-03. `https://pleni.se/` reports “URL is on Google” and “Page is indexed”; baseline is 1 indexed URL. `https://pleni.se/robots.txt` is 200 and the live homepage canonical is `https://pleni.se/` |
 | SEO1 | Path routing alongside hash | DONE | Fresh load of `https://pleni.se/#/party/M` rewrote to `https://pleni.se/parti/moderaterna/` on production 2026-09-03; the party route loaded and the mobile feed remained playable |
 | SEO2 | Prerendered clip watch pages | DONE | `https://pleni.se/klipp/andreas-carlson-stod-till-kollektivtrafiken/HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079_c01/` returned direct 200 with video, 772-character transcript and Riksdagen link, with no module script, on 2026-09-03 |
 | SEO2b | In-app clip route so a watch page can open the feed | NOT STARTED | — |
 | SEO3 | Politician, party and debate hubs | DONE | Direct 200 verified 2026-09-03 for `https://pleni.se/parti/moderaterna/`, `https://pleni.se/politiker/andreas-carlson/490b6787-c178-42e1-9ab8-e9d233939643/` and `https://pleni.se/debatt/stod-till-kollektivtrafiken/HD10533/` |
 | SEO4 | Topic pages | DEFERRED | `clips.topic` is null for all 5 514 clips; needs a pipeline taxonomy first. Nothing depends on it |
-| SEO5 | Sitemaps and search-engine submission | IN PROGRESS | `https://pleni.se/sitemap.xml` returned direct 200 with 7 child sitemaps and `robots.txt` names it on 2026-09-03. Google DNS verification and Google/Bing submission remain |
+| SEO5 | Sitemaps and search-engine submission | IN PROGRESS | Google accepted `https://pleni.se/sitemap.xml` as a successful sitemap index on 2026-09-03. A representative watch URL was added to Google's priority crawl queue and its live test passed. Bing submission was explicitly deferred by the owner |
 | SEO6 | Scheduled rebuild and stale-page cleanup | BLOCKED | Cleanup is live in the 36-second InstaPods build. No deploy-hook URL exists in the pod Git settings or Integrations panel; InstaPods documents only an authenticated deploy API. Owner decision required before any alternative |
 | SEO7 | Watch-page performance and Core Web Vitals | IN PROGRESS | Watch pages ship inlined CSS, a preloaded poster and `preload="metadata"`; PageSpeed evidence needs the live site |
 | SEO8 | Measurement, guardrails and closeout | IN PROGRESS | All six guardrails exist as tests plus a CI precache assertion; the four-week measurement needs the live site |
 
-**Current completion:** 3 of 10 `DONE`. The SEO surface is live. SEO0 and SEO5
-await account-level search-engine actions, SEO6 awaits an owner decision because
-InstaPods exposes no deploy-hook URL, SEO7 awaits three PageSpeed measurements,
-and SEO8 includes the four-week result measurement. SEO4 is deferred on missing
-data and SEO2b remains a separate product chunk.
+**Current completion:** 4 of 10 `DONE`. The SEO surface is live and Google
+Search Console is active. SEO5 awaits the owner-deferred Bing submission, SEO6
+awaits an owner decision because InstaPods exposes no deploy-hook URL, SEO7
+awaits three PageSpeed measurements, and SEO8 includes the four-week result
+measurement. SEO4 is deferred on missing data and SEO2b remains a separate
+product chunk.
 
 Update this table in the same commit as the chunk's `PROGRESS.md` handoff.
 Production evidence must name the live URL checked and what was observed. A local
