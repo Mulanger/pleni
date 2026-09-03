@@ -6196,3 +6196,108 @@ A 390×844 production check mounted the mobile feed and bottom navigation only.
 
 **Next agent should know:** the light desktop navigation is the approved
 baseline. Do not restore the navy background unless the owner requests it.
+
+## SEO — Search indexing roadmap — REGISTERED 2026-09-03
+
+**Built:** `docs/SEO_PLAN.md`, the authoritative tracker for making the
+catalogue discoverable in Google and Bing. It divides the work into SEO0-SEO8
+with dependencies, locked decisions, per-chunk acceptance criteria and a
+four-state dashboard.
+
+**Tests:** documentation only in this entry; the gates are recorded under SEO0
+below. `git diff --check` clean.
+
+**Contracts touched:** none.
+
+**Decisions made:** the SEO surface is prerendered static HTML generated after
+`vite build` from Supabase's publishable key, one file per public URL. Identity
+always occupies its own final path segment. `pleni.se` apex is canonical. The
+swipe feed is unchanged for humans. See `docs/adr/014-prerendered-seo-surface.md`.
+
+**Observations (not fixed, out of scope):** `docs/DESKTOP_COMPLETION_PLAN.md`
+still shows UI20.0-UI20.7 as `IN PROGRESS` awaiting an InstaPods gate that
+UI20.8's released commit `c1319e5` has since passed. Those rows look stale
+rather than blocked. Not touched — it belongs to whoever closes UI20.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** start at SEO0, then SEO1+SEO2 together. SEO4 is
+deferred on missing data, not blocked, and nothing depends on it.
+
+## SEO0 — Crawl foundation, host facts and baseline — IN PROGRESS 2026-09-03
+
+**Built:** `web/public/robots.txt`; an expanded `web/index.html` head with
+canonical, Swedish description, Open Graph/Twitter tags and a `WebSite` +
+`Organization` JSON-LD graph; `web/tests/seo-foundation.test.mjs`;
+`docs/adr/014-prerendered-seo-surface.md`.
+
+**Tests:** 93 frontend Node tests pass, up from 85 — the eight new ones are the
+SEO0 guardrails. TypeScript passes. The Vite production build passes and the
+generated worker still precaches **exactly 9 entries**; `robots.txt` does not
+enter the manifest because `txt` is absent from `globPatterns`. Project
+acceptance passes: 514 Python tests, 79 deselected, the known `audioop`
+warning, Ruff clean, strict mypy over 83 source files.
+
+**Local verification:** the built `dist` was served on 127.0.0.1 and loaded at
+375x812. The app mounted with the new head, the tab title read
+"Pleni — riksdagsdebatter som korta klipp", and the feed correctly reported no
+network because the local build carries no `VITE_*` values (ADR 006 degraded
+path). The built JSON-LD parses and its `publisher` reference resolves. One
+console error — "An unknown error occurred when fetching the script" — was
+reproduced identically from a build of the unmodified `index.html`, so it is a
+property of the bare `python -m http.server` harness, not this change.
+
+**Contracts touched:** none. No routing, service worker, migration, pipeline or
+feed code changed.
+
+**Host facts measured against production 2026-09-03** (full evidence in ADR 014):
+
+- `https://pleni.se/klipp/test` returns **404**. nginx 1.24.0 serves files with
+  **no SPA fallback**, so a path without a file cannot be indexed or even
+  deep-linked. This is why SEO1 must not ship before SEO2.
+- The apex, `www.pleni.se` and `rikettv.nbg1-3.instapods.app` all return 200
+  with byte-identical bodies (md5 `ee351be0...`) and no `Location`. No
+  `Cache-Control`, no `X-Robots-Tag`. Absolute canonical links are the only
+  deduplication mechanism available.
+- **5 514 published clips**, 364 politicians, 377 debates — about 6 260 pages
+  including hubs.
+- **`clips.topic` is null for all 5 514 clips.** SEO4 is deferred, not blocked.
+- `https://riketnlooigm.b-cdn.net/robots.txt` returns 404, which grants
+  Googlebot access to the MP4s rather than denying it.
+- `https://pleni.se/robots.txt` returned 404 before this chunk.
+
+**Decisions made:**
+- No `SearchAction` / sitelinks searchbox. `web/src/search/route.ts` keeps query
+  text in React memory and out of the URL by design, so there is no endpoint a
+  searchbox could resolve.
+- No `Sitemap:` line in `robots.txt` yet; it lands in SEO5 with the sitemap it
+  names, rather than pointing a crawler at a 404.
+- `twitter:card` is `summary`, because the brand mark is square (1254x1254).
+  Watch pages will use a player card with the clip's own vertical thumbnail.
+
+**Observations (not fixed, out of scope):**
+- `src/scoring/titles.py` produces truncated sentence fragments — a sampled
+  title is "Kriget i Iran och stangningen av Hormuzsundet har inneburit". That
+  reads acceptably as a feed overlay and poorly as an indexed `<title>` under a
+  named politician's byline. SEO2 must compose page titles from speaker, party
+  and `sources.title` rather than trusting the clip title. Not a defect in the
+  feed; do not change the pipeline for it.
+- `speaker_name` and `politicians.name` carry a role prefix and the
+  parenthesised party, e.g. "Infrastruktur- och bostadsministern Andreas
+  Carlson (KD)". Name slugs must strip both.
+- Sampled `clip_id`s contain hyphens inside the Riksdagen GUID, e.g.
+  `HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079_c01`. The plan's separate
+  id segment is required, not merely tidier.
+
+**Blocked / needs a decision:** nothing blocking implementation. Two items need
+the owner, and neither stops SEO1/SEO2:
+- Search Console and Bing Webmaster verification require the owner's accounts.
+- Nothing has been pushed or deployed. The commit is local.
+
+**Next agent should know:**
+- `node_modules` is absent from a fresh worktree; run `npm ci` in `web/` first
+  or every React-importing test fails with `ERR_MODULE_NOT_FOUND`.
+- Port 5199 was occupied by another process, so the launch config's dev server
+  was not used; the built `dist` was served on a spare port instead.
+- SEO0's remaining acceptance is deploy plus owner verification. SEO1 and SEO2
+  can begin immediately and must land in one deploy.
