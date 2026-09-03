@@ -16,6 +16,9 @@ import test from "node:test";
  */
 
 const CANONICAL_ORIGIN = "https://pleni.se";
+const HOME_TITLE = "Riksdagsdebatter i kortformat | Pleni";
+const HOME_DESCRIPTION =
+  "Upptäck aktuella frågor och uttalanden från Sveriges riksdag genom korta, tydliga videoklipp med källhänvisning.";
 
 function read(relative) {
   return readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8");
@@ -35,12 +38,22 @@ test("the home document is described for search and social results", () => {
   const description = indexHtml.match(/<meta\s+name="description"\s+content="([^"]+)"/s);
   assert.ok(description, "index.html must carry a meta description");
   assert.ok(description[1].length >= 50 && description[1].length <= 160);
+  assert.equal(description[1], HOME_DESCRIPTION);
 
-  assert.match(indexHtml, /<title>[^<]{12,}<\/title>/);
+  assert.match(indexHtml, new RegExp(`<title>${HOME_TITLE.replace("|", "\\|")}<\\/title>`));
   assert.match(indexHtml, /property="og:type"\s+content="website"/);
   assert.match(indexHtml, /property="og:locale"\s+content="sv_SE"/);
   assert.match(indexHtml, new RegExp(`property="og:url"\\s+content="${CANONICAL_ORIGIN}/"`));
-  assert.match(indexHtml, /name="twitter:card"/);
+  assert.match(indexHtml, new RegExp(`property="og:title"\\s+content="${HOME_TITLE.replace("|", "\\|")}"`));
+  assert.match(indexHtml, new RegExp(`property="og:description"\\s+content="${HOME_DESCRIPTION}"`));
+  assert.match(indexHtml, new RegExp(`name="twitter:title"\\s+content="${HOME_TITLE.replace("|", "\\|")}"`));
+  assert.match(indexHtml, new RegExp(`name="twitter:description"\\s+content="${HOME_DESCRIPTION}"`));
+  assert.match(indexHtml, /name="twitter:image:alt"\s+content="Plenis logotyp"/);
+  assert.match(indexHtml, /property="og:image:type"\s+content="image\/png"/);
+  assert.match(
+    indexHtml,
+    /name="robots"\s+content="max-snippet:-1, max-image-preview:large, max-video-preview:-1"/
+  );
   assert.equal(indexHtml.includes("<html lang=\"sv\">"), true);
 });
 
@@ -68,6 +81,8 @@ test("the home document publishes a valid WebSite and Organization graph", () =>
   const site = parsed["@graph"].find((node) => node["@type"] === "WebSite");
   const organization = parsed["@graph"].find((node) => node["@type"] === "Organization");
   assert.equal(site.url, `${CANONICAL_ORIGIN}/`);
+  assert.equal(site.alternateName, "Pleni.se");
+  assert.equal(site.description, HOME_DESCRIPTION);
   assert.equal(site.inLanguage, "sv-SE");
   assert.equal(site.publisher["@id"], organization["@id"]);
   assert.ok(organization.logo.url.startsWith(`${CANONICAL_ORIGIN}/`));

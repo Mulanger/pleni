@@ -242,6 +242,8 @@ export function renderDebatePage(debate, clips) {
     <meta property="og:title" content="${escapeHtml(heading)}" />
     <meta property="og:description" content="${escapeHtml(description)}" />
     <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="${escapeHtml(heading)}" />
+    <meta name="twitter:description" content="${escapeHtml(description)}" />
     <script type="application/ld+json">
 ${jsonLd({ "@context": "https://schema.org", "@graph": graph })}
     </script>

@@ -160,6 +160,14 @@ test("the watch page shows video, transcript and source without any script", () 
   assert.ok(withoutScripts.includes("Högre energipriser medför"), "transcript must be in the body");
   assert.ok(withoutScripts.includes(CLIP.sourceUrl), "Riksdagen source link must be in the body");
   assert.match(withoutScripts, /<h1>Andreas Carlson \(KD\) om Stöd till kollektivtrafiken<\/h1>/);
+  assert.match(html, /<meta name="twitter:card" content="summary_large_image" \/>/);
+  assert.match(html, /<meta property="og:image:type" content="image\/webp" \/>/);
+  assert.match(html, /<meta property="og:image:alt" content="Andreas Carlson \(KD\) om Stöd till kollektivtrafiken" \/>/);
+  assert.match(html, /<meta name="twitter:image:alt" content="Andreas Carlson \(KD\) om Stöd till kollektivtrafiken" \/>/);
+  assert.match(
+    html,
+    /<meta name="robots" content="max-snippet:-1, max-image-preview:large, max-video-preview:-1" \/>/
+  );
 
   // Nothing on a watch page may depend on the SPA bundle.
   assert.equal(/<script type="module"/.test(html), false);
@@ -251,18 +259,23 @@ test("shells inherit the built document and carry their own identity", () => {
   const shell = renderShellPage(builtHtml, {
     title: "Sök i riksdagsdebatter | Pleni",
     description: "Sök bland klipp från svenska riksdagsdebatter.",
-    canonical: "https://pleni.se/sok",
+    canonical: "https://pleni.se/sok/",
     robots: "noindex, follow"
   });
 
   assert.match(shell, /<title>Sök i riksdagsdebatter \| Pleni<\/title>/);
-  assert.match(shell, /<link rel="canonical" href="https:\/\/pleni\.se\/sok" \/>/);
-  assert.match(shell, /<meta property="og:url" content="https:\/\/pleni\.se\/sok" \/>/);
+  assert.match(shell, /<link rel="canonical" href="https:\/\/pleni\.se\/sok\/" \/>/);
+  assert.match(shell, /<meta property="og:url" content="https:\/\/pleni\.se\/sok\/" \/>/);
+  assert.match(shell, /<meta property="og:title" content="Sök i riksdagsdebatter \| Pleni" \/>/);
+  assert.match(shell, /<meta property="og:description" content="Sök bland klipp från svenska riksdagsdebatter\." \/>/);
+  assert.match(shell, /<meta name="twitter:title" content="Sök i riksdagsdebatter \| Pleni" \/>/);
+  assert.match(shell, /<meta name="twitter:description" content="Sök bland klipp från svenska riksdagsdebatter\." \/>/);
   assert.match(shell, /<meta name="robots" content="noindex, follow" \/>/);
+  assert.equal([...shell.matchAll(/<meta\s+name="robots"/g)].length, 1);
 
   // The home page's own identity must not survive into a shell.
   assert.equal(shell.includes('href="https://pleni.se/"'), false);
-  assert.equal(/<title>Pleni — riksdagsdebatter som korta klipp<\/title>/.test(shell), false);
+  assert.equal(/<title>Riksdagsdebatter i kortformat \| Pleni<\/title>/.test(shell), false);
   // The SPA entry and mount point must survive, or the shell boots nothing.
   assert.match(shell, /<div id="root">/);
   assert.match(shell, /<script type="module"/);

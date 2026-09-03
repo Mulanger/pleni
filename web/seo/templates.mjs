@@ -81,15 +81,16 @@ const SEO_CONTENT_STYLES = `
 .seo-hub .seo-inline li a{font-weight:500;font-size:14px}
 `.trim();
 
+const PREVIEW_ROBOTS = "max-snippet:-1, max-image-preview:large, max-video-preview:-1";
+
 function head({ title, description, canonical, robots, extraHead = "" }) {
   return `    <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#050608" />
     <title>${escapeHtml(title)}</title>
     <meta name="description" content="${escapeHtml(description)}" />
-    <link rel="canonical" href="${escapeHtml(canonical)}" />${
-      robots ? `\n    <meta name="robots" content="${escapeHtml(robots)}" />` : ""
-    }
+    <meta name="robots" content="${escapeHtml(robots ?? PREVIEW_ROBOTS)}" />
+    <link rel="canonical" href="${escapeHtml(canonical)}" />
     <link rel="icon" href="/favicon-20260812b.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32-20260812b.png" />
     <link rel="manifest" href="/manifest.json" />
@@ -223,14 +224,17 @@ export function renderClipPage(clip, related = []) {
     <meta property="og:title" content="${escapeHtml(heading)}" />
     <meta property="og:description" content="${escapeHtml(description)}" />
     <meta property="og:image" content="${escapeHtml(clip.thumbUrl)}" />
+    <meta property="og:image:type" content="image/webp" />
+    <meta property="og:image:alt" content="${escapeHtml(heading)}" />
     <meta property="og:video" content="${escapeHtml(clip.videoUrl)}" />
     <meta property="og:video:type" content="video/mp4" />
     <meta property="og:video:width" content="540" />
     <meta property="og:video:height" content="960" />
-    <meta name="twitter:card" content="player" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${escapeHtml(heading)}" />
     <meta name="twitter:description" content="${escapeHtml(description)}" />
     <meta name="twitter:image" content="${escapeHtml(clip.thumbUrl)}" />
+    <meta name="twitter:image:alt" content="${escapeHtml(heading)}" />
     <link rel="preload" as="image" href="${escapeHtml(clip.thumbUrl)}" />
     <script type="application/ld+json">
 ${jsonLd({ "@context": "https://schema.org", "@graph": [video, crumbs] })}
@@ -378,11 +382,27 @@ export function renderShellPage(
     /<meta\s+property="og:title"\s+content="[^"]*"\s*\/>/,
     `<meta property="og:title" content="${escapeHtml(title)}" />`
   );
+  html = replaceOnce(
+    html,
+    /<meta\s+property="og:description"\s+content="[^"]*"\s*\/>/,
+    `<meta property="og:description" content="${escapeHtml(description)}" />`
+  );
+  html = replaceOnce(
+    html,
+    /<meta\s+name="twitter:title"\s+content="[^"]*"\s*\/>/,
+    `<meta name="twitter:title" content="${escapeHtml(title)}" />`
+  );
+  html = replaceOnce(
+    html,
+    /<meta\s+name="twitter:description"\s+content="[^"]*"\s*\/>/,
+    `<meta name="twitter:description" content="${escapeHtml(description)}" />`
+  );
 
   if (robots) {
-    html = html.replace(
-      "</head>",
-      `  <meta name="robots" content="${escapeHtml(robots)}" />\n  </head>`
+    html = replaceOnce(
+      html,
+      /<meta\s+name="robots"\s+content="[^"]*"\s*\/>/,
+      `<meta name="robots" content="${escapeHtml(robots)}" />`
     );
   }
 
