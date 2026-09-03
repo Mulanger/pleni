@@ -193,4 +193,5 @@ test("desktop Saved and legal routes reuse archive playback and canonical docume
   assert.match(app, /<LegalScreen\s+presentation="desktop"/);
   assert.match(app, /LEGAL_PAGES\[page\]/);
   assert.match(app, /scrollKey="saved"/);
+  assert.match(app, /presentation === "desktop" && <h1>Sparade klipp<\/h1>/);
 });

@@ -5550,6 +5550,7 @@ function SavedScreen({
           <ChevronLeft size={24} />
           {presentation === "desktop" && <span>Tillbaka till Profil</span>}
         </button>
+        {presentation === "desktop" && <h1>Sparade klipp</h1>}
         {presentation === "mobile" && <strong>Sparade klipp</strong>}
         {presentation === "mobile" && <span className="person-topbar-spacer" aria-hidden="true" />}
       </div>

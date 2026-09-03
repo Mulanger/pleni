@@ -4640,6 +4640,13 @@ a {
     margin: 0;
   }
 
+  .desktop-profile-toolbar > h1 {
+    margin: 0 0 4px 22px;
+    color: #17233c;
+    font-size: 28px;
+    letter-spacing: -0.03em;
+  }
+
   .person-screen--desktop .person-scroll,
   .party-screen--desktop .person-scroll,
   .saved-screen--desktop .person-scroll {

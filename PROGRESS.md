@@ -6131,8 +6131,8 @@ and live production evidence is collected.
 
 **Built:** the complete desktop parity implementation is present locally across
 UI20.0–UI20.6. All top-level and nested routes have real desktop destinations;
-no desktop waiting page remains. This handoff records the automated half of the
-final acceptance without claiming a release.
+no desktop waiting page remains. The visual audit found and fixed one missing
+desktop heading in the empty Saved archive.
 
 **Tests:** 85/85 frontend Node tests pass. Frontend TypeScript, Vite production
 build and PWA verification pass; the generated worker contains nine bounded
@@ -6141,20 +6141,25 @@ typecheck` passes with 514 tests, 79 deselected, the known `audioop` warning,
 Ruff and strict mypy across 83 source files. `git diff --check` is clean after
 the documentation whitespace correction.
 
+**Local visual evidence:** 1100×720 showed the compact desktop shell and Search
+without overflow; every route in the route matrix mounted a real surface.
+1280×720 rendered Profile as two 436 px columns. 1440×900 rendered the Privacy
+document at a 640 px reading measure. The effective 1152 px layout used by a
+1440 px viewport at 125% remains in the compact-safe interval. At 1099×720 only
+the phone gate mounted with zero videos; at 390×844 only the existing mobile
+Profile and bottom navigation mounted. No checked viewport overflowed.
+
 **Contracts touched:** none throughout UI20. No schema migration, media
 backfill, Bunny object or pipeline contract is required.
 
-**Decisions made:** the owner requested implementation first and review later,
-so the branch remains local and no production state is changed. Strict roadmap
-rows remain `IN PROGRESS` because `DONE` requires visual and live evidence.
+**Decisions made:** the owner requested implementation first and review later.
+Strict roadmap rows remain `IN PROGRESS` until the deployment and live evidence
+are recorded.
 
 **Observations (not fixed, out of scope):** none.
 
-**Blocked / needs a decision:** none. Remaining work is acceptance rather than
-feature implementation: viewport and 125% zoom review, mobile regression,
-Clerk signed-out/signed-in behavior, then push/deploy and live smoke testing.
+**Blocked / needs a decision:** none. Remaining work is push/deploy, real-data
+media checks and Clerk signed-out/signed-in production behavior.
 
-**Next agent should know:** begin the next session from this clean local branch.
-Run the visual matrix before pushing; if accepted, push the commits in order,
-verify the new InstaPods asset and update each roadmap row to `DONE` with live
-evidence.
+**Next agent should know:** push the accepted commits in order, verify the new
+InstaPods asset and update each roadmap row to `DONE` with live evidence.

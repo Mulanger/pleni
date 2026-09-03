@@ -45,7 +45,7 @@ by the nine listed rows, including the completed UI17 baseline.
 | UI20.4 | Profile, account and onboarding | IN PROGRESS | Locally implemented; production verification deferred until the combined desktop release |
 | UI20.5 | Saved clips and legal pages | IN PROGRESS | Locally implemented; production verification deferred until the combined desktop release |
 | UI20.6 | Cross-route integration and quality | IN PROGRESS | Local route/media/accessibility integration complete; visual and production verification deferred |
-| UI20.7 | Final production acceptance and closeout | IN PROGRESS | Local automated gate complete; visual, account and production matrices remain |
+| UI20.7 | Final production acceptance and closeout | IN PROGRESS | Local automated and viewport gates complete; production/account smoke remains |
 
 **Current completion:** 1 of 9 deliverables is `DONE`.
 
