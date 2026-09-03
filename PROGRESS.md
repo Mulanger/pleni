@@ -6668,3 +6668,45 @@ the sitemap's discovered-page/video counts after Google's processing delay, and
 submit the sitemap to Bing when the owner resumes that work. Do not expose any
 future InstaPods API token in logs or documentation. SEO8's four-week comparison
 date is 2026-10-01.
+
+## SEO0 — Homepage search metadata refresh — DONE 2026-09-03
+
+**Built:** `web/index.html` now uses the owner-selected title
+“Riksdagsdebatter i kortformat | Pleni” and description “Upptäck aktuella frågor
+och uttalanden från Sveriges riksdag genom korta, tydliga videoklipp med
+källhänvisning.” The same identity is synchronized across Open Graph,
+Twitter/X and the `WebSite` JSON-LD. `web/seo/templates.mjs` gives indexable
+pages unlimited snippet/video previews and large image previews, adds image
+type/alt metadata, uses a valid `summary_large_image` card for watch pages, and
+replaces every shell's social title and description instead of leaving the
+homepage values behind. Private shells still carry one `noindex, follow` tag.
+
+**Tests:** 514 Python tests passed with 79 deselected and the known `audioop`
+warning; Ruff and strict mypy passed. All 140 frontend Node tests, TypeScript
+and Vite passed. The production-data prerender wrote 7 130 HTML and eight XML
+files; the service worker still precaches exactly nine entries.
+
+**Contracts touched:** none.
+
+**Production evidence:** InstaPods deployed `06a2486` successfully in 38
+seconds. `https://pleni.se/` returned 200 with the selected title and
+description, matching `og:title` and `twitter:title`, plus the preview robots
+policy. `https://pleni.se/parti/moderaterna/` carries its own social title and
+description, `https://pleni.se/profil/` carries exactly one `noindex, follow`,
+and the representative Andreas Carlson watch page uses
+`summary_large_image` with a descriptive image alt. Google Search Console then
+accepted `https://pleni.se/` into its priority crawl queue for omindexing.
+
+**Decisions made:** no `keywords`, invented social account, SearchAction or
+other decorative metadata was added. Google recommends concise titles, useful
+descriptions and consistent `WebSite` naming; preview directives explicitly
+allow the rich image/video treatment Pleni's content supports.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none for this refresh. Google controls the
+displayed title and snippet and may take several days to recrawl the page.
+
+**Next agent should know:** the homepage metadata strings are guarded by
+`web/tests/seo-foundation.test.mjs`; shell identity replacement and watch-card
+metadata are guarded by `web/tests/seo-prerender.test.mjs`.

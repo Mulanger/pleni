@@ -195,7 +195,7 @@ Allowed states: `NOT STARTED`, `IN PROGRESS`, `DONE`, `BLOCKED`. A row becomes
 
 | Chunk | Deliverable | Status | Production evidence |
 |---|---|---|---|
-| SEO0 | Crawl foundation, host facts, baseline | DONE | `pleni.se` domain-property access confirmed in Google Search Console 2026-09-03. `https://pleni.se/` reports “URL is on Google” and “Page is indexed”; baseline is 1 indexed URL. `https://pleni.se/robots.txt` is 200 and the live homepage canonical is `https://pleni.se/` |
+| SEO0 | Crawl foundation, host facts, baseline | DONE | `pleni.se` domain-property access confirmed in Google Search Console 2026-09-03. `https://pleni.se/` reports “URL is on Google” and “Page is indexed”; baseline is 1 indexed URL. Live title is “Riksdagsdebatter i kortformat \| Pleni”, its new description and social metadata agree, and Google accepted an omindexing request after deploy `06a2486` |
 | SEO1 | Path routing alongside hash | DONE | Fresh load of `https://pleni.se/#/party/M` rewrote to `https://pleni.se/parti/moderaterna/` on production 2026-09-03; the party route loaded and the mobile feed remained playable |
 | SEO2 | Prerendered clip watch pages | DONE | `https://pleni.se/klipp/andreas-carlson-stod-till-kollektivtrafiken/HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079_c01/` returned direct 200 with video, 772-character transcript and Riksdagen link, with no module script, on 2026-09-03 |
 | SEO2b | In-app clip route so a watch page can open the feed | NOT STARTED | — |
