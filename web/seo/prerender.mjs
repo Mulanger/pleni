@@ -65,16 +65,16 @@ const CLIP_SELECT = [
  * reload and on share.
  */
 const APP_SHELLS = [
-  { path: "/senaste", title: "Senaste klippen | Pleni", description: "De senaste klippen från svenska riksdagsdebatter — talare, parti och debatt för varje klipp." },
-  { path: "/sok", title: "Sök i riksdagsdebatter | Pleni", description: "Sök bland klipp från svenska riksdagsdebatter på politiker, parti, ämne eller datum." },
-  { path: "/foljer", title: "Följer | Pleni", description: "Politiker och partier du följer på Pleni.", robots: "noindex, follow" },
-  { path: "/profil", title: "Profil | Pleni", description: "Ditt konto, dina intressen och dina inställningar på Pleni.", robots: "noindex, follow" },
-  { path: "/sparade", title: "Sparade klipp | Pleni", description: "Klipp du sparat på Pleni.", robots: "noindex, follow" },
-  { path: "/sparade/klipp", title: "Sparade klipp | Pleni", description: "Klipp du sparat på Pleni.", robots: "noindex, follow" },
-  { path: "/legal/terms", title: "Användarvillkor | Pleni", description: "Villkoren för att använda Pleni." },
-  { path: "/legal/privacy", title: "Integritetspolicy | Pleni", description: "Hur Pleni behandlar personuppgifter." },
-  { path: "/legal/storage", title: "Lagring och cookies | Pleni", description: "Vad Pleni lagrar i din webbläsare och varför." },
-  { path: "/legal/about", title: "Om Pleni", description: "Pleni klipper svenska riksdagsdebatter till korta videor med länk till originalet." }
+  { path: "/senaste/", title: "Senaste klippen | Pleni", description: "De senaste klippen från svenska riksdagsdebatter — talare, parti och debatt för varje klipp." },
+  { path: "/sok/", title: "Sök i riksdagsdebatter | Pleni", description: "Sök bland klipp från svenska riksdagsdebatter på politiker, parti, ämne eller datum." },
+  { path: "/foljer/", title: "Följer | Pleni", description: "Politiker och partier du följer på Pleni.", robots: "noindex, follow" },
+  { path: "/profil/", title: "Profil | Pleni", description: "Ditt konto, dina intressen och dina inställningar på Pleni.", robots: "noindex, follow" },
+  { path: "/sparade/", title: "Sparade klipp | Pleni", description: "Klipp du sparat på Pleni.", robots: "noindex, follow" },
+  { path: "/sparade/klipp/", title: "Sparade klipp | Pleni", description: "Klipp du sparat på Pleni.", robots: "noindex, follow" },
+  { path: "/legal/terms/", title: "Användarvillkor | Pleni", description: "Villkoren för att använda Pleni." },
+  { path: "/legal/privacy/", title: "Integritetspolicy | Pleni", description: "Hur Pleni behandlar personuppgifter." },
+  { path: "/legal/storage/", title: "Lagring och cookies | Pleni", description: "Vad Pleni lagrar i din webbläsare och varför." },
+  { path: "/legal/about/", title: "Om Pleni", description: "Pleni klipper svenska riksdagsdebatter till korta videor med länk till originalet." }
 ];
 
 const PARTY_CODES = ["s", "m", "sd", "c", "v", "kd", "mp", "l"];
@@ -169,7 +169,7 @@ async function writeEntityHubs(builtHtml, { politicians, parties, clipsByPolitic
       continue;
     }
     const canonicalPath = politicianPath(politician);
-    const idOnlyPath = `/politiker/${encodeURIComponent(politician.id)}`;
+    const idOnlyPath = `/politiker/${encodeURIComponent(politician.id)}/`;
     const hub = renderPoliticianHub(builtHtml, politician, clips);
 
     // The slug form is canonical. The id-only form is generated too, because
@@ -187,8 +187,8 @@ async function writeEntityHubs(builtHtml, { politicians, parties, clipsByPolitic
       canonical: `${ORIGIN}${canonicalPath}`,
       robots: "noindex, follow"
     });
-    await writePage(`${canonicalPath}/klipp`, clipsShell);
-    await writePage(`${idOnlyPath}/klipp`, clipsShell);
+    await writePage(`${canonicalPath}klipp/`, clipsShell);
+    await writePage(`${idOnlyPath}klipp/`, clipsShell);
     shells += 2;
   }
 
@@ -211,9 +211,9 @@ async function writeEntityHubs(builtHtml, { politicians, parties, clipsByPolitic
 
     // Same reasoning as politicians: the readable name is canonical, and the
     // bare code stays a working alias because `navigation.ts` accepts both.
-    for (const base of new Set([partyBase, `/parti/${party.code.toLowerCase()}`])) {
+    for (const base of new Set([partyBase, `/parti/${party.code.toLowerCase()}/`])) {
       await writePage(base, partyHub);
-      await writePage(`${base}/klipp`, partyClipsShell);
+      await writePage(`${base}klipp/`, partyClipsShell);
       shells += 2;
     }
     hubs += 1;
@@ -390,12 +390,12 @@ async function writeSitemaps({ clips, politicians, parties, debates }) {
     // Indexable app surfaces only. Account routes are `noindex` and excluded.
     urlSitemap("/sitemap-sidor.xml", [
       { loc: `${ORIGIN}/` },
-      { loc: `${ORIGIN}/senaste` },
-      { loc: `${ORIGIN}/sok` },
-      { loc: `${ORIGIN}/legal/about` },
-      { loc: `${ORIGIN}/legal/terms` },
-      { loc: `${ORIGIN}/legal/privacy` },
-      { loc: `${ORIGIN}/legal/storage` }
+      { loc: `${ORIGIN}/senaste/` },
+      { loc: `${ORIGIN}/sok/` },
+      { loc: `${ORIGIN}/legal/about/` },
+      { loc: `${ORIGIN}/legal/terms/` },
+      { loc: `${ORIGIN}/legal/privacy/` },
+      { loc: `${ORIGIN}/legal/storage/` }
     ])
   ];
 

@@ -99,9 +99,9 @@ test("the clip id is its own path segment, so a GUID's hyphens stay harmless", (
   const path = clipPath(CLIP);
   assert.equal(
     path,
-    "/klipp/andreas-carlson-stod-till-kollektivtrafiken/HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079_c01"
+    "/klipp/andreas-carlson-stod-till-kollektivtrafiken/HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079_c01/"
   );
-  assert.equal(path.split("/").pop(), CLIP.id);
+  assert.equal(path.split("/").filter(Boolean).at(-1), CLIP.id);
 });
 
 test("titles say 'om' for a subject and 'i' for a sitting", () => {
@@ -297,7 +297,7 @@ test("account surfaces are noindex in the generator, not just in robots.txt", ()
     fileURLToPath(new URL("../seo/prerender.mjs", import.meta.url)),
     "utf8"
   );
-  for (const path of ["/profil", "/sparade", "/sparade/klipp", "/foljer"]) {
+  for (const path of ["/profil/", "/sparade/", "/sparade/klipp/", "/foljer/"]) {
     const entry = source.match(new RegExp(`\\{ path: "${path}"[^}]*\\}`));
     assert.ok(entry, `${path} must be generated`);
     assert.match(entry[0], /robots: "noindex/, `${path} must be noindex`);

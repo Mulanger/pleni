@@ -41,11 +41,14 @@ These were measured, not assumed. Each one constrains the implementation.
 1. **An unknown deep path returns HTTP 404.** `https://pleni.se/klipp/test`
    returns 404, not the SPA shell. The pod is nginx 1.24.0 serving files, with
    **no SPA fallback rewrite**.
-2. **No redirect and no custom headers are available.** `https://pleni.se/`,
+2. **No host redirect and no custom headers are available.** `https://pleni.se/`,
    `https://www.pleni.se/` and `https://rikettv.nbg1-3.instapods.app/` all
    return HTTP 200 with byte-identical bodies (md5 `ee351be0…`) and no
    `Location`. The response carries no `Cache-Control` and no `X-Robots-Tag`.
    Host-level redirects and header injection are therefore assumed unavailable.
+   This measurement applies to the three hostname roots; nginx's automatic
+   directory-slash redirect was not observable until generated directories
+   existed (fact 8).
 3. **InstaPods deploys from `origin/main` only.** No deploy webhook or scheduled
    build has been confirmed; SEO6 must establish the refresh mechanism.
 4. **5 514 published clips**, so roughly 6 260 pages including hubs. That is a
@@ -56,6 +59,12 @@ These were measured, not assumed. Each one constrains the implementation.
    404, which grants access rather than denying it, so Googlebot may fetch the
    MP4s referenced as `contentUrl`.
 7. `https://pleni.se/robots.txt` returned 404 before this chunk.
+8. **Generated directories are slash-canonical.** After the first production
+   prerender, a slashless HTTPS directory path returned `301 Location:
+   http://pleni.se/<path>/`; the HTTP listener then returned another 301 to
+   HTTPS. The same path with a trailing slash returned 200 directly. All
+   generated directory canonicals, internal links and sitemap URLs must
+   therefore end in `/`; route parsing still accepts slashless inbound links.
 
 ## Decision
 
@@ -87,7 +96,7 @@ failed prerender must never fail a deploy.
 containing hyphens — a real sampled id is
 `HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079_c01`. A `slug-id` scheme parsed
 from the right is therefore not decidable. URLs are
-`/klipp/<slug>/<clip_id>` and `/politiker/<namn-slug>/<politicians.id>`, with
+`/klipp/<slug>/<clip_id>/` and `/politiker/<namn-slug>/<politicians.id>/`, with
 the slug decorative and the final segment authoritative. Politicians key on the
 uuid because `politicians.id` is the identity gate (`Q-2`): the old name-slug
 scheme split the five most-clipped ministers into two identities each — 380
@@ -214,8 +223,8 @@ The first amendment dropped the decorative slug from politician and party
 paths. That was an over-correction and it is reversed. The canonical paths are:
 
 ```
-/politiker/<namn-slug>/<politicians.id>
-/parti/<partinamn-slug>
+/politiker/<namn-slug>/<politicians.id>/
+/parti/<partinamn-slug>/
 ```
 
 **What was wrong with the earlier reasoning.** It assumed the app could not
@@ -249,3 +258,23 @@ and a reload would 404. There is no shared module — one side is TypeScript in
 the bundle, the other plain Node in the build — so
 `web/tests/path-routing.test.mjs` compares the two implementations over real
 Swedish names and party names and fails on any divergence.
+
+---
+
+## Third amendment — static directory paths are slash-canonical — 2026-09-03
+
+The first production activation exposed a host behaviour that could not be
+measured while the paths still returned 404. A request for a generated
+directory without its trailing slash, such as
+`https://pleni.se/parti/moderaterna`, returned an absolute 301 to
+`http://pleni.se/parti/moderaterna/`. The HTTP listener then redirected back to
+HTTPS. The slash form returned 200 directly. The same behaviour was measured
+for watch, politician and debate directories and on the pod hostname.
+
+Every generated directory URL is therefore canonical with a trailing slash.
+The generator, sitemaps, internal links and app navigation emit that form, so a
+crawler or user following a Pleni-produced URL avoids the protocol downgrade
+and two-hop redirect. The route parser remains tolerant of slashless inbound
+URLs for compatibility; identity continues to live in the final non-empty path
+segment. Tests assert the slash form in both the browser router and the
+prerendered surface.

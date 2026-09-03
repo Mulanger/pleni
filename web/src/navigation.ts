@@ -256,16 +256,16 @@ function partyCodeFromPath(value: string | null): PartyCode | null {
 /** Every path the app can push. `web/seo/prerender.mjs` writes a shell for each. */
 export const APP_SHELL_ROUTES: readonly string[] = [
   "/",
-  "/senaste",
-  "/foljer",
-  "/sok",
-  "/profil",
-  "/sparade",
-  "/sparade/klipp",
-  "/legal/terms",
-  "/legal/privacy",
-  "/legal/storage",
-  "/legal/about"
+  "/senaste/",
+  "/foljer/",
+  "/sok/",
+  "/profil/",
+  "/sparade/",
+  "/sparade/klipp/",
+  "/legal/terms/",
+  "/legal/privacy/",
+  "/legal/storage/",
+  "/legal/about/"
 ];
 
 /** Parse a real path into a route. Unknown or malformed paths fail home. */
@@ -361,46 +361,46 @@ export function pathForRoute(route: AppRoute): string {
 
   if (route.view === "tab") {
     if (route.tab === "hem") {
-      return route.feedMode === "senaste" ? "/senaste" : "/";
+      return route.feedMode === "senaste" ? "/senaste/" : "/";
     }
-    return withQuery(`/${route.tab}`, params);
+    return withQuery(`/${route.tab}/`, params);
   }
   if (route.view === "saved") {
-    return withQuery("/sparade", params);
+    return withQuery("/sparade/", params);
   }
   if (route.view === "saved-clips") {
     if (route.startId) {
       params.set("clip", route.startId);
     }
-    return withQuery("/sparade/klipp", params);
+    return withQuery("/sparade/klipp/", params);
   }
   if (route.view === "legal") {
-    return withQuery(`/legal/${route.page}`, params);
+    return withQuery(`/legal/${route.page}/`, params);
   }
 
   if (route.tab !== "sok") {
     params.set("from", route.tab);
   }
   if (route.view === "party" || route.view === "party-clips") {
-    const base = `/parti/${partyPathSlug(route.partyCode)}`;
+    const base = `/parti/${partyPathSlug(route.partyCode)}/`;
     if (route.view === "party") {
       return withQuery(base, params);
     }
     if (route.startId) {
       params.set("clip", route.startId);
     }
-    return withQuery(`${base}/klipp`, params);
+    return withQuery(`${base}klipp/`, params);
   }
 
-  const prefix = route.personSlug ? `/politiker/${route.personSlug}` : "/politiker";
-  const base = `${prefix}/${encodeURIComponent(route.personId)}`;
+  const prefix = route.personSlug ? `/politiker/${route.personSlug}/` : "/politiker/";
+  const base = `${prefix}${encodeURIComponent(route.personId)}/`;
   if (route.view === "person") {
     return withQuery(base, params);
   }
   if (route.startId) {
     params.set("clip", route.startId);
   }
-  return withQuery(`${base}/klipp`, params);
+  return withQuery(`${base}klipp/`, params);
 }
 
 function withQuery(path: string, params: URLSearchParams): string {

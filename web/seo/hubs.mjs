@@ -32,9 +32,9 @@ import { ORIGIN, renderShellPage, renderStaticPage } from "./templates.mjs";
 
 const HUB_CLIP_LIMIT = 60;
 
-/** `/debatt/<slug>/<dokid>` — the dokid gets its own segment, as clip ids do. */
+/** `/debatt/<slug>/<dokid>/` — the dokid gets its own segment, as clip ids do. */
 export function debatePath(debate) {
-  return `/debatt/${slugify(debate.title)}/${encodeURIComponent(debate.dokid)}`;
+  return `/debatt/${slugify(debate.title)}/${encodeURIComponent(debate.dokid)}/`;
 }
 
 function clipListItems(clips) {
@@ -263,7 +263,7 @@ ${jsonLd({ "@context": "https://schema.org", "@graph": graph })}
       const [name, party, politicianId] = key.split("||");
       const label = `${name}${party ? ` (${party})` : ""}`;
       const link = politicianId
-        ? `<a href="/politiker/${encodeURIComponent(politicianId)}">${escapeHtml(label)}</a>`
+        ? `<a href="/politiker/${encodeURIComponent(politicianId)}/">${escapeHtml(label)}</a>`
         : escapeHtml(label);
       const items = speakerClips
         .map((clip) => {
@@ -298,7 +298,7 @@ ${items}
       )}</p>
 ${sections}
 ${sourceNote}
-      <a class="cta" href="/senaste">Öppna Pleni</a>`;
+      <a class="cta" href="/senaste/">Öppna Pleni</a>`;
 
   return renderStaticPage({ title, description, canonical, extraHead, body });
 }

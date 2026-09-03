@@ -83,7 +83,7 @@ test("a politician hub carries identity, its own canonical and real clip links",
   assert.match(html, /<title>Andreas Carlson \(KD\) — klipp från riksdagsdebatter \| Pleni<\/title>/);
   assert.match(
     html,
-    /<link rel="canonical" href="https:\/\/pleni\.se\/politiker\/andreas-carlson\/490b6787-c178-42e1-9ab8-e9d233939643" \/>/
+    /<link rel="canonical" href="https:\/\/pleni\.se\/politiker\/andreas-carlson\/490b6787-c178-42e1-9ab8-e9d233939643\/" \/>/
   );
   assert.equal(html.includes('href="/klipp/andreas-carlson-stod-till-kollektivtrafiken/'), true);
 
@@ -125,8 +125,8 @@ test("a party hub lists its roster and uses the verified logo", () => {
   const html = renderPartyHub(BUILT, PARTY, [POLITICIAN], [CLIP]);
 
   assert.match(html, /<title>Kristdemokraterna — klipp från riksdagsdebatter \| Pleni<\/title>/);
-  assert.match(html, /<link rel="canonical" href="https:\/\/pleni\.se\/parti\/kristdemokraterna" \/>/);
-  assert.match(html, /href="\/politiker\/andreas-carlson\/490b6787-c178-42e1-9ab8-e9d233939643"/);
+  assert.match(html, /<link rel="canonical" href="https:\/\/pleni\.se\/parti\/kristdemokraterna\/" \/>/);
+  assert.match(html, /href="\/politiker\/andreas-carlson\/490b6787-c178-42e1-9ab8-e9d233939643\/"/);
 
   const graph = graphOf(html);
   const organization = graph.find((node) => node["@type"] === "Organization");
@@ -158,7 +158,7 @@ test("a debate page is fully static and groups clips by speaker", () => {
 
   const html = renderDebatePage(debate, [CLIP, second]);
 
-  assert.equal(debatePath(debate), "/debatt/stod-till-kollektivtrafiken/HD10533");
+  assert.equal(debatePath(debate), "/debatt/stod-till-kollektivtrafiken/HD10533/");
   assert.match(html, /<h1>Stöd till kollektivtrafiken<\/h1>/);
   assert.match(html, /2 klipp · 2 talare/);
   assert.ok(html.includes("Andreas Carlson (KD)"));
@@ -270,14 +270,14 @@ test("the generator's sitemaps exclude account routes", () => {
 
 test("the readable name is canonical and the bare code is only an alias", () => {
   const html = renderPartyHub(BUILT, PARTY, [POLITICIAN], [CLIP]);
-  assert.equal(partyPath(PARTY), "/parti/kristdemokraterna");
+  assert.equal(partyPath(PARTY), "/parti/kristdemokraterna/");
   assert.equal(html.includes('href="/parti/kd"'), false);
 
   // A politician link always carries the name, so a crawler following a hub
   // reaches the canonical URL rather than the id-only alias.
   assert.equal(
     politicianPath(POLITICIAN),
-    "/politiker/andreas-carlson/490b6787-c178-42e1-9ab8-e9d233939643"
+    "/politiker/andreas-carlson/490b6787-c178-42e1-9ab8-e9d233939643/"
   );
 });
 

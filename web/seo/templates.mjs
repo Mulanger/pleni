@@ -120,9 +120,9 @@ function footer() {
           kommer från Sveriges riksdag och varje klipp länkar till originalet.
         </p>
         <ul class="links">
-          <li><a href="/legal/about">Om Pleni</a></li>
-          <li><a href="/legal/privacy">Integritet</a></li>
-          <li><a href="/legal/terms">Villkor</a></li>
+          <li><a href="/legal/about/">Om Pleni</a></li>
+          <li><a href="/legal/privacy/">Integritet</a></li>
+          <li><a href="/legal/terms/">Villkor</a></li>
         </ul>
       </footer>`;
 }
@@ -279,7 +279,7 @@ ${related
     clip.party
       ? `        <li><a href="${escapeHtml(partyPathForCode(clip.party))}">${escapeHtml(clip.party)}</a></li>`
       : "",
-    `        <li><a href="/senaste">Senaste klippen</a></li>`
+    `        <li><a href="/senaste/">Senaste klippen</a></li>`
   ]
     .filter(Boolean)
     .join("\n");
@@ -327,7 +327,7 @@ ${
       </p>`
     : ""
 }
-      <a class="cta" href="/senaste">Öppna Pleni</a>
+      <a class="cta" href="/senaste/">Öppna Pleni</a>
       <h2>Gå vidare</h2>
       <ul class="links">
 ${navLinks}

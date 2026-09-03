@@ -24,29 +24,29 @@ import { PARTY_NAMES, cleanName, slugify } from "../seo/lib.mjs";
 
 const CANONICAL_PATHS = [
   "/",
-  "/senaste",
-  "/foljer",
-  "/sok",
-  "/profil",
-  "/sparade",
-  "/sparade/klipp",
-  "/sparade/klipp?clip=HD1_a-b_c01",
-  "/legal/terms",
-  "/legal/privacy",
-  "/legal/storage",
-  "/legal/about",
-  "/politiker/490b6787-c178-42e1-9ab8-e9d233939643",
-  "/politiker/490b6787-c178-42e1-9ab8-e9d233939643/klipp",
-  "/politiker/490b6787-c178-42e1-9ab8-e9d233939643?from=hem",
-  "/politiker/490b6787-c178-42e1-9ab8-e9d233939643/klipp?clip=HD1_a-b_c01",
-  "/politiker/andreas-carlson/490b6787-c178-42e1-9ab8-e9d233939643",
-  "/politiker/andreas-carlson/490b6787-c178-42e1-9ab8-e9d233939643/klipp",
-  "/politiker/andreas-carlson/490b6787-c178-42e1-9ab8-e9d233939643?from=hem",
-  "/parti/moderaterna",
-  "/parti/sverigedemokraterna/klipp",
-  "/parti/socialdemokraterna?from=foljer",
-  "/foljer?feed=senaste",
-  "/politiker/abc?feed=senaste"
+  "/senaste/",
+  "/foljer/",
+  "/sok/",
+  "/profil/",
+  "/sparade/",
+  "/sparade/klipp/",
+  "/sparade/klipp/?clip=HD1_a-b_c01",
+  "/legal/terms/",
+  "/legal/privacy/",
+  "/legal/storage/",
+  "/legal/about/",
+  "/politiker/490b6787-c178-42e1-9ab8-e9d233939643/",
+  "/politiker/490b6787-c178-42e1-9ab8-e9d233939643/klipp/",
+  "/politiker/490b6787-c178-42e1-9ab8-e9d233939643/?from=hem",
+  "/politiker/490b6787-c178-42e1-9ab8-e9d233939643/klipp/?clip=HD1_a-b_c01",
+  "/politiker/andreas-carlson/490b6787-c178-42e1-9ab8-e9d233939643/",
+  "/politiker/andreas-carlson/490b6787-c178-42e1-9ab8-e9d233939643/klipp/",
+  "/politiker/andreas-carlson/490b6787-c178-42e1-9ab8-e9d233939643/?from=hem",
+  "/parti/moderaterna/",
+  "/parti/sverigedemokraterna/klipp/",
+  "/parti/socialdemokraterna/?from=foljer",
+  "/foljer/?feed=senaste",
+  "/politiker/abc/?feed=senaste"
 ];
 
 test("every canonical path round-trips through the route model", () => {
@@ -59,15 +59,15 @@ test("every canonical path round-trips through the route model", () => {
 
 test("the home feed keeps its mode in the path, never a query", () => {
   assert.equal(pathForRoute({ view: "tab", tab: "hem", feedMode: "fordig" }), "/");
-  assert.equal(pathForRoute({ view: "tab", tab: "hem", feedMode: "senaste" }), "/senaste");
+  assert.equal(pathForRoute({ view: "tab", tab: "hem", feedMode: "senaste" }), "/senaste/");
   assert.equal(routeFromPath("/").feedMode, "fordig");
   assert.equal(routeFromPath("/senaste").feedMode, "senaste");
 });
 
 test("default query values are omitted so each route has one canonical path", () => {
   // `feed=fordig` and `from=sok` are the defaults the parser already applies.
-  assert.equal(pathForRoute(routeFromPath("/foljer", "feed=fordig")), "/foljer");
-  assert.equal(pathForRoute(routeFromPath("/politiker/abc", "from=sok")), "/politiker/abc");
+  assert.equal(pathForRoute(routeFromPath("/foljer", "feed=fordig")), "/foljer/");
+  assert.equal(pathForRoute(routeFromPath("/politiker/abc", "from=sok")), "/politiker/abc/");
 });
 
 test("every legacy hash route lands on the route it always did", () => {
@@ -135,7 +135,7 @@ test("party paths accept the readable name and the bare code as an alias", () =>
 
   // The readable name is what gets written, so it is the canonical form and
   // the bare code stays a working alias rather than a competing URL.
-  assert.equal(pathForRoute(routeFromPath("/parti/m")), "/parti/moderaterna");
+  assert.equal(pathForRoute(routeFromPath("/parti/m")), "/parti/moderaterna/");
   assert.equal(partyPathSlug("V"), "vansterpartiet");
   // `NONE` is a display bucket for party-less speakers, not an addressable party.
   for (const segment of ["none", "x", "abc", ""]) {
@@ -158,7 +158,7 @@ test("malformed and unknown paths fail home rather than throwing", () => {
 test("politician ids survive encoding in both directions", () => {
   const id = "id with space/slash";
   const path = pathForRoute({ view: "person", tab: "sok", feedMode: "fordig", personId: id });
-  assert.equal(path, `/politiker/${encodeURIComponent(id)}`);
+  assert.equal(path, `/politiker/${encodeURIComponent(id)}/`);
   assert.equal(routeFromPath(...splitPath(path)).personId, id);
 });
 

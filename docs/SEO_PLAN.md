@@ -104,13 +104,13 @@ Swedish paths, matching the app's own vocabulary (`hem`, `foljer`, `sok`,
 slug.
 
 ```
-/klipp/<beskrivande-slug>/<clip_id>
-/politiker/<namn-slug>/<politicians.id>          canonical
-/politiker/<politicians.id>                      alias, canonicalised
-/parti/<partinamn-slug>                          canonical
-/parti/<kod>                                     alias, canonicalised
-/debatt/<beskrivande-slug>/<dokid>
-/amne/<amnes-slug>                               (SEO4, deferred)
+/klipp/<beskrivande-slug>/<clip_id>/
+/politiker/<namn-slug>/<politicians.id>/         canonical
+/politiker/<politicians.id>/                     alias, canonicalised
+/parti/<partinamn-slug>/                         canonical
+/parti/<kod>/                                    alias, canonicalised
+/debatt/<beskrivande-slug>/<dokid>/
+/amne/<amnes-slug>/                              (SEO4, deferred)
 ```
 
 **Settled after SEO3** (ADR 014, second amendment): every path carries its
@@ -128,6 +128,13 @@ free of hyphens and parse `slug-id` from the right. A separate segment is
 unambiguous whatever Riksdagen sends. The slug is decorative: a request with a
 stale or wrong slug still resolves, and its canonical link points at the correct
 form.
+
+**Settled after the first production activation** (ADR 014, third amendment):
+every generated directory URL ends in `/`. InstaPods' nginx otherwise sends a
+slashless HTTPS request to an absolute `http://pleni.se/.../` directory
+redirect, after which the HTTP listener redirects back to HTTPS. The slash form
+returns 200 directly. Canonicals, sitemaps, internal links and app navigation
+therefore emit the slash form; route parsing still accepts old slashless links.
 
 **Why politicians key on the uuid.** `public.politicians.id` is the identity gate
 (`Q-2`). The old name-slug scheme split the five most-clipped ministers into two
@@ -235,10 +242,14 @@ re-measure only if something looks wrong.
    → 404. nginx 1.24.0 serving files, **no SPA fallback rewrite**. This is the
    most consequential fact in the plan: a path with no file cannot be indexed or
    even deep-linked, so SEO1 must not ship before SEO2.
-2. **No redirects and no custom headers.** The apex, `www` and the pod hostname
-   all return 200 with byte-identical bodies (md5 `ee351be0…`) and no
-   `Location`. No `Cache-Control`, no `X-Robots-Tag`. Absolute canonical links
-   carry the entire deduplication load.
+2. **No host redirects and no custom headers.** The apex, `www` and the pod
+   hostname roots all return 200 with byte-identical bodies (md5 `ee351be0…`)
+   and no `Location`. No `Cache-Control`, no `X-Robots-Tag`. Absolute canonical
+   links carry the entire host deduplication load. After the generated SEO
+   directories shipped, a separate nginx behaviour became visible: a missing
+   trailing slash redirects HTTPS to an absolute HTTP directory URL and the
+   HTTP listener then redirects back to HTTPS. Generated URLs therefore always
+   end in `/`; see ADR 014's third amendment.
 3. **No deploy webhook confirmed.** InstaPods deploys from `origin/main`. SEO6
    must establish the refresh mechanism; check the panel while signed in.
 4. **5 514 published clips**, 364 politicians, 377 debates — roughly 6 260 pages

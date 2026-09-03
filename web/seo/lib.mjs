@@ -200,7 +200,7 @@ export function normalizeClip(row) {
  */
 export function clipPath(clip) {
   const descriptor = [clip.name, clip.debateTitle].filter(Boolean).join(" ");
-  return `/klipp/${slugify(descriptor)}/${encodeURIComponent(clip.id)}`;
+  return `/klipp/${slugify(descriptor)}/${encodeURIComponent(clip.id)}/`;
 }
 
 /**
@@ -268,13 +268,13 @@ export const PARTY_NAMES = {
  */
 export function politicianPath(politician) {
   const name = cleanName(politician.name) || politician.name || "";
-  return `/politiker/${slugify(name)}/${encodeURIComponent(politician.id)}`;
+  return `/politiker/${slugify(name)}/${encodeURIComponent(politician.id)}/`;
 }
 
 /** The party hub path, using the readable name rather than the code. */
 export function partyPath(party) {
   const name = party.name || PARTY_NAMES[party.code] || party.code || "";
-  return `/parti/${slugify(name)}`;
+  return `/parti/${slugify(name)}/`;
 }
 
 /** The party path for a clip, which carries only the party code. */
