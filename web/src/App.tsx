@@ -93,7 +93,7 @@ import { EMPTY_ONBOARDING, readOnboarding, writeOnboarding } from "./onboarding-
 import { EMPTY_LIBRARY, readLibrary, toggleInList, writeLibrary } from "./library-store";
 import { LEGAL_PAGE_ORDER, LEGAL_PAGES, LEGAL_VERSION } from "./legal";
 import type { LegalPageId } from "./legal";
-import { useAppNavigation } from "./navigation";
+import { personPathSlug, useAppNavigation } from "./navigation";
 import { PartyLogo } from "./party-logo";
 import {
   createPortraitDelivery,
@@ -1048,6 +1048,33 @@ function App() {
     setCollection(null);
     navigate({ view: "person", tab, feedMode, personId });
   };
+
+  /**
+   * Put the politician's name into the URL once it is known.
+   *
+   * Navigation only ever carries the id — every `onOpenPerson` caller has just
+   * the `Q-2` identity — so the pushed path is `/politiker/<id>`. When the
+   * profile row arrives, replace it with the canonical
+   * `/politiker/<namn-slug>/<id>` that the prerenderer generates and that
+   * `<link rel="canonical">` points at. `replace` is deliberate: this is the
+   * same page, so it must not add a history entry the Back button has to walk.
+   */
+  useEffect(() => {
+    if (person === null) {
+      return;
+    }
+    if (route.view !== "person" && route.view !== "person-clips") {
+      return;
+    }
+    if (route.personId !== person.id) {
+      return;
+    }
+    const slug = personPathSlug(cleanName(person.name) || person.name);
+    if (!slug || route.personSlug === slug) {
+      return;
+    }
+    navigate({ ...route, personSlug: slug }, { replace: true });
+  }, [navigate, person, route]);
 
   const closePerson = () => {
     backTo({ view: "tab", tab, feedMode });

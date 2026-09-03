@@ -245,12 +245,19 @@ export function usePwaExperience(networkRequestFailed: boolean): PwaExperience {
     const timer = window.setInterval(continueWhenSafe, 400);
     document.addEventListener("pause", continueWhenSafe, true);
     document.addEventListener("input", continueWhenSafe, true);
+    // Navigation is a safe moment to apply a deferred update. Since SEO1 the
+    // app routes on real paths, so `popstate` is the event that fires for
+    // Back/Forward; `hashchange` is kept for legacy hash links, which are
+    // rewritten to paths on load. The 400 ms interval above remains the
+    // backstop, because `pushState` itself fires no event.
+    window.addEventListener("popstate", continueWhenSafe);
     window.addEventListener("hashchange", continueWhenSafe);
     continueWhenSafe();
     return () => {
       window.clearInterval(timer);
       document.removeEventListener("pause", continueWhenSafe, true);
       document.removeEventListener("input", continueWhenSafe, true);
+      window.removeEventListener("popstate", continueWhenSafe);
       window.removeEventListener("hashchange", continueWhenSafe);
     };
   }, [beginVisualUpdate, reloadWhenSafe, updatePhase]);

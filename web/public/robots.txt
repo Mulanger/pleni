@@ -1,0 +1,16 @@
+# Pleni — https://pleni.se
+#
+# Public catalogue pages are crawlable. Account-bound routes carry no public
+# content and must never be indexed; they are listed here ahead of the path
+# routing that SEO1/SEO2 introduce, so the rule is in place before the URLs are.
+#
+# The `Sitemap:` line is appended to the deployed copy by `seo/prerender.mjs`,
+# and only once it has actually written the sitemap index. It is absent from
+# this source file on purpose: a build that cannot reach Supabase writes no
+# sitemap, and pointing a crawler at a 404 is worse than saying nothing.
+
+User-agent: *
+Allow: /
+Disallow: /profil
+Disallow: /sparade
+Disallow: /foljer

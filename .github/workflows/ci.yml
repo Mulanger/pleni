@@ -84,6 +84,23 @@ jobs:
         # a bad deploy would hit (ADR 006).
         run: node ./node_modules/vite/bin/vite.js build
 
+      - name: Prerender (degraded path)
+        # Same reasoning: with no Supabase environment the SEO generator must
+        # write the app shells, skip the catalogue and exit 0. A prerender that
+        # fails here would fail a deploy, which is the one thing it must never
+        # do. Runs after the Vite build so its HTML stays out of the service
+        # worker's precache manifest.
+        run: node seo/prerender.mjs
+
+      - name: Assert the app shell precache stayed bounded
+        # The precache is nine app-shell entries. If a future change lets the
+        # prerender's thousands of HTML files into the manifest, every install
+        # would download the whole catalogue.
+        run: |
+          entries=$(grep -oE '\{"revision":[^}]*\}' dist/sw.js | wc -l)
+          echo "precache entries: $entries"
+          test "$entries" -eq 9
+
   recommendations:
     name: Recommendations (rules, auth, Edge typecheck)
     runs-on: ubuntu-latest

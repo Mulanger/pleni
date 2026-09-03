@@ -6238,3 +6238,352 @@ personalization state. The session was not signed out solely for testing.
 **Next agent should know:** account UI must continue to derive from the shared
 `useViewer()` identity. Do not reintroduce a separate Clerk `<Show>` branch in
 Profile or replace the listener with a forced page reload.
+## SEO — Search indexing roadmap — REGISTERED 2026-09-03
+
+**Built:** `docs/SEO_PLAN.md`, the authoritative tracker for making the
+catalogue discoverable in Google and Bing. It divides the work into SEO0-SEO8
+with dependencies, locked decisions, per-chunk acceptance criteria and a
+four-state dashboard.
+
+**Tests:** documentation only in this entry; the gates are recorded under SEO0
+below. `git diff --check` clean.
+
+**Contracts touched:** none.
+
+**Decisions made:** the SEO surface is prerendered static HTML generated after
+`vite build` from Supabase's publishable key, one file per public URL. Identity
+always occupies its own final path segment. `pleni.se` apex is canonical. The
+swipe feed is unchanged for humans. See `docs/adr/014-prerendered-seo-surface.md`.
+
+**Observations (not fixed, out of scope):** `docs/DESKTOP_COMPLETION_PLAN.md`
+still shows UI20.0-UI20.7 as `IN PROGRESS` awaiting an InstaPods gate that
+UI20.8's released commit `c1319e5` has since passed. Those rows look stale
+rather than blocked. Not touched — it belongs to whoever closes UI20.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** start at SEO0, then SEO1+SEO2 together. SEO4 is
+deferred on missing data, not blocked, and nothing depends on it.
+
+## SEO0 — Crawl foundation, host facts and baseline — IN PROGRESS 2026-09-03
+
+**Built:** `web/public/robots.txt`; an expanded `web/index.html` head with
+canonical, Swedish description, Open Graph/Twitter tags and a `WebSite` +
+`Organization` JSON-LD graph; `web/tests/seo-foundation.test.mjs`;
+`docs/adr/014-prerendered-seo-surface.md`.
+
+**Tests:** 93 frontend Node tests pass, up from 85 — the eight new ones are the
+SEO0 guardrails. TypeScript passes. The Vite production build passes and the
+generated worker still precaches **exactly 9 entries**; `robots.txt` does not
+enter the manifest because `txt` is absent from `globPatterns`. Project
+acceptance passes: 514 Python tests, 79 deselected, the known `audioop`
+warning, Ruff clean, strict mypy over 83 source files.
+
+**Local verification:** the built `dist` was served on 127.0.0.1 and loaded at
+375x812. The app mounted with the new head, the tab title read
+"Pleni — riksdagsdebatter som korta klipp", and the feed correctly reported no
+network because the local build carries no `VITE_*` values (ADR 006 degraded
+path). The built JSON-LD parses and its `publisher` reference resolves. One
+console error — "An unknown error occurred when fetching the script" — was
+reproduced identically from a build of the unmodified `index.html`, so it is a
+property of the bare `python -m http.server` harness, not this change.
+
+**Contracts touched:** none. No routing, service worker, migration, pipeline or
+feed code changed.
+
+**Host facts measured against production 2026-09-03** (full evidence in ADR 014):
+
+- `https://pleni.se/klipp/test` returns **404**. nginx 1.24.0 serves files with
+  **no SPA fallback**, so a path without a file cannot be indexed or even
+  deep-linked. This is why SEO1 must not ship before SEO2.
+- The apex, `www.pleni.se` and `rikettv.nbg1-3.instapods.app` all return 200
+  with byte-identical bodies (md5 `ee351be0...`) and no `Location`. No
+  `Cache-Control`, no `X-Robots-Tag`. Absolute canonical links are the only
+  deduplication mechanism available.
+- **5 514 published clips**, 364 politicians, 377 debates — about 6 260 pages
+  including hubs.
+- **`clips.topic` is null for all 5 514 clips.** SEO4 is deferred, not blocked.
+- `https://riketnlooigm.b-cdn.net/robots.txt` returns 404, which grants
+  Googlebot access to the MP4s rather than denying it.
+- `https://pleni.se/robots.txt` returned 404 before this chunk.
+
+**Decisions made:**
+- No `SearchAction` / sitelinks searchbox. `web/src/search/route.ts` keeps query
+  text in React memory and out of the URL by design, so there is no endpoint a
+  searchbox could resolve.
+- No `Sitemap:` line in `robots.txt` yet; it lands in SEO5 with the sitemap it
+  names, rather than pointing a crawler at a 404.
+- `twitter:card` is `summary`, because the brand mark is square (1254x1254).
+  Watch pages will use a player card with the clip's own vertical thumbnail.
+
+**Observations (not fixed, out of scope):**
+- `src/scoring/titles.py` produces truncated sentence fragments — a sampled
+  title is "Kriget i Iran och stangningen av Hormuzsundet har inneburit". That
+  reads acceptably as a feed overlay and poorly as an indexed `<title>` under a
+  named politician's byline. SEO2 must compose page titles from speaker, party
+  and `sources.title` rather than trusting the clip title. Not a defect in the
+  feed; do not change the pipeline for it.
+- `speaker_name` and `politicians.name` carry a role prefix and the
+  parenthesised party, e.g. "Infrastruktur- och bostadsministern Andreas
+  Carlson (KD)". Name slugs must strip both.
+- Sampled `clip_id`s contain hyphens inside the Riksdagen GUID, e.g.
+  `HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079_c01`. The plan's separate
+  id segment is required, not merely tidier.
+
+**Blocked / needs a decision:** nothing blocking implementation. Two items need
+the owner, and neither stops SEO1/SEO2:
+- Search Console and Bing Webmaster verification require the owner's accounts.
+- Nothing has been pushed or deployed. The commit is local.
+
+**Next agent should know:**
+- `node_modules` is absent from a fresh worktree; run `npm ci` in `web/` first
+  or every React-importing test fails with `ERR_MODULE_NOT_FOUND`.
+- Port 5199 was occupied by another process, so the launch config's dev server
+  was not used; the built `dist` was served on a spare port instead.
+- SEO0's remaining acceptance is deploy plus owner verification. SEO1 and SEO2
+  can begin immediately and must land in one deploy.
+
+## SEO1 — Path routing alongside hash — IN PROGRESS 2026-09-03
+
+**Built:** `routeFromPath`, `pathForRoute`, `initialRoute` and
+`APP_SHELL_ROUTES` in `web/src/navigation.ts`; `useAppNavigation` now writes
+real paths with `pushState` and rewrites a legacy hash URL once with
+`replaceState`; a `popstate` listener in `web/src/pwa/usePwaExperience.ts`;
+`web/tests/path-routing.test.mjs`.
+
+**Tests:** 10 new routing tests inside a suite that went from 93 to 121 with
+SEO2. Every canonical path round-trips (`pathForRoute(routeFromPath(p)) === p`),
+every legacy hash route resolves to the identical route object, malformed paths
+fail home without throwing, and party paths accept only the eight real codes.
+TypeScript passes.
+
+**Contracts touched:** none. `AppRoute` is unchanged, so `App.tsx` and the
+desktop route outlet needed no edits at all.
+
+**Decisions made:**
+- Politician and party paths carry **no decorative slug**: `/politiker/<uuid>`
+  and `/parti/<kod>`. The app pushes these URLs and only ever holds the id, so a
+  slug would give one entity two URLs and one page two history entries — and
+  every pushed URL needs a generated file because the pod 404s the rest. This
+  amends the original scheme in ADR 014; the amendment is recorded there.
+- The home feed keeps its mode in the path (`/` and `/senaste`) rather than a
+  query, and default query values are omitted, so each route has exactly one
+  canonical path.
+- A legacy hash is honoured only in its original shape — a hash route at the
+  site root — so a real path route can never be overridden by a stray fragment.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none. SEO1 must not deploy without SEO2,
+because a path with no generated file 404s on the pod.
+
+**Next agent should know:** `APP_SHELL_ROUTES` in `navigation.ts` and the
+`APP_SHELLS` list in `web/seo/prerender.mjs` must stay in agreement; a test
+fails if a pushable route has no generated shell.
+
+## SEO2 — Prerendered clip watch pages — IN PROGRESS 2026-09-03
+
+**Built:** `web/seo/lib.mjs` (pure helpers), `web/seo/templates.mjs` (page
+templates), `web/seo/prerender.mjs` (the generator),
+`web/tests/seo-prerender.test.mjs`, a `prerender` script and an extended
+`build` script in `web/package.json`, and the updated InstaPods build command in
+`AGENTS.md` and `README.md`.
+
+**Tests:** 121 frontend Node tests pass, up from 93. TypeScript passes. The Vite
+production build passes and the generated worker still precaches **exactly 9
+entries** — verified by counting `{"revision":…}` records in `dist/sw.js` after
+the prerender wrote 6 139 HTML files. Project acceptance passes: 514 Python
+tests, 79 deselected, the known `audioop` warning, Ruff and strict mypy over 83
+source files.
+
+**Generated against production data 2026-09-03:**
+- **5 514 clip watch pages, 0 skipped**, across 377 debates.
+- 10 app shells and 614 entity shells (299 politicians with clips × 2 routes,
+  plus 8 parties × 2).
+- 6 139 `index.html` files in `dist` including the root.
+
+**Degradation verified:** with `VITE_SUPABASE_URL`/`VITE_SUPABASE_PUBLISHABLE_KEY`
+unset the generator writes the 10 app shells, logs, and **exits 0**; with an
+unreachable Supabase host it logs `clip fetch failed` and **exits 0**. A failed
+prerender cannot fail a deploy, which is the ADR 006 rule.
+
+**Local verification:** a real interpellation watch page was served and loaded at
+375×812. It rendered the brand, breadcrumbs, `<h1>`, byline, the Bunny WebP
+poster, the facts list, the full transcript, the Riksdagen source link, the
+onward links and the related-clips list. Title read "Andreas Carlson (KD) om
+Stöd till kollektivtrafiken — 12 juni 2026 | Pleni".
+
+**Contracts touched:** none. No pipeline code, migration, Bunny path, render
+geometry, service worker or feed logic changed.
+
+**Decisions made:**
+- **Watch pages do not boot the SPA.** No `<div id="root">`, no module script —
+  asserted by test. That removes the content-parity/cloaking risk completely and
+  makes the poster the LCP element. Closing the swipe-feed gap for a Google
+  visitor is registered as its own chunk, SEO2b.
+- **Shell pages are the built `index.html` patched**, not a reconstructed
+  document, so hashed asset URLs, icons, the manifest link and PWA metadata stay
+  correct as the build changes. `replaceOnce` throws if `index.html`'s head stops
+  matching, so a future head change fails in tests rather than shipping shells
+  that carry the home page's canonical.
+- **Entity shells are `noindex, follow`** until SEO3 gives them real content. 614
+  identical JavaScript-dependent pages would be duplicate thin content.
+- Titles say "om" for a debate subject and "i" for a chamber sitting. Measured:
+  335 of 377 debates carry a real subject, 38 are "Frågestund", so
+  "Andreas Carlson om Frågestund" had to become "i Frågestund".
+- Related-clip anchor text uses the clip's own title, not the speaker name.
+  Several clips from one speaker in one debate is the normal case and
+  `name (party)` repeated six times is useless as anchor text.
+- No new dependency. The generator uses Node's built-in `fetch`, matching the
+  app's own raw-PostgREST approach.
+
+**Observations (not fixed, out of scope):**
+- 299 of 364 politicians have at least one published clip. The other 65 get no
+  page, which is correct.
+- `clips.title` remains a truncated fragment. It is used for anchor text and
+  never for a page title. Fixing the generator's input belongs to the pipeline.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:**
+- **Run the prerender AFTER `vite build`, never before.** `vite.config.ts` globs
+  `**/*.html`, so HTML written first turns the nine-entry app shell into one
+  entry per clip. `npm run build` in `web/` has the right order.
+- The InstaPods build command now also removes the previous deploy's generated
+  route roots before copying, so an unpublished clip cannot keep a live page.
+  **That command must be updated in the InstaPods panel — editing `AGENTS.md`
+  changes documentation only.**
+- A full prerender over 5 514 clips takes a few seconds after the build; the
+  Supabase read is 12 paged requests of 500 rows.
+- SEO5 is the natural next chunk: the URL set now exists, so the sitemaps have
+  something to list. SEO3 upgrades the entity shells in place.
+
+## SEO3, SEO5, SEO6-SEO8 — hubs, sitemaps and refresh — IN PROGRESS 2026-09-03
+
+**Built:** `web/seo/hubs.mjs` (politician, party and debate pages),
+`web/seo/sitemaps.mjs` (video sitemap, plain sitemaps, sitemap index),
+`renderStaticPage` and the JSON-LD/prerender injection in
+`web/seo/templates.mjs`, hub and sitemap wiring plus `fetchAll`/`groupBy` in
+`web/seo/prerender.mjs`, `.github/workflows/seo-refresh.yml`, two new CI steps,
+`web/tests/seo-hubs-sitemaps.test.mjs`.
+
+**Tests:** 132 frontend Node tests pass, up from 121. TypeScript passes. The
+Vite build passes and the worker still precaches **exactly 9 entries** after the
+prerender writes 6 516 HTML files and 8 XML files. Project acceptance passes:
+514 Python tests, 79 deselected, the known `audioop` warning, Ruff and strict
+mypy over 83 source files.
+
+**Generated against production data 2026-09-03:**
+- 5 514 clip watch pages, 0 skipped.
+- **377 debate pages**, fully static.
+- **307 hubs** (299 politicians with clips + 8 parties) with real prerendered
+  content, plus 307 `noindex` `/klipp` sub-route shells.
+- 10 app shells. 6 516 pages in total.
+- **Sitemap index + 7 children, 6 205 URLs.** Every file parses as XML, the
+  largest is 2.06 MB against a 50 MB limit, and the largest shard holds 2 000
+  URLs against a 50 000 limit. 27 sampled URLs including the first and last
+  each resolve to a real file on disk.
+
+**Local verification:** `/parti/kd` served the SEO title, then React replaced
+the prerendered list with the real Pleni party screen — KD's verified logo,
+873 klipp, 26 politiker, real thumbnails. `/debatt/stod-till-kollektivtrafiken/HD10533`
+rendered fully static: "12 juni 2026 · 14 klipp · 4 talare", clips grouped under
+each speaker with the politician's name linking to their hub.
+
+**Contracts touched:** none.
+
+**Decisions made:**
+- **Politician and party hubs are app shells with prerendered content inside
+  `#root`.** React clears the container on mount, so a direct visit still gets
+  the real app screen while a crawler gets identity, counts and 60 real links to
+  watch pages. Both render the same entity from the same rows, so this is
+  progressive enhancement rather than a second version of the page. Debate pages
+  are fully static because the app has no debate route to hand over to.
+- **Hubs list the 60 most recent clips instead of paginating.** Query-string
+  pagination cannot work on a host that serves files — `/parti/m?sida=2` and
+  `/parti/m` are the same file — so pagination would need real `/sida/<n>`
+  paths. The sitemap is the complete index; a hub's job is clustering and crawl
+  depth. Build real pagination only if the sitemap proves insufficient.
+- The `/politiker/<id>/klipp` and `/parti/<kod>/klipp` routes stay
+  `noindex, follow` and canonicalise to their hub. They are routes the app
+  pushes, not separate pages worth indexing.
+- `robots.txt` gains its `Sitemap:` line from the generator, not from the source
+  file, and only after the index is actually written. A build that cannot reach
+  Supabase therefore ships no sitemap and no pointer to one.
+- `<lastmod>` keeps a bare `YYYY-MM-DD` as a bare date rather than inventing a
+  time the row never carried.
+- SEO6 calls an InstaPods deploy hook if `INSTAPODS_DEPLOY_HOOK` is set and
+  otherwise does nothing but explain itself. It deliberately does **not** fall
+  back to a bot pushing commits to `main` on a schedule; that is the owner's
+  decision and the workflow says so in its header.
+
+**Observations (not fixed, out of scope):**
+- 65 of 364 politicians have no published clip and get no page. Correct.
+- Hub pages carry two JSON-LD blocks: the site-level `Organization`/`WebSite`
+  inherited from `index.html` and the hub's own graph. Their `@id`s differ, so
+  they do not conflict.
+
+**Blocked / needs a decision:** nothing blocking code. Four owner actions
+remain, listed in the next section.
+
+**Next agent should know:**
+- SEO2b is the only unbuilt chunk that is not deferred: an in-app `clip` route
+  so a Google visitor can continue into the feed instead of following a link.
+- CI now runs the prerender in its degraded path and asserts the 9-entry
+  precache, so the ordering trap fails in CI rather than in production.
+- The Chrome extension was not connected during this session
+  (`list_connected_browsers` returned empty), so the InstaPods panel could not
+  be inspected or changed.
+
+## SEO follow-up — readable slugs in every URL — IN PROGRESS 2026-09-03
+
+**Built:** `partyPathSlug`, `personPathSlug` and slug-aware path parsing in
+`web/src/navigation.ts`; an optional decorative `personSlug` on the `person` and
+`person-clips` routes; a URL-upgrade effect in `web/src/App.tsx`;
+`politicianPath`, `partyPath`, `partyPathForCode` and `PARTY_NAMES` in
+`web/seo/lib.mjs`, with every internal link, breadcrumb and sitemap entry
+switched to the canonical form; two new tests including the slug drift guard.
+
+**Tests:** 136 frontend Node tests pass, up from 132. TypeScript passes. The
+Vite build passes and the worker still precaches exactly 9 entries. Project
+acceptance passes: 514 Python tests, 79 deselected, Ruff and strict mypy over 83
+source files.
+
+**Why this reverses an earlier decision.** The first ADR 014 amendment dropped
+the slug from politician and party paths, reasoning that the app pushes those
+URLs and holds only the id. That was an over-correction. The app does not need
+the slug at navigation time: it pushes `/politiker/<id>`, and when the profile
+row arrives `App` replaces the URL with `/politiker/<namn-slug>/<id>`. The owner
+pushed back on losing the slug and was right to.
+
+**Generated against production 2026-09-03:** 5 514 watch pages, 377 debate
+pages, 307 hubs and 929 shells — the shell count rose from 307 because each
+politician and party now has both the canonical slug path and the id/code alias,
+plus their `/klipp` sub-routes. Sitemaps list the canonical form only.
+`/parti/kd` canonicalises to `/parti/kristdemokraterna`;
+`/politiker/<id>` canonicalises to `/politiker/andreas-carlson/<id>`.
+
+**Local verification:** loading `/politiker/490b6787-…` upgraded the URL to
+`/politiker/andreas-carlson/490b6787-…`, history grew by exactly one entry for
+the navigation rather than two, and Back landed on `/senaste` instead of the
+id-only form. `/parti/moderaterna` served the party hub.
+
+**Contracts touched:** none. `AppRoute` gained an optional decorative field;
+identity is still `personId`, and every comparison in the app keys on it.
+
+**Decisions made:**
+- Both URL forms are generated and the alias canonicalises to the slug form, so
+  a URL the app pushed before the row arrived can be reloaded or shared without
+  a 404 and without competing in the index.
+- `personPathSlug` (TypeScript, in the bundle) and `slugify` (plain Node, in the
+  build) are separate implementations with a drift test over real Swedish names,
+  following the same pattern as the search ranking constants. There is no shared
+  module because the two run in different toolchains.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** if you change either slug function, the drift test
+in `web/tests/path-routing.test.mjs` is the one that fails. Fix both sides; do
+not relax the test.

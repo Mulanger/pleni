@@ -2074,3 +2074,36 @@ PROGRESS.md
 baseline, every remaining mobile route, explicit non-goals, per-chunk completion
 gates, the full desktop/mobile test matrix and a release/rollback protocol. No
 product code changes in this registration chunk.
+
+---
+
+## SEO — Search indexing (SEO0-SEO8) — REGISTERED 2026-09-03
+
+**Depends on:** the released UI20 desktop work only in the sense that it must not
+be disturbed. **Size:** nine chunks; SEO1 and SEO2 are the large ones.
+
+**Objective:** give every published clip a crawlable watch page and connect them
+with politician, party and debate hubs, so the catalogue can be found in Google
+and Bing. Today `web/src/navigation.ts` routes on the URL fragment, which means
+the entire site is one indexable URL.
+
+**The plan lives in `docs/SEO_PLAN.md`.** It carries the locked decisions, the
+measured host facts, the per-chunk scope and acceptance criteria, and the status
+dashboard. Do not start a chunk from this heading alone; read that file.
+
+**Architecture, decided in `docs/adr/014-prerendered-seo-surface.md`:** the SEO
+surface is static HTML generated after `vite build` by a Node script reading
+Supabase with the publishable key, one file per public URL, copied to the pod
+root by the existing deploy command. The InstaPods pod returns 404 for any path
+without a file, so a file per URL is a host requirement as well as an SEO one.
+
+**Hard constraints.** `web/vite.config.ts` globs `**/*.html` into the service
+worker precache, so the generator must run *after* the Vite build or the
+nine-entry app shell becomes one entry per clip. The build must still succeed
+with no `VITE_*` values (ADR 006), so the generator degrades to a logged no-op.
+`src/contracts.py`, the pipeline stages, migrations 001-031, the render geometry
+and the feed's media scheduler are all out of scope.
+
+**Status:** SEO0 implemented locally 2026-09-03, pending deploy and owner Search
+Console verification. SEO4 is deferred — `clips.topic` is null across all 5 514
+published clips — and nothing depends on it.

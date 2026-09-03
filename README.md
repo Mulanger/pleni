@@ -16,6 +16,8 @@ node .\node_modules\vite\bin\vite.js build
 Current InstaPods Git deploy runs from the repository root. Use:
 
 - Install: `cd web && npm ci`
-- Build: `cd web && node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json && node ./node_modules/vite/bin/vite.js build && cd .. && rm -rf ./assets ./index.html ./dist && cp -R web/dist/. ./`
+- Build: `cd web && node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json && node ./node_modules/vite/bin/vite.js build && node seo/prerender.mjs && cd .. && rm -rf ./assets ./index.html ./dist ./klipp ./politiker ./parti ./senaste ./sok ./foljer ./profil ./sparade ./legal ./robots.txt && cp -R web/dist/. ./`
 
 The final copy step is required because the static host serves the pod root.
+`seo/prerender.mjs` writes the crawlable watch pages and must run after the
+Vite build, never before it — see `docs/SEO_PLAN.md`.
