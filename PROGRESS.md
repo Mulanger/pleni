@@ -6197,7 +6197,7 @@ A 390×844 production check mounted the mobile feed and bottom navigation only.
 **Next agent should know:** the light desktop navigation is the approved
 baseline. Do not restore the navy background unless the owner requests it.
 
-## UI20.9 — Reactive account transitions — IN PROGRESS 2026-09-03
+## UI20.9 — Reactive account transitions — DONE 2026-09-03
 
 **Built:** `web/src/clerk.tsx` now subscribes directly to Clerk's settled user
 and session emissions instead of depending only on a later context render. One
@@ -6226,8 +6226,15 @@ position and unsaved UI state while still removing the manual-refresh defect.
 
 **Observations (not fixed, out of scope):** none.
 
-**Blocked / needs a decision:** no implementation blocker. Production asset
-rollout and a live already-signed-in regression check remain.
+**Production evidence:** commit `02947c2` is released from `main` as
+`assets/index-CsWv4FpT.js`. A fresh signed-out 1440×900 Profile load showed the
+login/create-account state. The owner's existing signed-in Chrome session,
+loaded against the same new asset, immediately showed `Mitt konto`, the Profile
+identity and e-mail, sign-out, account-scoped library totals and the enabled
+personalization state. The session was not signed out solely for testing.
 
-**Next agent should know:** release through `main`, verify the new JavaScript
-asset and signed-in desktop Profile on `pleni.se`, then mark UI20.9 `DONE`.
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** account UI must continue to derive from the shared
+`useViewer()` identity. Do not reintroduce a separate Clerk `<Show>` branch in
+Profile or replace the listener with a forced page reload.
