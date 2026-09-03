@@ -6126,3 +6126,35 @@ matrix and production smoke checks are performed.
 **Next agent should know:** UI20.7 can begin with the final local acceptance
 record. Do not mark any UI20 row `DONE` or push/deploy until viewport, signed-in
 and live production evidence is collected.
+
+## UI20.7 — Desktop local acceptance — IN PROGRESS 2026-09-03
+
+**Built:** the complete desktop parity implementation is present locally across
+UI20.0–UI20.6. All top-level and nested routes have real desktop destinations;
+no desktop waiting page remains. This handoff records the automated half of the
+final acceptance without claiming a release.
+
+**Tests:** 85/85 frontend Node tests pass. Frontend TypeScript, Vite production
+build and PWA verification pass; the generated worker contains nine bounded
+app-shell entries and no video/private data. `python tasks.py test lint
+typecheck` passes with 514 tests, 79 deselected, the known `audioop` warning,
+Ruff and strict mypy across 83 source files. `git diff --check` is clean after
+the documentation whitespace correction.
+
+**Contracts touched:** none throughout UI20. No schema migration, media
+backfill, Bunny object or pipeline contract is required.
+
+**Decisions made:** the owner requested implementation first and review later,
+so the branch remains local and no production state is changed. Strict roadmap
+rows remain `IN PROGRESS` because `DONE` requires visual and live evidence.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none. Remaining work is acceptance rather than
+feature implementation: viewport and 125% zoom review, mobile regression,
+Clerk signed-out/signed-in behavior, then push/deploy and live smoke testing.
+
+**Next agent should know:** begin the next session from this clean local branch.
+Run the visual matrix before pushing; if accepted, push the commits in order,
+verify the new InstaPods asset and update each roadmap row to `DONE` with live
+evidence.

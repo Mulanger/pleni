@@ -45,7 +45,7 @@ by the nine listed rows, including the completed UI17 baseline.
 | UI20.4 | Profile, account and onboarding | IN PROGRESS | Locally implemented; production verification deferred until the combined desktop release |
 | UI20.5 | Saved clips and legal pages | IN PROGRESS | Locally implemented; production verification deferred until the combined desktop release |
 | UI20.6 | Cross-route integration and quality | IN PROGRESS | Local route/media/accessibility integration complete; visual and production verification deferred |
-| UI20.7 | Final production acceptance and closeout | NOT STARTED | — |
+| UI20.7 | Final production acceptance and closeout | IN PROGRESS | Local automated gate complete; visual, account and production matrices remain |
 
 **Current completion:** 1 of 9 deliverables is `DONE`.
 
@@ -110,7 +110,7 @@ hierarchy and thin dividers instead of a mosaic of generic cards.
 
 ## UI20.0 — Shared desktop architecture
 
-**Status:** `IN PROGRESS`  
+**Status:** `IN PROGRESS`
 **Depends on:** UI17.  
 **Primary scope:** `web/src/App.tsx`, `web/src/styles.css`,
 `web/src/desktop/*`, focused frontend tests.
@@ -137,7 +137,7 @@ hierarchy and thin dividers instead of a mosaic of generic cards.
 
 ## UI20.1 — Politician and party pages
 
-**Status:** `NOT STARTED`  
+**Status:** `IN PROGRESS`
 **Depends on:** UI20.0.  
 **Primary scope:** shared person/party presentation in `web/src/App.tsx`, desktop
 styles, route/layout tests. Existing data readers stay authoritative.
@@ -169,7 +169,7 @@ styles, route/layout tests. Existing data readers stay authoritative.
 
 ## UI20.2 — Search
 
-**Status:** `NOT STARTED`  
+**Status:** `IN PROGRESS`
 **Depends on:** UI20.0 and UI20.1.  
 **Primary scope:** shared search presentation, desktop styles, existing
 `web/src/search/*` state/route helpers and focused frontend tests.
@@ -289,7 +289,7 @@ existing legal content and route tests.
 
 ## UI20.6 — Cross-route integration and quality
 
-**Status:** `IN PROGRESS`  
+**Status:** `IN PROGRESS`
 **Depends on:** UI20.1–UI20.5.  
 **Primary scope:** desktop integration, accessibility/performance regressions and
 small corrections inside completed UI20 scopes only.
@@ -321,7 +321,7 @@ small corrections inside completed UI20 scopes only.
 
 ## UI20.7 — Production acceptance and closeout
 
-**Status:** `NOT STARTED`  
+**Status:** `IN PROGRESS`
 **Depends on:** UI20.6.  
 **Primary scope:** tests, release evidence, this document, `PROGRESS.md` and
 runbook updates required by observed operations. No feature work.
