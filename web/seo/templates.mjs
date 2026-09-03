@@ -58,6 +58,27 @@ ul.links a{display:inline-block;border:1px solid var(--line);background:var(--pa
 footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
 `.trim();
 
+/**
+ * Styles for prerendered content injected into the app shell.
+ *
+ * Every selector is `seo-` prefixed. The app's own stylesheet owns `#root`
+ * once React mounts, so these rules must not be in a position to fight it.
+ */
+const SEO_CONTENT_STYLES = `
+.seo-hub{max-width:720px;margin:0 auto;padding:20px 20px 64px;color:#f4f5f7;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.seo-hub a{color:#7fb2ff}
+.seo-hub h1{font-size:clamp(22px,5vw,30px);line-height:1.25;margin:0 0 8px}
+.seo-hub p{color:#9aa1ad;font-size:14px;margin:0 0 18px}
+.seo-hub h2{font-size:17px;margin:24px 0 10px}
+.seo-hub ul{list-style:none;padding:0;margin:0;display:grid;gap:8px}
+.seo-hub li{border:1px solid #232833;background:#101319;border-radius:10px;padding:10px 12px}
+.seo-hub li a{display:block;text-decoration:none;font-weight:600;font-size:15px}
+.seo-hub li span{display:block;color:#9aa1ad;font-size:13px;margin-top:2px}
+.seo-hub .seo-inline{display:flex;flex-wrap:wrap;gap:8px}
+.seo-hub .seo-inline li{padding:7px 12px;border-radius:999px}
+.seo-hub .seo-inline li a{font-weight:500;font-size:14px}
+`.trim();
+
 function head({ title, description, canonical, robots, extraHead = "" }) {
   return `    <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -102,6 +123,28 @@ function footer() {
           <li><a href="/legal/terms">Villkor</a></li>
         </ul>
       </footer>`;
+}
+
+/**
+ * A fully static page: brand header, the caller's body, footer.
+ *
+ * Used for pages the app has no route for — watch pages and debate pages — so
+ * nothing hydrates and there is no second version of the content to keep in
+ * agreement.
+ */
+export function renderStaticPage({ title, description, canonical, robots, extraHead, body }) {
+  return document_({
+    title,
+    description,
+    canonical,
+    robots,
+    extraHead,
+    body: `    <div class="wrap">
+${brandHeader()}
+${body}
+${footer()}
+    </div>`
+  });
 }
 
 function paragraphs(text) {
@@ -302,7 +345,10 @@ ${footer()}
  * page whose only content arrives via JavaScript is thin, and 744 identical
  * ones would be duplicate thin pages.
  */
-export function renderShellPage(builtHtml, { title, description, canonical, robots }) {
+export function renderShellPage(
+  builtHtml,
+  { title, description, canonical, robots, graph, prerender }
+) {
   let html = builtHtml;
 
   html = replaceOnce(html, /<title>[\s\S]*?<\/title>/, `<title>${escapeHtml(title)}</title>`);
@@ -332,6 +378,24 @@ export function renderShellPage(builtHtml, { title, description, canonical, robo
       "</head>",
       `  <meta name="robots" content="${escapeHtml(robots)}" />\n  </head>`
     );
+  }
+
+  if (graph) {
+    const block = jsonLd({ "@context": "https://schema.org", "@graph": graph });
+    html = html.replace(
+      "</head>",
+      `  <script type="application/ld+json">\n${block}\n    </script>\n  </head>`
+    );
+  }
+
+  // Content placed inside `#root` is what a crawler sees before the bundle
+  // runs, and it is what gives the watch pages a crawl path that does not
+  // depend on JavaScript. React clears the container on mount, so the app's
+  // own screen replaces it. Both render the same entity from the same rows, so
+  // this is progressive enhancement rather than a second version of the page.
+  if (prerender) {
+    html = replaceOnce(html, /<div id="root"><\/div>/, `<div id="root">${prerender}</div>`);
+    html = html.replace("</head>", `  <style>${SEO_CONTENT_STYLES}</style>\n  </head>`);
   }
 
   return html;

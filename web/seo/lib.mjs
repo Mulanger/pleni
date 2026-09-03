@@ -98,6 +98,25 @@ export function formatSwedishDate(value) {
   }).format(date);
 }
 
+/**
+ * W3C date for `<lastmod>` and `<video:publication_date>`.
+ *
+ * A full timestamp is passed through as-is; a bare `YYYY-MM-DD` stays a bare
+ * date, which the sitemap spec allows and which avoids inventing a time the row
+ * never carried.
+ */
+export function isoDate(value) {
+  if (!value) {
+    return "";
+  }
+  const raw = String(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
 /** ISO 8601 duration for schema.org, e.g. 44.97 seconds -> "PT45S". */
 export function isoDuration(seconds) {
   const total = Math.max(1, Math.round(Number(seconds) || 0));

@@ -189,15 +189,17 @@ Allowed states: `NOT STARTED`, `IN PROGRESS`, `DONE`, `BLOCKED`. A row becomes
 | SEO1 | Path routing alongside hash | IN PROGRESS | Implemented locally 2026-09-03; ships with SEO2 in one deploy |
 | SEO2 | Prerendered clip watch pages | IN PROGRESS | Implemented locally 2026-09-03; 5 514 watch pages + 624 shells generated from production data, 0 skipped |
 | SEO2b | In-app clip route so a watch page can open the feed | NOT STARTED | — |
-| SEO3 | Politician, party and debate hubs | NOT STARTED | — |
+| SEO3 | Politician, party and debate hubs | IN PROGRESS | Implemented locally 2026-09-03; 307 hubs and 377 debate pages generated from production data |
 | SEO4 | Topic pages | DEFERRED | `clips.topic` is null for all 5 514 clips; needs a pipeline taxonomy first. Nothing depends on it |
-| SEO5 | Sitemaps and search-engine submission | NOT STARTED | — |
-| SEO6 | Scheduled rebuild and stale-page cleanup | NOT STARTED | — |
-| SEO7 | Watch-page performance and Core Web Vitals | NOT STARTED | — |
-| SEO8 | Measurement, guardrails and closeout | NOT STARTED | — |
+| SEO5 | Sitemaps and search-engine submission | IN PROGRESS | Implemented locally 2026-09-03; index plus 7 children, 6 205 URLs, all well-formed and inside spec limits. Submission needs the owner |
+| SEO6 | Scheduled rebuild and stale-page cleanup | IN PROGRESS | Workflow and deploy-command cleanup written 2026-09-03; needs an InstaPods deploy-hook URL from the owner |
+| SEO7 | Watch-page performance and Core Web Vitals | IN PROGRESS | Watch pages ship inlined CSS, a preloaded poster and `preload="metadata"`; PageSpeed evidence needs the live site |
+| SEO8 | Measurement, guardrails and closeout | IN PROGRESS | All six guardrails exist as tests plus a CI precache assertion; the four-week measurement needs the live site |
 
-**Current completion:** 0 of 10. SEO4 is deferred on missing data, so the
-reachable target is 9 of 10.
+**Current completion:** 0 of 10 `DONE`. Every chunk except SEO4 and SEO2b is
+implemented and locally verified; each is held at `IN PROGRESS` because the
+remaining acceptance is deployment and owner action, not code. SEO4 is deferred
+on missing data, so the reachable target is 9 of 10.
 
 Update this table in the same commit as the chunk's `PROGRESS.md` handoff.
 Production evidence must name the live URL checked and what was observed. A local

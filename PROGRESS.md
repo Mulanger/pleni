@@ -6416,3 +6416,80 @@ geometry, service worker or feed logic changed.
   Supabase read is 12 paged requests of 500 rows.
 - SEO5 is the natural next chunk: the URL set now exists, so the sitemaps have
   something to list. SEO3 upgrades the entity shells in place.
+
+## SEO3, SEO5, SEO6-SEO8 — hubs, sitemaps and refresh — IN PROGRESS 2026-09-03
+
+**Built:** `web/seo/hubs.mjs` (politician, party and debate pages),
+`web/seo/sitemaps.mjs` (video sitemap, plain sitemaps, sitemap index),
+`renderStaticPage` and the JSON-LD/prerender injection in
+`web/seo/templates.mjs`, hub and sitemap wiring plus `fetchAll`/`groupBy` in
+`web/seo/prerender.mjs`, `.github/workflows/seo-refresh.yml`, two new CI steps,
+`web/tests/seo-hubs-sitemaps.test.mjs`.
+
+**Tests:** 132 frontend Node tests pass, up from 121. TypeScript passes. The
+Vite build passes and the worker still precaches **exactly 9 entries** after the
+prerender writes 6 516 HTML files and 8 XML files. Project acceptance passes:
+514 Python tests, 79 deselected, the known `audioop` warning, Ruff and strict
+mypy over 83 source files.
+
+**Generated against production data 2026-09-03:**
+- 5 514 clip watch pages, 0 skipped.
+- **377 debate pages**, fully static.
+- **307 hubs** (299 politicians with clips + 8 parties) with real prerendered
+  content, plus 307 `noindex` `/klipp` sub-route shells.
+- 10 app shells. 6 516 pages in total.
+- **Sitemap index + 7 children, 6 205 URLs.** Every file parses as XML, the
+  largest is 2.06 MB against a 50 MB limit, and the largest shard holds 2 000
+  URLs against a 50 000 limit. 27 sampled URLs including the first and last
+  each resolve to a real file on disk.
+
+**Local verification:** `/parti/kd` served the SEO title, then React replaced
+the prerendered list with the real Pleni party screen — KD's verified logo,
+873 klipp, 26 politiker, real thumbnails. `/debatt/stod-till-kollektivtrafiken/HD10533`
+rendered fully static: "12 juni 2026 · 14 klipp · 4 talare", clips grouped under
+each speaker with the politician's name linking to their hub.
+
+**Contracts touched:** none.
+
+**Decisions made:**
+- **Politician and party hubs are app shells with prerendered content inside
+  `#root`.** React clears the container on mount, so a direct visit still gets
+  the real app screen while a crawler gets identity, counts and 60 real links to
+  watch pages. Both render the same entity from the same rows, so this is
+  progressive enhancement rather than a second version of the page. Debate pages
+  are fully static because the app has no debate route to hand over to.
+- **Hubs list the 60 most recent clips instead of paginating.** Query-string
+  pagination cannot work on a host that serves files — `/parti/m?sida=2` and
+  `/parti/m` are the same file — so pagination would need real `/sida/<n>`
+  paths. The sitemap is the complete index; a hub's job is clustering and crawl
+  depth. Build real pagination only if the sitemap proves insufficient.
+- The `/politiker/<id>/klipp` and `/parti/<kod>/klipp` routes stay
+  `noindex, follow` and canonicalise to their hub. They are routes the app
+  pushes, not separate pages worth indexing.
+- `robots.txt` gains its `Sitemap:` line from the generator, not from the source
+  file, and only after the index is actually written. A build that cannot reach
+  Supabase therefore ships no sitemap and no pointer to one.
+- `<lastmod>` keeps a bare `YYYY-MM-DD` as a bare date rather than inventing a
+  time the row never carried.
+- SEO6 calls an InstaPods deploy hook if `INSTAPODS_DEPLOY_HOOK` is set and
+  otherwise does nothing but explain itself. It deliberately does **not** fall
+  back to a bot pushing commits to `main` on a schedule; that is the owner's
+  decision and the workflow says so in its header.
+
+**Observations (not fixed, out of scope):**
+- 65 of 364 politicians have no published clip and get no page. Correct.
+- Hub pages carry two JSON-LD blocks: the site-level `Organization`/`WebSite`
+  inherited from `index.html` and the hub's own graph. Their `@id`s differ, so
+  they do not conflict.
+
+**Blocked / needs a decision:** nothing blocking code. Four owner actions
+remain, listed in the next section.
+
+**Next agent should know:**
+- SEO2b is the only unbuilt chunk that is not deferred: an in-app `clip` route
+  so a Google visitor can continue into the feed instead of following a link.
+- CI now runs the prerender in its degraded path and asserts the 9-entry
+  precache, so the ordering trap fails in CI rather than in production.
+- The Chrome extension was not connected during this session
+  (`list_connected_browsers` returned empty), so the InstaPods panel could not
+  be inspected or changed.

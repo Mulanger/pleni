@@ -1,0 +1,70 @@
+# SEO6 — keep the crawlable surface fresh.
+#
+# The pipeline publishes clips continuously from the owner's workstation, but
+# InstaPods only rebuilds on a push to `main`. Without this, a clip published
+# today has no watch page and no sitemap entry until the next code change.
+#
+# A static host cannot route `/sitemap.xml` to a function, so freshness has to
+# come from a rebuild rather than a dynamic endpoint.
+#
+# MECHANISM — read before enabling.
+#
+# The preferred trigger is an InstaPods deploy hook. As of 2026-09-03 no hook
+# has been confirmed, because the panel needs an interactive sign-in. Set the
+# `INSTAPODS_DEPLOY_HOOK` repository secret to that URL and this workflow calls
+# it. With no secret set, the workflow does nothing but say so — it deliberately
+# does NOT fall back to pushing a commit, because a bot writing to `main` on a
+# schedule is a bigger change than it looks and is the owner's call to make.
+#
+# To enable the commit-based fallback instead, set `INSTAPODS_DEPLOY_HOOK` to
+# the literal value `commit` and grant `contents: write` below.
+
+name: SEO refresh
+
+on:
+  schedule:
+    # 04:20 UTC daily — after the workstation's overnight publishing window and
+    # well clear of it, so a rebuild never races a half-written batch.
+    - cron: "20 4 * * *"
+  workflow_dispatch:
+
+# Least privilege by default. The commit fallback needs `contents: write`; leave
+# it read-only until the owner chooses that path.
+permissions:
+  contents: read
+
+concurrency:
+  group: seo-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Trigger a rebuild so new clips get pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Call the InstaPods deploy hook
+        env:
+          HOOK: ${{ secrets.INSTAPODS_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "No INSTAPODS_DEPLOY_HOOK secret is set."
+            echo "Nothing was triggered. New clips will get watch pages on the"
+            echo "next deploy of main. See docs/SEO_PLAN.md, chunk SEO6."
+            exit 0
+          fi
+          if [ "$HOOK" = "commit" ]; then
+            echo "The commit fallback is selected but not implemented here on"
+            echo "purpose: it needs contents: write and an explicit decision."
+            echo "See the header of this file."
+            exit 0
+          fi
+
+          echo "Triggering the InstaPods rebuild."
+          code=$(curl -sS -o /tmp/hook-response -w '%{http_code}' -X POST "$HOOK")
+          echo "HTTP $code"
+          head -c 500 /tmp/hook-response || true
+          case "$code" in
+            2*) echo "Rebuild requested." ;;
+            *)  echo "::error::deploy hook returned HTTP $code"; exit 1 ;;
+          esac

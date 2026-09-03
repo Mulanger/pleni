@@ -98,9 +98,13 @@ test("robots.txt opens the catalogue and closes the account routes", () => {
 });
 
 test("robots.txt names a sitemap only once one exists", () => {
-  // SEO5 adds this line together with the sitemap index it points at. Until
-  // then the absence is deliberate, not an oversight.
+  // `seo/prerender.mjs` appends the `Sitemap:` line to the deployed copy, and
+  // only after it has written the index. Absence here is the mechanism: a
+  // build that cannot reach Supabase ships no sitemap and no pointer to one.
   assert.equal(/^Sitemap:/m.test(robotsTxt), false);
+
+  const generator = read("../seo/prerender.mjs");
+  assert.match(generator, /Sitemap: \$\{ORIGIN\}\/sitemap\.xml/);
 });
 
 test("the precache glob stays narrow enough to exclude generated SEO files", () => {

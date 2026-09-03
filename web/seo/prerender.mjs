@@ -22,7 +22,14 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { clipPath, normalizeClip } from "./lib.mjs";
+import {
+  debatePath,
+  renderDebatePage,
+  renderPartyHub,
+  renderPoliticianHub
+} from "./hubs.mjs";
+import { cleanName, clipPath, isoDate, normalizeClip } from "./lib.mjs";
+import { clipSitemaps, sitemapIndex, urlSitemap } from "./sitemaps.mjs";
 import { ORIGIN, renderClipPage, renderShellPage } from "./templates.mjs";
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -138,28 +145,95 @@ async function writeAppShells(builtHtml) {
 }
 
 /**
- * Entity shells keep `/politiker/<id>` and `/parti/<code>` from 404ing on
- * direct entry. They are `noindex` until SEO3 gives them real hub content.
+ * Politician and party hubs (SEO3), plus the `/klipp` sub-route shells.
+ *
+ * The hub itself carries real prerendered content and is indexable. The
+ * `/klipp` variant is the same entity's in-app clip player, so it stays
+ * `noindex, follow` and canonicalises to the hub: it is a route the app
+ * pushes, not a second page worth indexing.
  */
-async function writeEntityShells(builtHtml, politicianIds) {
-  let written = 0;
-  const targets = [
-    ...politicianIds.flatMap((id) => {
-      const base = `/politiker/${encodeURIComponent(id)}`;
-      return [base, `${base}/klipp`];
-    }),
-    ...PARTY_CODES.flatMap((code) => [`/parti/${code}`, `/parti/${code}/klipp`])
-  ];
+async function writeEntityHubs(builtHtml, { politicians, parties, clipsByPolitician, clipsByParty }) {
+  let hubs = 0;
+  let shells = 0;
 
-  for (const path of targets) {
-    const html = renderShellPage(builtHtml, {
-      title: "Pleni — riksdagsdebatter som korta klipp",
-      description:
-        "Klipp från svenska riksdagsdebatter, med talare, parti, debatt och länk till originalet.",
-      canonical: `${ORIGIN}${path}`,
-      robots: "noindex, follow"
-    });
-    await writePage(path, html);
+  for (const politician of politicians) {
+    const clips = clipsByPolitician.get(politician.id) ?? [];
+    if (clips.length === 0) {
+      continue;
+    }
+    const base = `/politiker/${encodeURIComponent(politician.id)}`;
+    await writePage(base, renderPoliticianHub(builtHtml, politician, clips));
+    hubs += 1;
+
+    await writePage(
+      `${base}/klipp`,
+      renderShellPage(builtHtml, {
+        title: `${cleanName(politician.name) || politician.name} — klipp | Pleni`,
+        description: "Klipp från svenska riksdagsdebatter på Pleni.",
+        canonical: `${ORIGIN}${base}`,
+        robots: "noindex, follow"
+      })
+    );
+    shells += 1;
+  }
+
+  for (const party of parties) {
+    const code = party.code.toLowerCase();
+    const clips = clipsByParty.get(party.code) ?? [];
+    const roster = politicians
+      .filter(
+        (person) => person.party === party.code && (clipsByPolitician.get(person.id)?.length ?? 0) > 0
+      )
+      .sort((a, b) => a.name.localeCompare(b.name, "sv"));
+
+    await writePage(`/parti/${code}`, renderPartyHub(builtHtml, party, roster, clips));
+    hubs += 1;
+
+    await writePage(
+      `/parti/${code}/klipp`,
+      renderShellPage(builtHtml, {
+        title: `${party.name} — klipp | Pleni`,
+        description: "Klipp från svenska riksdagsdebatter på Pleni.",
+        canonical: `${ORIGIN}/parti/${code}`,
+        robots: "noindex, follow"
+      })
+    );
+    shells += 1;
+  }
+
+  return { hubs, shells };
+}
+
+/** Debate pages (SEO3). Fully static — the app has no debate route. */
+async function writeDebatePages(clips) {
+  const byDebate = new Map();
+  for (const clip of clips) {
+    if (!clip.dokid) {
+      continue;
+    }
+    const bucket = byDebate.get(clip.dokid);
+    if (bucket) {
+      bucket.clips.push(clip);
+    } else {
+      byDebate.set(clip.dokid, {
+        debate: {
+          dokid: clip.dokid,
+          title: clip.debateTitle,
+          debate_type: clip.debateType,
+          debate_date: clip.debateDate,
+          source_url: clip.sourceUrl
+        },
+        clips: [clip]
+      });
+    }
+  }
+
+  let written = 0;
+  for (const { debate, clips: debateClips } of byDebate.values()) {
+    if (!debate.title) {
+      continue;
+    }
+    await writePage(debatePath(debate), renderDebatePage(debate, debateClips));
     written += 1;
   }
   return written;
@@ -206,12 +280,166 @@ async function main() {
     await writePage(clipPath(clip), renderClipPage(clip, neighbours));
     written += 1;
   }
-
-  const politicianIds = [...new Set(clips.map((clip) => clip.politicianId).filter(Boolean))];
-  const entityCount = await writeEntityShells(builtHtml, politicianIds);
-
   log("clip watch pages written", { pages: written, skipped, debates: byDebate.size });
-  log("entity shells written", { pages: entityCount, politicians: politicianIds.length });
+
+  const debatePages = await writeDebatePages(clips);
+  log("debate pages written", { pages: debatePages });
+
+  // Hubs need rows the clip join does not carry: portraits, constituency and
+  // Riksdagen's `intressent_id` for `sameAs`, plus the verified party marks.
+  let politicians = [];
+  let parties = [];
+  try {
+    [politicians, parties] = await Promise.all([
+      fetchAll(url, key, "politicians", "id,intressent_id,name,party,role,constituency,avatar_url"),
+      fetchAll(url, key, "party_profiles", "code,name,short_name,color,logo_url,display_order")
+    ]);
+  } catch (error) {
+    log(`hub metadata fetch failed, keeping clip pages only: ${error.message}`);
+    return;
+  }
+
+  const clipsByPolitician = groupBy(clips, (clip) => clip.politicianId);
+  const clipsByParty = groupBy(clips, (clip) => clip.party);
+  const orderedParties = parties
+    .filter((party) => PARTY_CODES.includes(party.code.toLowerCase()))
+    .sort((a, b) => (a.display_order ?? 99) - (b.display_order ?? 99));
+
+  const { hubs, shells } = await writeEntityHubs(builtHtml, {
+    politicians,
+    parties: orderedParties,
+    clipsByPolitician,
+    clipsByParty
+  });
+  log("entity hubs written", { hubs, shells, parties: orderedParties.length });
+
+  const sitemapCount = await writeSitemaps({
+    clips,
+    politicians: politicians.filter(
+      (person) => (clipsByPolitician.get(person.id)?.length ?? 0) > 0
+    ),
+    parties: orderedParties,
+    debates: debateIndex(clips)
+  });
+  log("sitemaps written", { files: sitemapCount });
+}
+
+/** Debate descriptors, newest first, for the sitemap and nothing else. */
+function debateIndex(clips) {
+  const byDokid = new Map();
+  for (const clip of clips) {
+    if (!clip.dokid || !clip.debateTitle || byDokid.has(clip.dokid)) {
+      continue;
+    }
+    byDokid.set(clip.dokid, {
+      dokid: clip.dokid,
+      title: clip.debateTitle,
+      debate_date: clip.debateDate
+    });
+  }
+  return [...byDokid.values()];
+}
+
+/**
+ * Write the sitemap index and its children, then name the index in
+ * `robots.txt`.
+ *
+ * `robots.txt` is patched here rather than shipped with a `Sitemap:` line,
+ * because until this function runs there is no sitemap to point at, and a
+ * crawler sent to a 404 is worse than one sent nowhere.
+ */
+async function writeSitemaps({ clips, politicians, parties, debates }) {
+  const newest = clips
+    .map((clip) => isoDate(clip.publishedAt))
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+
+  const children = [
+    ...clipSitemaps(clips),
+    urlSitemap("/sitemap-debatt.xml", [
+      ...debates.map((debate) => ({
+        loc: `${ORIGIN}${debatePath(debate)}`,
+        lastmod: isoDate(debate.debate_date)
+      }))
+    ]),
+    urlSitemap("/sitemap-politiker.xml", [
+      ...politicians.map((person) => ({
+        loc: `${ORIGIN}/politiker/${encodeURIComponent(person.id)}`
+      }))
+    ]),
+    urlSitemap("/sitemap-parti.xml", [
+      ...parties.map((party) => ({ loc: `${ORIGIN}/parti/${party.code.toLowerCase()}` }))
+    ]),
+    // Indexable app surfaces only. Account routes are `noindex` and excluded.
+    urlSitemap("/sitemap-sidor.xml", [
+      { loc: `${ORIGIN}/` },
+      { loc: `${ORIGIN}/senaste` },
+      { loc: `${ORIGIN}/sok` },
+      { loc: `${ORIGIN}/legal/about` },
+      { loc: `${ORIGIN}/legal/terms` },
+      { loc: `${ORIGIN}/legal/privacy` },
+      { loc: `${ORIGIN}/legal/storage` }
+    ])
+  ];
+
+  for (const child of children) {
+    await writeFile(join(DIST, child.path.replace(/^\//, "")), child.xml, "utf8");
+  }
+  await writeFile(join(DIST, "sitemap.xml"), sitemapIndex(children, newest), "utf8");
+
+  const robotsPath = join(DIST, "robots.txt");
+  const robots = await readFile(robotsPath, "utf8");
+  if (!/^Sitemap:/m.test(robots)) {
+    await writeFile(robotsPath, `${robots.trimEnd()}\n\nSitemap: ${ORIGIN}/sitemap.xml\n`, "utf8");
+  }
+
+  return children.length + 1;
+}
+
+/** Group rows by a key, skipping rows whose key is null. */
+function groupBy(rows, keyOf) {
+  const groups = new Map();
+  for (const row of rows) {
+    const key = keyOf(row);
+    if (!key) {
+      continue;
+    }
+    const bucket = groups.get(key);
+    if (bucket) {
+      bucket.push(row);
+    } else {
+      groups.set(key, [row]);
+    }
+  }
+  return groups;
+}
+
+/** Page through a small public table. */
+async function fetchAll(url, key, table, select) {
+  const rows = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const query = new URLSearchParams({
+      select,
+      order: "id.asc",
+      limit: String(PAGE_SIZE),
+      offset: String(offset)
+    });
+    if (table === "party_profiles") {
+      query.set("order", "display_order.asc");
+    }
+    const response = await fetch(`${url}/rest/v1/${table}?${query}`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" }
+    });
+    if (!response.ok) {
+      throw new Error(`${table} request failed: ${response.status} ${response.statusText}`);
+    }
+    const batch = await response.json();
+    rows.push(...batch);
+    if (batch.length < PAGE_SIZE) {
+      return rows;
+    }
+  }
 }
 
 main().catch((error) => {
