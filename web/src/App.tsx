@@ -1474,6 +1474,44 @@ function App() {
                       onOpenLegal={openLegal}
                       pwa={pwa}
                     />
+                  ) : null,
+                saved:
+                  route.view === "saved" ? (
+                    <SavedScreen
+                      presentation="desktop"
+                      scrollKey="saved"
+                      clips={savedClips}
+                      loading={savedLoading}
+                      error={savedError}
+                      onBack={() => backTo({ view: "tab", tab: "profil", feedMode })}
+                      onPlayClip={openSavedClip}
+                    />
+                  ) : null,
+                "saved-clips":
+                  route.view === "saved-clips" ? (
+                    <CollectionScreen
+                      presentation="desktop"
+                      collection={collection ?? { title: "Sparade klipp", subtitle: "Laddar…", clips: [], startId: null }}
+                      onBack={() => backTo({ view: "saved", tab: "profil", feedMode })}
+                      muted={muted}
+                      setMuted={setMuted}
+                      liked={liked}
+                      saved={saved}
+                      following={following}
+                      onLike={toggleLikeClip}
+                      onSave={toggleSaveClip}
+                      onToggleFollow={toggleFollowPolitician}
+                      onOpenPerson={openPerson}
+                    />
+                  ) : null,
+                legal:
+                  route.view === "legal" ? (
+                    <LegalScreen
+                      presentation="desktop"
+                      page={route.page}
+                      onBack={() => backTo({ view: "tab", tab: "profil", feedMode })}
+                      onNavigate={openLegal}
+                    />
                   ) : null
               }}
             />
@@ -5023,20 +5061,23 @@ function TopicSearchResultsSkeleton() {
 }
 
 function LegalScreen({
+  presentation = "mobile",
   page,
   onBack,
   onNavigate
 }: {
+  presentation?: "mobile" | "desktop";
   page: LegalPageId;
   onBack: () => void;
   onNavigate: (page: LegalPageId) => void;
 }) {
   const document = LEGAL_PAGES[page];
   return (
-    <section className="panel-screen legal-screen">
+    <section className={presentation === "desktop" ? "panel-screen legal-screen legal-screen--desktop" : "panel-screen legal-screen"}>
       <header className="legal-topbar">
-        <button type="button" aria-label="Tillbaka till Profil" onClick={onBack}>
+        <button type="button" className={presentation === "desktop" ? "desktop-back-action" : undefined} aria-label="Tillbaka till Profil" onClick={onBack}>
           <ChevronLeft size={20} />
+          {presentation === "desktop" && <span>Tillbaka till Profil</span>}
         </button>
         <span>Juridisk information</span>
       </header>
@@ -5446,28 +5487,43 @@ function SignedInAccountCard() {
  * a clip do we hand the list to the shared immersive player.
  */
 function SavedScreen({
+  presentation = "mobile",
+  scrollKey = null,
   clips,
   loading,
   error,
   onBack,
   onPlayClip
 }: {
+  presentation?: "mobile" | "desktop";
+  scrollKey?: string | null;
   clips: ClipItem[];
   loading: boolean;
   error: string | null;
   onBack: () => void;
   onPlayClip: (clipId: string) => void;
 }) {
+  const { scrollRef, rememberScroll } = useProfileScrollPosition(
+    scrollKey,
+    presentation === "desktop"
+  );
+  const playClip = (clipId: string) => {
+    if (presentation === "desktop" && scrollKey && scrollRef.current) {
+      desktopProfileScrollPositions.write(scrollKey, scrollRef.current.scrollTop);
+    }
+    onPlayClip(clipId);
+  };
   return (
-    <section className="person-screen saved-screen">
-      <div className="person-topbar">
-        <button onClick={onBack} aria-label="Tillbaka">
+    <section className={presentation === "desktop" ? "person-screen saved-screen saved-screen--desktop" : "person-screen saved-screen"}>
+      <div className={presentation === "desktop" ? "desktop-profile-toolbar" : "person-topbar"}>
+        <button className={presentation === "desktop" ? "desktop-back-action" : undefined} onClick={onBack} aria-label="Tillbaka">
           <ChevronLeft size={24} />
+          {presentation === "desktop" && <span>Tillbaka till Profil</span>}
         </button>
-        <strong>Sparade klipp</strong>
-        <span className="person-topbar-spacer" aria-hidden="true" />
+        {presentation === "mobile" && <strong>Sparade klipp</strong>}
+        {presentation === "mobile" && <span className="person-topbar-spacer" aria-hidden="true" />}
       </div>
-      <div className="panel-scroll person-scroll">
+      <div ref={scrollRef} className="panel-scroll person-scroll" onScroll={rememberScroll}>
         <section className="clip-grid-block">
           <div className="section-label">
             {clips.length} {clips.length === 1 ? "sparat klipp" : "sparade klipp"}
@@ -5491,7 +5547,7 @@ function SavedScreen({
                 <button
                   className="mini-clip"
                   key={clip.id}
-                  onClick={() => onPlayClip(clip.id)}
+                  onClick={() => playClip(clip.id)}
                   aria-label={`Spela: ${clip.title}`}
                 >
                   <img src={clip.thumbUrl} alt="" loading="lazy" />

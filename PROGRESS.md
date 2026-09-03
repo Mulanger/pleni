@@ -6066,3 +6066,31 @@ signed-in browser acceptance are deferred until all desktop chunks are ready.
 
 **Next agent should know:** continue with UI20.5 Saved clips and legal pages.
 Use the shared bounded CollectionScreen and preserve the existing legal copy.
+
+## UI20.5 — Desktop Saved clips and legal pages — IN PROGRESS 2026-09-03
+
+**Built:** Saved now renders the real account archive as a desktop editorial
+thumbnail grid and stores its session scroll position before opening the shared
+bounded `CollectionScreen`. Back returns to the archive. Terms, Privacy,
+Storage and About reuse the canonical `LEGAL_PAGES` copy and hashes in a quiet,
+bounded desktop reading surface with working local page navigation.
+
+**Tests:** 83 frontend Node tests, TypeScript and the Vite production build pass;
+the build still generates the nine-entry PWA app shell. Focused tests cover all
+three desktop route branches, canonical legal content and saved scroll memory.
+
+**Contracts touched:** none. Saved ordering, library guards, legal copy and
+media scheduling remain shared with mobile.
+
+**Decisions made:** the archive chooser never autoplays media; it mounts the
+existing player only after a real saved clip is selected. Legal desktop changes
+reading measure and typography only.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** no implementation blocker. Production smoke
+tests remain deferred until the combined desktop release.
+
+**Next agent should know:** UI20.6 must now treat every route as available,
+remove the obsolete waiting fallback, standardize Escape/back/focus behavior
+and run the media/overflow/mobile regression audit.

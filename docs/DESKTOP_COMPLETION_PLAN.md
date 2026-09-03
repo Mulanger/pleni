@@ -43,7 +43,7 @@ by the nine listed rows, including the completed UI17 baseline.
 | UI20.2 | Search and search-result feed | IN PROGRESS | Locally implemented; production verification deferred until the combined desktop release |
 | UI20.3 | Following | IN PROGRESS | Locally implemented; production verification deferred until the combined desktop release |
 | UI20.4 | Profile, account and onboarding | IN PROGRESS | Locally implemented; production verification deferred until the combined desktop release |
-| UI20.5 | Saved clips and legal pages | NOT STARTED | — |
+| UI20.5 | Saved clips and legal pages | IN PROGRESS | Locally implemented; production verification deferred until the combined desktop release |
 | UI20.6 | Cross-route integration and quality | NOT STARTED | — |
 | UI20.7 | Final production acceptance and closeout | NOT STARTED | — |
 
@@ -259,7 +259,7 @@ styles, PWA placement and focused auth/privacy tests.
 
 ## UI20.5 — Saved clips and legal pages
 
-**Status:** `NOT STARTED`  
+**Status:** `IN PROGRESS`  
 **Depends on:** UI20.0 and UI20.4.  
 **Primary scope:** saved/legal presentation in `web/src/App.tsx`, desktop styles,
 existing legal content and route tests.

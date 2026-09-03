@@ -15,9 +15,9 @@ const routes = [
   { hash: "#/person/alice/clips?clip=c1", id: "person-clips", available: true, action: "history" },
   { hash: "#/party/S", id: "party", available: true, action: "history" },
   { hash: "#/party/S/clips?clip=c1", id: "party-clips", available: true, action: "history" },
-  { hash: "#/profil/saved", id: "saved", available: false, action: "history" },
-  { hash: "#/profil/saved/clips?clip=c1", id: "saved-clips", available: false, action: "history" },
-  { hash: "#/legal/privacy", id: "legal", available: false, action: "history" }
+  { hash: "#/profil/saved", id: "saved", available: true, action: "history" },
+  { hash: "#/profil/saved/clips?clip=c1", id: "saved-clips", available: true, action: "history" },
+  { hash: "#/legal/privacy", id: "legal", available: true, action: "history" }
 ];
 
 test("desktop outlet describes every current AppRoute without changing hashes", () => {
@@ -133,4 +133,17 @@ test("desktop Profile reuses account, preferences, recommendation and PWA action
   assert.match(app, /onDeleteRecommendationData=\{\(\) => void deleteMyRecommendationData\(\)\}/);
   assert.match(app, /className="profile-primary-column"/);
   assert.match(app, /className="profile-secondary-column"/);
+});
+
+test("desktop Saved and legal routes reuse archive playback and canonical documents", () => {
+  const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+
+  assert.match(app, /saved:\s*route\.view === "saved"/);
+  assert.match(app, /<SavedScreen\s+presentation="desktop"/);
+  assert.match(app, /"saved-clips":\s*route\.view === "saved-clips"/);
+  assert.match(app, /collection=\{collection \?\? \{ title: "Sparade klipp"/);
+  assert.match(app, /legal:\s*route\.view === "legal"/);
+  assert.match(app, /<LegalScreen\s+presentation="desktop"/);
+  assert.match(app, /LEGAL_PAGES\[page\]/);
+  assert.match(app, /scrollKey="saved"/);
 });

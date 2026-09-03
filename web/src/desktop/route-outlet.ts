@@ -124,7 +124,7 @@ export function describeDesktopRoute(route: AppRoute): DesktopRouteDescriptor {
       return {
         id: "saved",
         focusKey: "saved",
-        available: false,
+        available: true,
         eyebrow: "Ditt bibliotek",
         title: "Sparade klipp kommer snart",
         description: "Ditt befintliga sparade arkiv finns kvar i mobilappen under tiden.",
@@ -134,7 +134,7 @@ export function describeDesktopRoute(route: AppRoute): DesktopRouteDescriptor {
       return {
         id: "saved-clips",
         focusKey: `saved-clips:${route.startId ?? "first"}`,
-        available: false,
+        available: true,
         eyebrow: "Ditt bibliotek",
         title: "Sparade klipp kommer snart",
         description: "Uppspelningen av ditt sparade arkiv finns kvar i mobilappen under tiden.",
@@ -144,7 +144,7 @@ export function describeDesktopRoute(route: AppRoute): DesktopRouteDescriptor {
       return {
         id: "legal",
         focusKey: `legal:${route.page}`,
-        available: false,
+        available: true,
         eyebrow: "Pleni",
         title: `${LEGAL_TITLES[route.page]} kommer snart`,
         description: "Dokumentet finns kvar i mobilappen medan den läsbara desktopytan byggs.",
