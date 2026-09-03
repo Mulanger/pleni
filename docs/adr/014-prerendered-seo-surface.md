@@ -161,7 +161,7 @@ better metadata. It does not address the problem.
 Two decisions in the original text changed while the chunks were built. Both
 were driven by facts that only surfaced in implementation.
 
-### Politician and party paths carry no decorative slug
+### Politician and party paths carry no decorative slug — REVERSED, see below
 
 The original scheme was `/politiker/<namn-slug>/<uuid>`. It does not survive
 contact with the router. The app pushes these URLs itself and only ever holds
@@ -205,3 +205,47 @@ for a chamber sitting. Measured 2026-09-03: 335 of 377 debates carry a subject,
 title takes "i" instead. Detection is a small title list plus Riksdagen's
 `kam-*` debate-type family; an unknown type keeps the subject reading, which is
 correct for the large majority.
+
+---
+
+## Second amendment — the slug is back — 2026-09-03
+
+The first amendment dropped the decorative slug from politician and party
+paths. That was an over-correction and it is reversed. The canonical paths are:
+
+```
+/politiker/<namn-slug>/<politicians.id>
+/parti/<partinamn-slug>
+```
+
+**What was wrong with the earlier reasoning.** It assumed the app could not
+produce the slug, because a `person` route holds only `personId`. True at the
+moment of navigation — but the app does not need the slug then. Every
+`onOpenPerson` caller has just the id, so the pushed path stays
+`/politiker/<id>`; when the profile row arrives, `App` replaces the URL with the
+canonical slug form. `replaceState`, not `pushState`, because it is the same
+page: history must not grow and Back must not land on the id-only form. Verified
+locally — the URL upgraded, history grew by exactly one entry for the
+navigation, and Back landed on the previous page.
+
+**Both forms are generated.** The slug form is canonical; the id-only form
+serves the same content and its `<link rel="canonical">` points at the slug
+form, so the URL the app pushes before the row arrives can be reloaded or
+shared without a 404 and without competing in the index. Party paths use the
+readable name, and the bare code (`/parti/kd`) remains a working alias for the
+same reason. Internal links — watch-page onward links, breadcrumbs, party
+rosters, sitemaps — all emit the canonical form only.
+
+**Why it is worth the extra machinery.** Words in a URL are a weak ranking
+signal, and the earlier text was right about that. What it undervalued is that
+Google displays the URL in the result, so a readable one affects click-through,
+and a pasted raw URL becomes its own anchor text. 5 891 of 6 516 pages already
+carried keyword slugs; this closes the remaining 307.
+
+**Drift is the real risk, and it is guarded.** `personPathSlug` in
+`web/src/navigation.ts` must produce the same string as `slugify` in
+`web/seo/lib.mjs`, or the app would push a URL the prerenderer never generated
+and a reload would 404. There is no shared module — one side is TypeScript in
+the bundle, the other plain Node in the build — so
+`web/tests/path-routing.test.mjs` compares the two implementations over real
+Swedish names and party names and fails on any divergence.

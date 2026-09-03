@@ -28,7 +28,14 @@ import {
   renderPartyHub,
   renderPoliticianHub
 } from "./hubs.mjs";
-import { cleanName, clipPath, isoDate, normalizeClip } from "./lib.mjs";
+import {
+  cleanName,
+  clipPath,
+  isoDate,
+  normalizeClip,
+  partyPath,
+  politicianPath
+} from "./lib.mjs";
 import { clipSitemaps, sitemapIndex, urlSitemap } from "./sitemaps.mjs";
 import { ORIGIN, renderClipPage, renderShellPage } from "./templates.mjs";
 
@@ -161,24 +168,32 @@ async function writeEntityHubs(builtHtml, { politicians, parties, clipsByPolitic
     if (clips.length === 0) {
       continue;
     }
-    const base = `/politiker/${encodeURIComponent(politician.id)}`;
-    await writePage(base, renderPoliticianHub(builtHtml, politician, clips));
-    hubs += 1;
+    const canonicalPath = politicianPath(politician);
+    const idOnlyPath = `/politiker/${encodeURIComponent(politician.id)}`;
+    const hub = renderPoliticianHub(builtHtml, politician, clips);
 
-    await writePage(
-      `${base}/klipp`,
-      renderShellPage(builtHtml, {
-        title: `${cleanName(politician.name) || politician.name} — klipp | Pleni`,
-        description: "Klipp från svenska riksdagsdebatter på Pleni.",
-        canonical: `${ORIGIN}${base}`,
-        robots: "noindex, follow"
-      })
-    );
+    // The slug form is canonical. The id-only form is generated too, because
+    // the app pushes it before the profile row arrives; it serves the same
+    // content and its canonical link points at the slug form, so a reload or a
+    // shared link never 404s and the duplicate never competes.
+    await writePage(canonicalPath, hub);
+    await writePage(idOnlyPath, hub);
+    hubs += 1;
     shells += 1;
+
+    const clipsShell = renderShellPage(builtHtml, {
+      title: `${cleanName(politician.name) || politician.name} — klipp | Pleni`,
+      description: "Klipp från svenska riksdagsdebatter på Pleni.",
+      canonical: `${ORIGIN}${canonicalPath}`,
+      robots: "noindex, follow"
+    });
+    await writePage(`${canonicalPath}/klipp`, clipsShell);
+    await writePage(`${idOnlyPath}/klipp`, clipsShell);
+    shells += 2;
   }
 
   for (const party of parties) {
-    const code = party.code.toLowerCase();
+    const partyBase = partyPath(party);
     const clips = clipsByParty.get(party.code) ?? [];
     const roster = politicians
       .filter(
@@ -186,19 +201,22 @@ async function writeEntityHubs(builtHtml, { politicians, parties, clipsByPolitic
       )
       .sort((a, b) => a.name.localeCompare(b.name, "sv"));
 
-    await writePage(`/parti/${code}`, renderPartyHub(builtHtml, party, roster, clips));
-    hubs += 1;
+    const partyHub = renderPartyHub(builtHtml, party, roster, clips);
+    const partyClipsShell = renderShellPage(builtHtml, {
+      title: `${party.name} — klipp | Pleni`,
+      description: "Klipp från svenska riksdagsdebatter på Pleni.",
+      canonical: `${ORIGIN}${partyBase}`,
+      robots: "noindex, follow"
+    });
 
-    await writePage(
-      `/parti/${code}/klipp`,
-      renderShellPage(builtHtml, {
-        title: `${party.name} — klipp | Pleni`,
-        description: "Klipp från svenska riksdagsdebatter på Pleni.",
-        canonical: `${ORIGIN}/parti/${code}`,
-        robots: "noindex, follow"
-      })
-    );
-    shells += 1;
+    // Same reasoning as politicians: the readable name is canonical, and the
+    // bare code stays a working alias because `navigation.ts` accepts both.
+    for (const base of new Set([partyBase, `/parti/${party.code.toLowerCase()}`])) {
+      await writePage(base, partyHub);
+      await writePage(`${base}/klipp`, partyClipsShell);
+      shells += 2;
+    }
+    hubs += 1;
   }
 
   return { hubs, shells };
@@ -364,12 +382,10 @@ async function writeSitemaps({ clips, politicians, parties, debates }) {
       }))
     ]),
     urlSitemap("/sitemap-politiker.xml", [
-      ...politicians.map((person) => ({
-        loc: `${ORIGIN}/politiker/${encodeURIComponent(person.id)}`
-      }))
+      ...politicians.map((person) => ({ loc: `${ORIGIN}${politicianPath(person)}` }))
     ]),
     urlSitemap("/sitemap-parti.xml", [
-      ...parties.map((party) => ({ loc: `${ORIGIN}/parti/${party.code.toLowerCase()}` }))
+      ...parties.map((party) => ({ loc: `${ORIGIN}${partyPath(party)}` }))
     ]),
     // Indexable app surfaces only. Account routes are `noindex` and excluded.
     urlSitemap("/sitemap-sidor.xml", [

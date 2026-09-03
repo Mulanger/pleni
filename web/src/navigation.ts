@@ -2,15 +2,25 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { LegalPageId } from "./legal";
 import type { FeedMode, PartyCode, Tab } from "./types";
 
+/**
+ * `personSlug` is decorative and optional.
+ *
+ * Identity is `personId` — `public.politicians.id`, the `Q-2` gate — and every
+ * comparison in the app must key on it. The slug only shapes the URL, so that a
+ * politician's page reads `/politiker/andreas-carlson/<id>` rather than a bare
+ * uuid. Two routes differing only in slug are the same route; the app pushes
+ * the id form and upgrades the URL once the name is known.
+ */
 export type AppRoute =
   | { view: "tab"; tab: Tab; feedMode: FeedMode }
-  | { view: "person"; tab: Tab; feedMode: FeedMode; personId: string }
+  | { view: "person"; tab: Tab; feedMode: FeedMode; personId: string; personSlug?: string }
   | {
       view: "person-clips";
       tab: Tab;
       feedMode: FeedMode;
       personId: string;
       startId: string | null;
+      personSlug?: string;
     }
   | { view: "party"; tab: Tab; feedMode: FeedMode; partyCode: PartyCode }
   | {
@@ -155,6 +165,26 @@ export function routeFromHash(hash: string): AppRoute {
  * title, heading and body, not from the URL. See ADR 014.
  */
 
+/**
+ * Party paths use the readable name, because the eight codes are a closed and
+ * stable set so the mapping is a compile-time constant. The bare code stays an
+ * accepted alias in both directions, so no link can rot.
+ */
+const PARTY_PATH_SLUGS: Record<PartyCode, string> = {
+  S: "socialdemokraterna",
+  M: "moderaterna",
+  SD: "sverigedemokraterna",
+  C: "centerpartiet",
+  V: "vansterpartiet",
+  KD: "kristdemokraterna",
+  MP: "miljopartiet",
+  L: "liberalerna",
+  // `NONE` is a display bucket for party-less speakers, never an addressable
+  // party. `pathForRoute` is never reached with it because `openParty` returns
+  // early, and the parser rejects it.
+  NONE: ""
+};
+
 const PARTY_PATH_CODES: Record<string, PartyCode> = {
   s: "S",
   m: "M",
@@ -163,8 +193,59 @@ const PARTY_PATH_CODES: Record<string, PartyCode> = {
   v: "V",
   kd: "KD",
   mp: "MP",
-  l: "L"
+  l: "L",
+  ...Object.fromEntries(
+    (Object.entries(PARTY_PATH_SLUGS) as [PartyCode, string][])
+      .filter(([code, slug]) => slug !== "" && code !== "NONE")
+      .map(([code, slug]) => [slug, code])
+  )
 };
+
+/** The readable party segment, e.g. `moderaterna`. */
+export function partyPathSlug(code: PartyCode): string {
+  return PARTY_PATH_SLUGS[code] || code.toLowerCase();
+}
+
+const SLUG_TRANSLITERATION: Record<string, string> = {
+  å: "a",
+  ä: "a",
+  ö: "o",
+  á: "a",
+  à: "a",
+  é: "e",
+  è: "e",
+  ë: "e",
+  í: "i",
+  ó: "o",
+  ô: "o",
+  ú: "u",
+  ü: "u",
+  ø: "o",
+  æ: "ae",
+  ß: "ss",
+  ñ: "n",
+  ç: "c"
+};
+
+/**
+ * The decorative name segment for a politician path.
+ *
+ * This must produce the same string as `slugify` in `web/seo/lib.mjs`, or the
+ * app would push a URL the prerenderer never generated and a reload would 404.
+ * `web/tests/path-routing.test.mjs` compares the two implementations over real
+ * names and fails on drift. Pass an already-cleaned name — App owns `cleanName`.
+ */
+export function personPathSlug(name: string): string {
+  let out = "";
+  for (const character of (name ?? "").toLowerCase()) {
+    out += SLUG_TRANSLITERATION[character] ?? character;
+  }
+  return out
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .replace(/-+$/g, "");
+}
 
 function partyCodeFromPath(value: string | null): PartyCode | null {
   return value !== null && value.toLowerCase() in PARTY_PATH_CODES
@@ -219,19 +300,33 @@ export function routeFromPath(pathname: string, search = ""): AppRoute {
   const from: Tab = isTab(fromValue) ? fromValue : "sok";
 
   if (segments[0] === "politiker") {
-    const personId = decodeSegment(rawSegments[1]);
+    // Four shapes, all decidable because a politician id is a uuid and can
+    // never be the literal segment `klipp`:
+    //   /politiker/<id>                 /politiker/<slug>/<id>
+    //   /politiker/<id>/klipp           /politiker/<slug>/<id>/klipp
+    const hasSlug = rawSegments.length >= 3 && segments[2] !== "klipp";
+    const personId = decodeSegment(rawSegments[hasSlug ? 2 : 1]);
     if (!personId) {
       return DEFAULT_ROUTE;
     }
-    return segments[2] === "klipp"
+    const personSlug = hasSlug ? segments[1] : undefined;
+    const wantsClips = segments[hasSlug ? 3 : 2] === "klipp";
+    return wantsClips
       ? {
           view: "person-clips",
           tab: from,
           feedMode: mode,
           personId,
-          startId: params.get("clip")
+          startId: params.get("clip"),
+          ...(personSlug ? { personSlug } : {})
         }
-      : { view: "person", tab: from, feedMode: mode, personId };
+      : {
+          view: "person",
+          tab: from,
+          feedMode: mode,
+          personId,
+          ...(personSlug ? { personSlug } : {})
+        };
   }
   if (segments[0] === "parti") {
     const code = partyCodeFromPath(decodeSegment(rawSegments[1]));
@@ -287,7 +382,7 @@ export function pathForRoute(route: AppRoute): string {
     params.set("from", route.tab);
   }
   if (route.view === "party" || route.view === "party-clips") {
-    const base = `/parti/${route.partyCode.toLowerCase()}`;
+    const base = `/parti/${partyPathSlug(route.partyCode)}`;
     if (route.view === "party") {
       return withQuery(base, params);
     }
@@ -297,7 +392,8 @@ export function pathForRoute(route: AppRoute): string {
     return withQuery(`${base}/klipp`, params);
   }
 
-  const base = `/politiker/${encodeURIComponent(route.personId)}`;
+  const prefix = route.personSlug ? `/politiker/${route.personSlug}` : "/politiker";
+  const base = `${prefix}/${encodeURIComponent(route.personId)}`;
   if (route.view === "person") {
     return withQuery(base, params);
   }

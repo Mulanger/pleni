@@ -15,6 +15,7 @@
  */
 
 import {
+  PARTY_NAMES,
   cleanName,
   clipHeading,
   clipPath,
@@ -22,6 +23,9 @@ import {
   formatSwedishDate,
   jsonLd,
   metaDescription,
+  partyPath,
+  partyPathForCode,
+  politicianPath,
   slugify
 } from "./lib.mjs";
 import { ORIGIN, renderShellPage, renderStaticPage } from "./templates.mjs";
@@ -77,7 +81,7 @@ function breadcrumbs(name, canonical) {
 
 /** A politician hub: identity, counts and their most recent clips. */
 export function renderPoliticianHub(builtHtml, politician, clips) {
-  const canonical = `${ORIGIN}/politiker/${encodeURIComponent(politician.id)}`;
+  const canonical = `${ORIGIN}${politicianPath(politician)}`;
   const name = cleanName(politician.name) || politician.name;
   const party = politician.party ? ` (${politician.party})` : "";
   const roleText = politician.role === "minister" ? "Statsråd" : "Riksdagsledamot";
@@ -120,9 +124,9 @@ export function renderPoliticianHub(builtHtml, politician, clips) {
   const partySection = politician.party
     ? `      <h2>Parti</h2>
       <ul class="seo-inline">
-        <li><a href="/parti/${escapeHtml(
-          politician.party.toLowerCase()
-        )}">${escapeHtml(politician.party)}</a></li>
+        <li><a href="${escapeHtml(partyPathForCode(politician.party))}">${escapeHtml(
+          PARTY_NAMES[politician.party] ?? politician.party
+        )}</a></li>
       </ul>`
     : "";
 
@@ -141,7 +145,7 @@ ${partySection}
 
 /** A party hub: mark, counts, roster and recent clips. */
 export function renderPartyHub(builtHtml, party, politicians, clips) {
-  const canonical = `${ORIGIN}/parti/${party.code.toLowerCase()}`;
+  const canonical = `${ORIGIN}${partyPath(party)}`;
   const title = `${party.name} — klipp från riksdagsdebatter | Pleni`;
   const description = metaDescription(
     `${party.name} i riksdagen: ${clips.length} klipp från ${politicians.length} politiker, ` +
@@ -173,7 +177,7 @@ export function renderPartyHub(builtHtml, party, politicians, clips) {
   const roster = politicians
     .map(
       (person) =>
-        `        <li><a href="/politiker/${encodeURIComponent(person.id)}">${escapeHtml(
+        `        <li><a href="${escapeHtml(politicianPath(person))}">${escapeHtml(
           cleanName(person.name) || person.name
         )}</a></li>`
     )

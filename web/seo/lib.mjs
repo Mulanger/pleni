@@ -243,6 +243,45 @@ function debatePhrase(clip) {
   return isSessionTitle(clip) ? ` i ${clip.debateTitle}` : ` om ${clip.debateTitle}`;
 }
 
+/** Party names by code. A clip row carries only the code. */
+export const PARTY_NAMES = {
+  S: "Socialdemokraterna",
+  M: "Moderaterna",
+  SD: "Sverigedemokraterna",
+  C: "Centerpartiet",
+  V: "Vänsterpartiet",
+  KD: "Kristdemokraterna",
+  MP: "Miljöpartiet",
+  L: "Liberalerna"
+};
+
+/**
+ * The canonical path for a politician hub.
+ *
+ * The name slug is decorative; `politicians.id` in the final segment is the
+ * identity (`Q-2`). `/politiker/<id>` without the slug is generated too and
+ * canonicalises here, because the app pushes that form before the profile row
+ * arrives and a reloaded or shared URL must never 404.
+ *
+ * `personPathSlug` in `web/src/navigation.ts` must produce the same slug as
+ * `slugify` does here; `web/tests/path-routing.test.mjs` fails on drift.
+ */
+export function politicianPath(politician) {
+  const name = cleanName(politician.name) || politician.name || "";
+  return `/politiker/${slugify(name)}/${encodeURIComponent(politician.id)}`;
+}
+
+/** The party hub path, using the readable name rather than the code. */
+export function partyPath(party) {
+  const name = party.name || PARTY_NAMES[party.code] || party.code || "";
+  return `/parti/${slugify(name)}`;
+}
+
+/** The party path for a clip, which carries only the party code. */
+export function partyPathForCode(code) {
+  return partyPath({ code, name: PARTY_NAMES[code] });
+}
+
 /** Page title. Never trusts `clips.title` alone — see the note in ADR 014. */
 export function clipTitle(clip) {
   const date = formatSwedishDate(clip.debateDate);

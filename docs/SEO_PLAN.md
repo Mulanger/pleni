@@ -105,19 +105,22 @@ slug.
 
 ```
 /klipp/<beskrivande-slug>/<clip_id>
-/politiker/<politicians.id>
-/politiker/<politicians.id>/klipp
-/parti/<kod>
-/parti/<kod>/klipp
-/debatt/<beskrivande-slug>/<dokid>      (SEO3)
-/amne/<amnes-slug>                      (SEO4, deferred)
+/politiker/<namn-slug>/<politicians.id>          canonical
+/politiker/<politicians.id>                      alias, canonicalised
+/parti/<partinamn-slug>                          canonical
+/parti/<kod>                                     alias, canonicalised
+/debatt/<beskrivande-slug>/<dokid>
+/amne/<amnes-slug>                               (SEO4, deferred)
 ```
 
-**Amended during SEO1** (see ADR 014's amendment): politician and party paths
-carry **no decorative slug**. The app pushes those URLs itself and only holds
-the id, so a slug would give one entity two URLs and one page two history
-entries — and every pushed URL needs a generated file, because the pod 404s the
-rest. Clip paths keep their slug because nothing in the app pushes them.
+**Settled after SEO3** (ADR 014, second amendment): every path carries its
+readable slug. `/politiker/<namn-slug>/<id>` and `/parti/<partinamn-slug>` are
+canonical. The app pushes `/politiker/<id>` because a route holds only the id,
+then replaces the URL with the canonical form once the profile row arrives —
+`replaceState`, so history does not grow and Back does not land on the id-only
+form. Both forms are generated and the id-only one canonicalises to the slug
+form, so no pushed URL can 404 and no duplicate competes. The bare party code
+stays a working alias.
 
 **Why the id gets its own segment.** `clip_id` is `{dokid}_{anforande_id}_c{NN}`.
 We do not control `anforande_id`'s character set, so we cannot assume the id is

@@ -20,7 +20,9 @@ import {
   formatSwedishDate,
   isoDuration,
   jsonLd,
-  metaDescription
+  metaDescription,
+  partyPathForCode,
+  politicianPath
 } from "./lib.mjs";
 
 export const ORIGIN = "https://pleni.se";
@@ -201,7 +203,7 @@ export function renderClipPage(clip, related = []) {
               "@type": "ListItem",
               position: 2,
               name: clip.name,
-              item: `${ORIGIN}/politiker/${encodeURIComponent(clip.politicianId)}`
+              item: `${ORIGIN}${politicianPath({ id: clip.politicianId, name: clip.name })}`
             }
           ]
         : []),
@@ -270,10 +272,12 @@ ${related
 
   const navLinks = [
     clip.politicianId
-      ? `        <li><a href="/politiker/${encodeURIComponent(clip.politicianId)}">Alla klipp med ${escapeHtml(clip.name)}</a></li>`
+      ? `        <li><a href="${escapeHtml(
+          politicianPath({ id: clip.politicianId, name: clip.name })
+        )}">Alla klipp med ${escapeHtml(clip.name)}</a></li>`
       : "",
     clip.party
-      ? `        <li><a href="/parti/${escapeHtml(clip.party.toLowerCase())}">${escapeHtml(clip.party)}</a></li>`
+      ? `        <li><a href="${escapeHtml(partyPathForCode(clip.party))}">${escapeHtml(clip.party)}</a></li>`
       : "",
     `        <li><a href="/senaste">Senaste klippen</a></li>`
   ]
@@ -285,7 +289,9 @@ ${brandHeader()}
       <nav class="crumbs">
         <a href="/">Pleni</a> ›${
           clip.politicianId
-            ? ` <a href="/politiker/${encodeURIComponent(clip.politicianId)}">${escapeHtml(clip.name)}</a> ›`
+            ? ` <a href="${escapeHtml(
+                politicianPath({ id: clip.politicianId, name: clip.name })
+              )}">${escapeHtml(clip.name)}</a> ›`
             : ""
         } ${escapeHtml(clip.debateTitle || "Klipp")}
       </nav>

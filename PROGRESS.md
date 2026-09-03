@@ -6493,3 +6493,56 @@ remain, listed in the next section.
 - The Chrome extension was not connected during this session
   (`list_connected_browsers` returned empty), so the InstaPods panel could not
   be inspected or changed.
+
+## SEO follow-up — readable slugs in every URL — IN PROGRESS 2026-09-03
+
+**Built:** `partyPathSlug`, `personPathSlug` and slug-aware path parsing in
+`web/src/navigation.ts`; an optional decorative `personSlug` on the `person` and
+`person-clips` routes; a URL-upgrade effect in `web/src/App.tsx`;
+`politicianPath`, `partyPath`, `partyPathForCode` and `PARTY_NAMES` in
+`web/seo/lib.mjs`, with every internal link, breadcrumb and sitemap entry
+switched to the canonical form; two new tests including the slug drift guard.
+
+**Tests:** 136 frontend Node tests pass, up from 132. TypeScript passes. The
+Vite build passes and the worker still precaches exactly 9 entries. Project
+acceptance passes: 514 Python tests, 79 deselected, Ruff and strict mypy over 83
+source files.
+
+**Why this reverses an earlier decision.** The first ADR 014 amendment dropped
+the slug from politician and party paths, reasoning that the app pushes those
+URLs and holds only the id. That was an over-correction. The app does not need
+the slug at navigation time: it pushes `/politiker/<id>`, and when the profile
+row arrives `App` replaces the URL with `/politiker/<namn-slug>/<id>`. The owner
+pushed back on losing the slug and was right to.
+
+**Generated against production 2026-09-03:** 5 514 watch pages, 377 debate
+pages, 307 hubs and 929 shells — the shell count rose from 307 because each
+politician and party now has both the canonical slug path and the id/code alias,
+plus their `/klipp` sub-routes. Sitemaps list the canonical form only.
+`/parti/kd` canonicalises to `/parti/kristdemokraterna`;
+`/politiker/<id>` canonicalises to `/politiker/andreas-carlson/<id>`.
+
+**Local verification:** loading `/politiker/490b6787-…` upgraded the URL to
+`/politiker/andreas-carlson/490b6787-…`, history grew by exactly one entry for
+the navigation rather than two, and Back landed on `/senaste` instead of the
+id-only form. `/parti/moderaterna` served the party hub.
+
+**Contracts touched:** none. `AppRoute` gained an optional decorative field;
+identity is still `personId`, and every comparison in the app keys on it.
+
+**Decisions made:**
+- Both URL forms are generated and the alias canonicalises to the slug form, so
+  a URL the app pushed before the row arrived can be reloaded or shared without
+  a 404 and without competing in the index.
+- `personPathSlug` (TypeScript, in the bundle) and `slugify` (plain Node, in the
+  build) are separate implementations with a drift test over real Swedish names,
+  following the same pattern as the search ranking constants. There is no shared
+  module because the two run in different toolchains.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** if you change either slug function, the drift test
+in `web/tests/path-routing.test.mjs` is the one that fails. Fix both sides; do
+not relax the test.
