@@ -5883,3 +5883,50 @@ roadmap so no further identifier collision is introduced.
 based on current `origin/main`; do not modify or clean the owner's dirty local
 backfill branch. Update both the roadmap dashboard and this ledger at each chunk
 boundary.
+
+## UI20.0 — Shared desktop architecture — IN PROGRESS 2026-09-03
+
+**Built:** `web/src/desktop/route-outlet.ts` exhaustively describes every
+existing `AppRoute`; `web/src/desktop/DesktopRouteOutlet.tsx` selects the released
+Home feed or an honest route-specific pending surface; and
+`web/src/desktop/primitives.tsx` provides the shared page, header, section,
+loading/empty/error and focus-restoration primitives. `web/src/App.tsx` now uses
+one route-aware desktop outlet, while explicit desktop/mobile keys force clean
+surface teardown when the viewport crosses a product boundary. Desktop styling
+locks the navy Pleni navigation, warm workspace, restrained dividers, visible
+focus and reduced-motion behavior.
+
+**Tests:** 77 Node tests passed, including exhaustive route descriptors, direct
+hash selection, one shared focus boundary and mutually exclusive surfaces.
+TypeScript, Vite production build and PWA verification passed. Project
+acceptance: 514 passed, 79 deselected, one known `audioop` deprecation warning;
+Ruff and mypy passed.
+
+**Visual verification:** local 1100×720 rendered the route-specific Search
+surface with navy navigation, focus on `tab:sok`, zero videos and no horizontal
+overflow. Direct `#/person/alice?from=sok`, browser Back and Forward restored
+the correct route heading, active navigation and focus key. At 1099×720 only the
+phone gate mounted; at 390×844 only the mobile app mounted. Neither surface had
+horizontal overflow.
+
+**Contracts touched:** none. No database migration, video rendition, Bunny
+object, Supabase reader or mobile product logic changed.
+
+**Decisions made:** unsupported routes remain explicit, route-aware waiting
+surfaces until their own UI20 chunk is accepted. Route data and navigation stay
+owned by `App`; desktop primitives are presentation-only. UI19 comments remain
+hidden.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** no product decision is blocked. Commit `2968d16`
+and the UI20 roadmap commit are on `origin/main`, but both `pleni.se` and the pod
+hostname still served the previous light-sidebar bundle during the immediate
+post-push checks. UI20.0 remains `IN PROGRESS` until InstaPods serves the new
+asset and the live desktop/mobile smoke checks pass.
+
+**Next agent should know:** first recheck the deployed asset; do not reimplement
+or repush the frontend. When the navy route-aware outlet is live, record the
+production viewport evidence, move the roadmap row to `DONE`, update completion
+to 2 of 9 and commit/push the documentation closeout. UI20.1 is next only after
+that gate.

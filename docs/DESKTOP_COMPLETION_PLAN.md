@@ -38,7 +38,7 @@ by the nine listed rows, including the completed UI17 baseline.
 | Chunk | Deliverable | Status | Production evidence |
 |---|---|---|---|
 | UI17 | Desktop shell, Home feed, inspector and debate feed | DONE | Released 2026-09-02; see `PROGRESS.md` |
-| UI20.0 | Shared desktop architecture and route outlet | NOT STARTED | — |
+| UI20.0 | Shared desktop architecture and route outlet | IN PROGRESS | `2968d16` on `main`; InstaPods still served the prior bundle at the first release check |
 | UI20.1 | Politician and party pages | NOT STARTED | — |
 | UI20.2 | Search and search-result feed | NOT STARTED | — |
 | UI20.3 | Following | NOT STARTED | — |
