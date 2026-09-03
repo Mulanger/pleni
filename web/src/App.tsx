@@ -1138,6 +1138,34 @@ function App() {
     navigate({ view: "legal", tab: "profil", feedMode, page });
   };
 
+  const closeDesktopRoute = useCallback(() => {
+    if (showingSearchFeed) {
+      closeTopicSearchFeed();
+      return;
+    }
+    switch (route.view) {
+      case "person":
+      case "party":
+        backTo({ view: "tab", tab: route.tab, feedMode });
+        return;
+      case "person-clips":
+        backTo({ view: "person", tab: route.tab, feedMode, personId: route.personId });
+        return;
+      case "party-clips":
+        backTo({ view: "party", tab: route.tab, feedMode, partyCode: route.partyCode });
+        return;
+      case "saved":
+      case "legal":
+        backTo({ view: "tab", tab: "profil", feedMode });
+        return;
+      case "saved-clips":
+        backTo({ view: "saved", tab: "profil", feedMode });
+        return;
+      case "tab":
+        return;
+    }
+  }, [backTo, feedMode, route, showingSearchFeed]);
+
   useEffect(() => {
     if (route.view === "person-clips") {
       setCollection({
@@ -1287,8 +1315,10 @@ function App() {
           <div className="desktop-content">
             <DesktopRouteOutlet
               route={route}
-              onHome={() => navigate({ view: "tab", tab: "hem", feedMode })}
-              onBack={() => backTo({ view: "tab", tab, feedMode })}
+              surfaceFocusKey={
+                showingSearchFeed ? searchFeedCollection?.historyId ?? "search-feed" : null
+              }
+              onEscape={closeDesktopRoute}
               surfaces={{
                 home: (
                   <FeedScreen

@@ -44,7 +44,7 @@ by the nine listed rows, including the completed UI17 baseline.
 | UI20.3 | Following | IN PROGRESS | Locally implemented; production verification deferred until the combined desktop release |
 | UI20.4 | Profile, account and onboarding | IN PROGRESS | Locally implemented; production verification deferred until the combined desktop release |
 | UI20.5 | Saved clips and legal pages | IN PROGRESS | Locally implemented; production verification deferred until the combined desktop release |
-| UI20.6 | Cross-route integration and quality | NOT STARTED | — |
+| UI20.6 | Cross-route integration and quality | IN PROGRESS | Local route/media/accessibility integration complete; visual and production verification deferred |
 | UI20.7 | Final production acceptance and closeout | NOT STARTED | — |
 
 **Current completion:** 1 of 9 deliverables is `DONE`.
@@ -289,7 +289,7 @@ existing legal content and route tests.
 
 ## UI20.6 — Cross-route integration and quality
 
-**Status:** `NOT STARTED`  
+**Status:** `IN PROGRESS`  
 **Depends on:** UI20.1–UI20.5.  
 **Primary scope:** desktop integration, accessibility/performance regressions and
 small corrections inside completed UI20 scopes only.

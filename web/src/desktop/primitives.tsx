@@ -4,9 +4,11 @@ import { AlertCircle, ChevronLeft, Home, LoaderCircle } from "lucide-react";
 
 export function DesktopRouteFrame({
   focusKey,
+  onEscape,
   children
 }: {
   focusKey: string;
+  onEscape?: () => void;
   children: ReactNode;
 }) {
   const routeRef = useRef<HTMLDivElement>(null);
@@ -14,6 +16,25 @@ export function DesktopRouteFrame({
   useEffect(() => {
     routeRef.current?.focus({ preventScroll: true });
   }, [focusKey]);
+
+  useEffect(() => {
+    if (!onEscape) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) {
+        return;
+      }
+      const target = event.target;
+      if (target instanceof Element && target.closest('[role="dialog"]')) {
+        return;
+      }
+      event.preventDefault();
+      onEscape();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onEscape]);
 
   return (
     <div ref={routeRef} className="desktop-route-frame" tabIndex={-1} data-route-key={focusKey}>

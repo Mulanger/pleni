@@ -26,8 +26,8 @@ export type DesktopRouteDescriptor = {
 const TAB_DESCRIPTORS = {
   foljer: {
     id: "following",
-    title: "Följer kommer snart",
-    description: "Dina följda politiker och partier finns kvar i mobilappen medan desktopvyn byggs."
+    title: "Följer",
+    description: "Dina följda politiker och partier."
   },
   sok: {
     id: "search",
@@ -36,8 +36,8 @@ const TAB_DESCRIPTORS = {
   },
   profil: {
     id: "profile",
-    title: "Profil kommer snart",
-    description: "Konto, sparade klipp och personliga inställningar finns kvar i mobilappen under tiden."
+    title: "Profil",
+    description: "Konto, sparade klipp och personliga inställningar."
   }
 } as const;
 
@@ -86,8 +86,8 @@ export function describeDesktopRoute(route: AppRoute): DesktopRouteDescriptor {
         focusKey: `person:${route.personId}`,
         available: true,
         eyebrow: "Politiker",
-        title: "Politikersidan kommer snart",
-        description: "Profil, uppdrag och publicerade klipp finns kvar i mobilappen medan desktopvyn byggs.",
+        title: "Politiker",
+        description: "Profil, uppdrag och publicerade klipp.",
         backAction: "history"
       };
     case "person-clips":
@@ -96,8 +96,8 @@ export function describeDesktopRoute(route: AppRoute): DesktopRouteDescriptor {
         focusKey: `person-clips:${route.personId}:${route.startId ?? "first"}`,
         available: true,
         eyebrow: "Politiker",
-        title: "Politikerns klipp kommer snart",
-        description: "Den fokuserade klippsamlingen öppnas fortfarande som vanligt i mobilappen.",
+        title: "Politikerns klipp",
+        description: "Fokuserad klippsamling.",
         backAction: "history"
       };
     case "party":
@@ -106,8 +106,8 @@ export function describeDesktopRoute(route: AppRoute): DesktopRouteDescriptor {
         focusKey: `party:${route.partyCode}`,
         available: true,
         eyebrow: "Parti",
-        title: "Partisidan kommer snart",
-        description: "Partiets politiker och publicerade klipp finns kvar i mobilappen medan desktopvyn byggs.",
+        title: "Parti",
+        description: "Partiets politiker och publicerade klipp.",
         backAction: "history"
       };
     case "party-clips":
@@ -116,8 +116,8 @@ export function describeDesktopRoute(route: AppRoute): DesktopRouteDescriptor {
         focusKey: `party-clips:${route.partyCode}:${route.startId ?? "first"}`,
         available: true,
         eyebrow: "Parti",
-        title: "Partiets klipp kommer snart",
-        description: "Den fokuserade klippsamlingen öppnas fortfarande som vanligt i mobilappen.",
+        title: "Partiets klipp",
+        description: "Fokuserad klippsamling.",
         backAction: "history"
       };
     case "saved":
@@ -126,8 +126,8 @@ export function describeDesktopRoute(route: AppRoute): DesktopRouteDescriptor {
         focusKey: "saved",
         available: true,
         eyebrow: "Ditt bibliotek",
-        title: "Sparade klipp kommer snart",
-        description: "Ditt befintliga sparade arkiv finns kvar i mobilappen under tiden.",
+        title: "Sparade klipp",
+        description: "Ditt sparade arkiv.",
         backAction: "history"
       };
     case "saved-clips":
@@ -136,8 +136,8 @@ export function describeDesktopRoute(route: AppRoute): DesktopRouteDescriptor {
         focusKey: `saved-clips:${route.startId ?? "first"}`,
         available: true,
         eyebrow: "Ditt bibliotek",
-        title: "Sparade klipp kommer snart",
-        description: "Uppspelningen av ditt sparade arkiv finns kvar i mobilappen under tiden.",
+        title: "Sparade klipp",
+        description: "Fokuserad uppspelning av ditt sparade arkiv.",
         backAction: "history"
       };
     case "legal":
@@ -146,8 +146,8 @@ export function describeDesktopRoute(route: AppRoute): DesktopRouteDescriptor {
         focusKey: `legal:${route.page}`,
         available: true,
         eyebrow: "Pleni",
-        title: `${LEGAL_TITLES[route.page]} kommer snart`,
-        description: "Dokumentet finns kvar i mobilappen medan den läsbara desktopytan byggs.",
+        title: LEGAL_TITLES[route.page],
+        description: "Juridisk information från Pleni.",
         backAction: "history"
       };
     default:

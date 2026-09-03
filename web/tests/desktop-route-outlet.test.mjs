@@ -64,13 +64,60 @@ test("desktop route architecture owns one focus boundary and shared primitives",
 
   assert.match(app, /<DesktopRouteOutlet/);
   assert.doesNotMatch(app, /function DesktopComingSoon/);
-  assert.match(outlet, /<DesktopRouteFrame focusKey=/);
+  assert.match(outlet, /<DesktopRouteFrame[\s\S]*focusKey=/);
   assert.match(outlet, /<DesktopPage/);
   assert.match(outlet, /<DesktopSection>/);
   assert.match(outlet, /<DesktopState/);
   assert.match(primitives, /focus\(\{ preventScroll: true \}\)/);
   assert.match(styles, /\.desktop-back-action:focus-visible/);
   assert.match(styles, /prefers-reduced-motion: reduce/);
+});
+
+test("every desktop route has a real surface and the waiting page is gone", () => {
+  const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const outlet = readFileSync(
+    new URL("../src/desktop/DesktopRouteOutlet.tsx", import.meta.url),
+    "utf8"
+  );
+  const routeOutlet = readFileSync(
+    new URL("../src/desktop/route-outlet.ts", import.meta.url),
+    "utf8"
+  );
+  const surfaceIds = [
+    "home",
+    "following",
+    "search",
+    "profile",
+    "person",
+    '"person-clips"',
+    "party",
+    '"party-clips"',
+    "saved",
+    '"saved-clips"',
+    "legal"
+  ];
+
+  for (const id of surfaceIds) {
+    assert.match(app, new RegExp(`\\n\\s*${id}:`), id);
+  }
+  assert.doesNotMatch(outlet, /Desktopvyn är under arbete|kommer snart/);
+  assert.doesNotMatch(routeOutlet, /available: false/);
+});
+
+test("desktop route focus and Escape follow focused feed and route identity", () => {
+  const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const primitives = readFileSync(
+    new URL("../src/desktop/primitives.tsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(app, /surfaceFocusKey=/);
+  assert.match(app, /showingSearchFeed \? searchFeedCollection\?\.historyId/);
+  assert.match(app, /onEscape=\{closeDesktopRoute\}/);
+  assert.match(app, /case "person-clips":/);
+  assert.match(app, /case "saved-clips":/);
+  assert.match(primitives, /event\.key !== "Escape"/);
+  assert.match(primitives, /closest\('\[role="dialog"\]'\)/);
 });
 
 test("desktop profiles reuse mobile data components and the bounded collection player", () => {

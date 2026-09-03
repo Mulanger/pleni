@@ -7,34 +7,35 @@ import type { DesktopRouteId } from "./route-outlet";
 export function DesktopRouteOutlet({
   route,
   surfaces,
-  onHome,
-  onBack
+  surfaceFocusKey,
+  onEscape
 }: {
   route: AppRoute;
   surfaces: Partial<Record<DesktopRouteId, ReactNode>>;
-  onHome: () => void;
-  onBack: () => void;
+  surfaceFocusKey?: string | null;
+  onEscape: () => void;
 }) {
   const descriptor = describeDesktopRoute(route);
   const surface = surfaces[descriptor.id];
 
   return (
-    <DesktopRouteFrame focusKey={descriptor.focusKey}>
-      {descriptor.available && surface ? (
+    <DesktopRouteFrame
+      focusKey={`${descriptor.focusKey}:${surfaceFocusKey ?? "route"}`}
+      onEscape={onEscape}
+    >
+      {surface ? (
         surface
       ) : (
         <DesktopPage
           eyebrow={descriptor.eyebrow}
-          title={descriptor.title}
-          description={descriptor.description}
-          backLabel={descriptor.backAction === "history" ? "Tillbaka" : "Till videoflödet"}
-          onBack={descriptor.backAction === "history" ? onBack : onHome}
+          title="Sidan kunde inte visas"
+          description="Pleni kunde inte montera den här vyn. Ladda om sidan och försök igen."
         >
           <DesktopSection>
             <DesktopState
-              kind="empty"
-              title="Desktopvyn är under arbete"
-              detail="Inget innehåll eller någon kontodata har ersatts. Öppna sidan på en mobilskärm för den nuvarande funktionen."
+              kind="error"
+              title="Ett oväntat visningsfel inträffade"
+              detail="Ingen kontodata eller mediefil har ändrats."
             />
           </DesktopSection>
         </DesktopPage>

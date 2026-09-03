@@ -6094,3 +6094,35 @@ tests remain deferred until the combined desktop release.
 **Next agent should know:** UI20.6 must now treat every route as available,
 remove the obsolete waiting fallback, standardize Escape/back/focus behavior
 and run the media/overflow/mobile regression audit.
+
+## UI20.6 — Desktop route integration and quality — IN PROGRESS 2026-09-03
+
+**Built:** every `AppRoute` now maps to a real desktop surface and no route can
+show the former “under arbete” waiting page. The outlet has one focus boundary
+whose identity includes transient search-feed context. Escape closes a focused
+search feed or returns one semantic level from person, party, saved and legal
+routes while leaving dialogs to their own focus/close behavior. All collection
+destinations continue to use the single bounded `FeedScreen`.
+
+**Tests:** 85 frontend Node tests, TypeScript, Vite production build and PWA
+verification pass. The service worker still precaches exactly nine app-shell
+entries and excludes video/private data. Full project acceptance passes with
+514 Python tests, 79 deselected, the known `audioop` warning, Ruff and strict
+mypy over 83 source files.
+
+**Contracts touched:** none. No data reader, account store, Python contract,
+database schema, Bunny object or video rendition changed.
+
+**Decisions made:** a missing surface is now treated as an unexpected render
+error, never as an advertised unfinished desktop page. Escape is ignored when a
+dialog owns the event. Top-level tabs remain stable on Escape.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** implementation and automated integration are
+complete. The row remains `IN PROGRESS` until the owner-requested later visual
+matrix and production smoke checks are performed.
+
+**Next agent should know:** UI20.7 can begin with the final local acceptance
+record. Do not mark any UI20 row `DONE` or push/deploy until viewport, signed-in
+and live production evidence is collected.
