@@ -156,6 +156,7 @@ test("desktop search reuses the public search state and bounded result player", 
   assert.match(app, /<CollectionScreen\s+presentation="desktop"\s+collection=\{searchFeedCollection\}/);
   assert.match(app, /presentation === "desktop" \? \(/);
   assert.match(app, /<Group title="Riksdagspartier">/);
+  assert.match(app, /!showResults \|\| presentation === "desktop"/);
 });
 
 test("desktop Following reuses account-bound library rows and split unfollow actions", () => {

@@ -4592,7 +4592,7 @@ function SearchScreen({
       className={`${showResults ? "panel-screen search-screen has-results" : "panel-screen search-screen"}${presentation === "desktop" ? " search-screen--desktop" : ""}`}
     >
       <div className="search-header">
-        {!showResults && <h1>Sök</h1>}
+        {(!showResults || presentation === "desktop") && <h1>Sök</h1>}
         <form
           className="search-form"
           role="search"
