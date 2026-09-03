@@ -1370,7 +1370,42 @@ function App() {
                     onToggleFollow={toggleFollowPolitician}
                     onOpenPerson={openPerson}
                   />
-                ) : null
+                ) : null,
+                search:
+                  route.view === "tab" && route.tab === "sok" ? (
+                    showingSearchFeed && searchFeedCollection !== null ? (
+                      <CollectionScreen
+                        presentation="desktop"
+                        collection={searchFeedCollection}
+                        onBack={closeTopicSearchFeed}
+                        muted={muted}
+                        setMuted={setMuted}
+                        liked={liked}
+                        saved={saved}
+                        following={following}
+                        onLike={toggleLikeClip}
+                        onSave={toggleSaveClip}
+                        onToggleFollow={toggleFollowPolitician}
+                        onOpenPerson={openPerson}
+                      />
+                    ) : (
+                      <SearchScreen
+                        presentation="desktop"
+                        query={query}
+                        setQuery={setQuery}
+                        partyFilter={partyFilter}
+                        setPartyFilter={setPartyFilter}
+                        partyProfiles={partyProfiles}
+                        partyProfilesLoading={partyProfilesLoading}
+                        topicState={topicSearchState}
+                        setTopicState={setTopicSearchState}
+                        topicSearchAvailable={topicSearchAvailable}
+                        onOpenPerson={openPerson}
+                        onOpenParty={openParty}
+                        onOpenTopicFeed={openTopicSearchFeed}
+                      />
+                    )
+                  ) : null
               }}
             />
           </div>
@@ -4134,6 +4169,7 @@ function FollowingScreen({
  * searching for almost anyone returned nothing.
  */
 function SearchScreen({
+  presentation = "mobile",
   query,
   setQuery,
   partyFilter,
@@ -4147,6 +4183,7 @@ function SearchScreen({
   onOpenParty,
   onOpenTopicFeed
 }: {
+  presentation?: "mobile" | "desktop";
   query: string;
   setQuery: (query: string) => void;
   partyFilter: PartyCode | null;
@@ -4394,7 +4431,7 @@ function SearchScreen({
 
   return (
     <section
-      className={showResults ? "panel-screen search-screen has-results" : "panel-screen search-screen"}
+      className={`${showResults ? "panel-screen search-screen has-results" : "panel-screen search-screen"}${presentation === "desktop" ? " search-screen--desktop" : ""}`}
     >
       <div className="search-header">
         {!showResults && <h1>Sök</h1>}
@@ -4630,20 +4667,42 @@ function SearchScreen({
                 </div>
               </section>
             )}
-            <Group title="Populära debatter">
-              <div className="placeholder-note">
-                Exempeldata — populäritet mäts inte ännu.
-              </div>
-              {TRENDING.map((item) => (
-                <ListRow
-                  key={item.n}
-                  eyebrow={item.n}
-                  title={item.title}
-                  subtitle={item.meta}
-                  action={<span className="up">{item.up}</span>}
-                />
-              ))}
-            </Group>
+            {presentation === "desktop" ? (
+              <Group title="Riksdagspartier">
+                {partyProfilesLoading && <ListRow title="Hämtar partier…" />}
+                {!partyProfilesLoading && partyProfiles.map((profile) => (
+                  <ListRow
+                    key={profile.abbr}
+                    avatar={
+                      <PartyAvatar
+                        party={profile.abbr}
+                        color={profile.color}
+                        logoUrl={profile.logoUrl}
+                      />
+                    }
+                    title={profile.name}
+                    subtitle={profile.clipCount === null ? undefined : `${formatNumber(profile.clipCount)} klipp`}
+                    onClick={() => openParty(profile)}
+                    chevron
+                  />
+                ))}
+              </Group>
+            ) : (
+              <Group title="Populära debatter">
+                <div className="placeholder-note">
+                  Exempeldata — populäritet mäts inte ännu.
+                </div>
+                {TRENDING.map((item) => (
+                  <ListRow
+                    key={item.n}
+                    eyebrow={item.n}
+                    title={item.title}
+                    subtitle={item.meta}
+                    action={<span className="up">{item.up}</span>}
+                  />
+                ))}
+              </Group>
+            )}
           </>
         )}
       </div>

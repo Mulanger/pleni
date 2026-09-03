@@ -5977,3 +5977,35 @@ auto-deploy could not be inspected or restarted.
 `rikettv` deployment for current `origin/main`, then close UI20.0. After that,
 commit/push this UI20.1 implementation, run live person/party/profile-clip smoke
 checks and close UI20.1 before beginning UI20.2.
+
+## UI20.2 — Desktop search — IN PROGRESS 2026-09-03
+
+**Built:** the complete public Search route now mounts on desktop through the
+route-aware outlet. It reuses the existing person, party and topic state,
+OpenAI privacy note, facets, ambiguity/date/fallback handling, pagination and
+the bounded `CollectionScreen` for individual results and Spela alla. Compact
+desktop remains one column; normal desktop places topic clips first with
+identity results as secondary context. The mobile-only example “Populära
+debatter” block is replaced on desktop by the real party directory.
+
+**Tests:** 80 frontend Node tests and TypeScript pass, including direct desktop
+Search routing, shared state ownership, the bounded result player and the
+absence of example debate content from the desktop branch.
+
+**Contracts touched:** none. Search requests, Supabase readers, stored state and
+media contracts are unchanged.
+
+**Decisions made:** search remains one shared component with an explicit
+presentation mode. Query, interpretation, revealed result count and scroll
+remain owned by the existing App state, so returning from a focused feed does
+not create a second search session.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** no implementation decision is blocked. The row
+remains `IN PROGRESS` because the owner asked to defer deployment and production
+smoke checks until all remaining desktop chunks are implemented locally.
+
+**Next agent should know:** continue with UI20.3 Following. Do not duplicate the
+library store or account guard; the desktop list must use the same follow arrays
+and mutation funnel as mobile.

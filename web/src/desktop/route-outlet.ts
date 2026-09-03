@@ -31,8 +31,8 @@ const TAB_DESCRIPTORS = {
   },
   sok: {
     id: "search",
-    title: "Sök kommer snart",
-    description: "Sök bland personer, partier och politiska ämnen i mobilappen tills desktopvyn är klar."
+    title: "Sök",
+    description: "Sök bland personer, partier och politiska ämnen."
   },
   profil: {
     id: "profile",
@@ -75,7 +75,7 @@ export function describeDesktopRoute(route: AppRoute): DesktopRouteDescriptor {
       return {
         ...descriptor,
         focusKey: `tab:${route.tab}`,
-        available: false,
+        available: route.tab === "sok",
         eyebrow: "Pleni på desktop",
         backAction: "home"
       };

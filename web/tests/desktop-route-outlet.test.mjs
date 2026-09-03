@@ -9,7 +9,7 @@ import { routeFromHash } from "../src/navigation.ts";
 const routes = [
   { hash: "#/hem/fordig", id: "home", available: true, action: "home" },
   { hash: "#/foljer", id: "following", available: false, action: "home" },
-  { hash: "#/sok", id: "search", available: false, action: "home" },
+  { hash: "#/sok", id: "search", available: true, action: "home" },
   { hash: "#/profil", id: "profile", available: false, action: "home" },
   { hash: "#/person/alice", id: "person", available: true, action: "history" },
   { hash: "#/person/alice/clips?clip=c1", id: "person-clips", available: true, action: "history" },
@@ -98,4 +98,15 @@ test("desktop profiles reuse mobile data components and the bounded collection p
   assert.match(styles, /@media \(min-width: 1280px\)/);
   assert.match(styles, /\.person-screen--desktop \.person-scroll/);
   assert.match(styles, /\.party-screen--desktop \.person-scroll/);
+});
+
+test("desktop search reuses the public search state and bounded result player", () => {
+  const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+
+  assert.match(app, /search:\s*route\.view === "tab" && route\.tab === "sok"/);
+  assert.match(app, /<SearchScreen\s+presentation="desktop"/);
+  assert.match(app, /showingSearchFeed && searchFeedCollection !== null/);
+  assert.match(app, /<CollectionScreen\s+presentation="desktop"\s+collection=\{searchFeedCollection\}/);
+  assert.match(app, /presentation === "desktop" \? \(/);
+  assert.match(app, /<Group title="Riksdagspartier">/);
 });
