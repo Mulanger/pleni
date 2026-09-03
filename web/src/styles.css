@@ -3866,8 +3866,8 @@ a {
     min-width: 0;
     flex-direction: column;
     padding: 28px 18px 22px;
-    border-right: 1px solid #203a61;
-    background: #13284d;
+    border-right: 1px solid #e7e7e1;
+    background: rgba(250, 250, 248, 0.96);
   }
 
   .desktop-brand {
@@ -3886,12 +3886,11 @@ a {
     display: block;
     width: auto;
     height: 36px;
-    border-radius: 9px;
     object-fit: contain;
   }
 
   .desktop-brand span {
-    color: #fff;
+    color: #142b4d;
     font-size: 22px;
     font-weight: 800;
     letter-spacing: -0.04em;
@@ -3914,7 +3913,7 @@ a {
     border: 0;
     border-radius: 12px;
     background: transparent;
-    color: rgba(255, 255, 255, 0.72);
+    color: #60605a;
     cursor: pointer;
     font-size: 14px;
     font-weight: 650;
@@ -3923,19 +3922,19 @@ a {
 
   .desktop-sidebar nav button:hover,
   .desktop-sidebar nav button:focus-visible {
-    background: rgba(255, 255, 255, 0.1);
-    color: #fff;
+    background: #f0f0eb;
+    color: #17233c;
   }
 
   .desktop-sidebar nav button.active {
-    background: #fff;
+    background: #e9edf5;
     color: #13284d;
   }
 
   .desktop-sidebar nav button:focus-visible,
   .desktop-account > button:focus-visible,
   .desktop-brand:focus-visible {
-    outline: 3px solid rgba(255, 255, 255, 0.54);
+    outline: 3px solid rgba(38, 79, 139, 0.32);
     outline-offset: 3px;
   }
 
@@ -3950,8 +3949,8 @@ a {
     gap: 11px;
     margin-top: auto;
     padding: 8px 10px;
-    border-top: 1px solid rgba(255, 255, 255, 0.16);
-    color: rgba(255, 255, 255, 0.72);
+    border-top: 1px solid #e7e7e1;
+    color: #55554f;
     font-size: 13px;
     font-weight: 650;
   }

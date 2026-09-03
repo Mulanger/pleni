@@ -6163,3 +6163,31 @@ media checks and Clerk signed-out/signed-in production behavior.
 
 **Next agent should know:** push the accepted commits in order, verify the new
 InstaPods asset and update each roadmap row to `DONE` with live evidence.
+
+## UI20.8 — Light desktop navigation — IN PROGRESS 2026-09-03
+
+**Built:** restored the approved light desktop sidebar palette: warm white
+background, navy Pleni identity, neutral inactive navigation and a restrained
+blue-grey active state. The route structure, controls and all mobile styles are
+unchanged.
+
+**Tests:** 85/85 frontend Node tests pass. TypeScript, Vite production build and
+PWA verification pass with nine bounded app-shell entries and no video/private
+data. Full project acceptance passes with 514 Python tests, 79 deselected, the
+known `audioop` warning, Ruff and strict mypy over 83 source files. A local
+1440×900 visual check confirms the light sidebar, active-state contrast and no
+horizontal overflow; 390×844 still mounts only the mobile surface.
+
+**Contracts touched:** none. This is a desktop-only CSS and design-document
+correction.
+
+**Decisions made:** the owner explicitly selected the original light navigation
+over the navy UI20 variant. `docs/DESKTOP_COMPLETION_PLAN.md` now records that
+choice as the current visual thesis.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** release through `main`, verify the light sidebar on
+`pleni.se`, then mark this handoff `DONE`.

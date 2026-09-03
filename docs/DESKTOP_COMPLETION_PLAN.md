@@ -57,8 +57,8 @@ checked; a local screenshot alone is not production evidence.
 
 ### Visual thesis
 
-Pleni desktop is a calm parliamentary newsroom: navy navigation, a warm light
-workspace, real portraits and video as the visual anchors, strong editorial
+Pleni desktop is a calm parliamentary newsroom: light navigation with navy
+typography, a warm light workspace, real portraits and video as the visual anchors, strong editorial
 hierarchy and thin dividers instead of a mosaic of generic cards.
 
 ### Content plan
