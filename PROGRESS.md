@@ -6587,3 +6587,75 @@ identity is still `personId`, and every comparison in the app keys on it.
 **Next agent should know:** if you change either slug function, the drift test
 in `web/tests/path-routing.test.mjs` is the one that fails. Fix both sides; do
 not relax the test.
+
+## SEO production release — IN PROGRESS 2026-09-03
+
+**Released:** merged the four SEO commits into current `origin/main` as
+`3a4101e`, changed the InstaPods `rikettv` build command to run
+`node seo/prerender.mjs` after Vite and clean every generated route before the
+copy, then deployed. The first full SEO build completed successfully in 32
+seconds. A production-only nginx directory redirect defect was fixed in
+`6f3e8e8` (`chunk(SEO5): canonicalize static directory URLs`); its automatic
+deployment completed successfully in 36 seconds.
+
+**Production evidence:**
+- `https://pleni.se/robots.txt` returns direct 200 and names
+  `https://pleni.se/sitemap.xml`.
+- `https://pleni.se/sitemap.xml` returns direct 200 and lists exactly seven
+  child sitemaps.
+- `https://pleni.se/klipp/andreas-carlson-stod-till-kollektivtrafiken/HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079_c01/`
+  returns direct 200. Its static document has a video, a 772-character
+  transcript, a Riksdagen link, no module script and no React root; it therefore
+  works with JavaScript disabled.
+- `https://pleni.se/parti/moderaterna/`,
+  `https://pleni.se/politiker/andreas-carlson/490b6787-c178-42e1-9ab8-e9d233939643/`
+  and `https://pleni.se/debatt/stod-till-kollektivtrafiken/HD10533/` each return
+  direct 200.
+- A fresh `https://pleni.se/#/party/M` load rewrites to
+  `https://pleni.se/parti/moderaterna/`.
+- At 390×844 the homepage loaded 60 feed rows, kept three video elements and
+  played the active one (`readyState=4`, time advancing); the directional media
+  window is unchanged.
+
+**Tests:** merged release and slash-canonical hotfix both passed the full gates:
+514 Python tests with 79 deselected and the known `audioop` warning, Ruff,
+strict mypy over 83 files, 140 frontend Node tests, TypeScript and Vite. A full
+production-data prerender wrote 5 514 watch pages, 377 debate pages, 307 hubs,
+929 shells, 7 130 HTML files and eight XML files. The service worker precaches
+exactly nine entries.
+
+**Contracts touched:** none.
+
+**Decisions made:**
+- Every generated directory URL is slash-canonical. The first production
+  activation showed that nginx redirects a slashless HTTPS directory to an
+  absolute HTTP URL, then redirects back to HTTPS. Slash URLs return 200
+  directly. Canonicals, sitemaps, internal links and app navigation now emit
+  the slash form; parsers still accept old slashless inbound links. ADR 014's
+  third amendment records the measured host behaviour.
+- The scheduled workflow still does not push fallback commits. The signed-in
+  InstaPods pod Git settings and Integrations panel expose no deploy-hook URL,
+  and the official Git deployment documentation offers only a bearer-token API
+  endpoint for manual deploys. Any alternative needs an explicit owner decision.
+
+**Observations (not fixed, out of scope):**
+- The first full deploy exposed InstaPods' insecure absolute directory redirect
+  only for missing trailing slashes. Pleni-generated URLs no longer traverse
+  it; changing nginx itself is unavailable in the panel.
+
+**Blocked / needs a decision:**
+- Google Search Console is signed in as `collab.bevsworld@gmail.com`. A pending
+  `pleni.se` domain property exists but this account has no access until its DNS
+  TXT verification record is added and Verify is pressed. The current indexed
+  URL baseline and video-thumbnail report are unavailable until then.
+- Bing Webmaster Tools is signed out. Account sign-in, site verification and
+  sitemap submission remain.
+- SEO6 needs an owner-approved authenticated InstaPods API strategy or an
+  explicit decision to remain manual; no panel deploy hook exists.
+
+**Next agent should know:** resume at the open Search Console DNS-verification
+dialog, then submit `https://pleni.se/sitemap.xml`, record the indexed-page
+baseline and inspect the video report. Sign in to Bing and submit the same
+sitemap. Do not expose the Google verification token or any future InstaPods
+API token in logs or documentation. SEO8's four-week comparison date is
+2026-10-01.

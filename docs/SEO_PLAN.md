@@ -195,21 +195,22 @@ Allowed states: `NOT STARTED`, `IN PROGRESS`, `DONE`, `BLOCKED`. A row becomes
 
 | Chunk | Deliverable | Status | Production evidence |
 |---|---|---|---|
-| SEO0 | Crawl foundation, host facts, baseline | IN PROGRESS | Implemented locally 2026-09-03; host facts measured against production and recorded in ADR 014. Awaiting deploy and owner Search Console verification |
-| SEO1 | Path routing alongside hash | IN PROGRESS | Implemented locally 2026-09-03; ships with SEO2 in one deploy |
-| SEO2 | Prerendered clip watch pages | IN PROGRESS | Implemented locally 2026-09-03; 5 514 watch pages + 624 shells generated from production data, 0 skipped |
+| SEO0 | Crawl foundation, host facts, baseline | IN PROGRESS | `https://pleni.se/robots.txt` is 200 and the live homepage canonical is `https://pleni.se/` (2026-09-03). Search Console has a pending `pleni.se` domain property; DNS verification and the indexed-URL baseline remain |
+| SEO1 | Path routing alongside hash | DONE | Fresh load of `https://pleni.se/#/party/M` rewrote to `https://pleni.se/parti/moderaterna/` on production 2026-09-03; the party route loaded and the mobile feed remained playable |
+| SEO2 | Prerendered clip watch pages | DONE | `https://pleni.se/klipp/andreas-carlson-stod-till-kollektivtrafiken/HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079_c01/` returned direct 200 with video, 772-character transcript and Riksdagen link, with no module script, on 2026-09-03 |
 | SEO2b | In-app clip route so a watch page can open the feed | NOT STARTED | — |
-| SEO3 | Politician, party and debate hubs | IN PROGRESS | Implemented locally 2026-09-03; 307 hubs and 377 debate pages generated from production data |
+| SEO3 | Politician, party and debate hubs | DONE | Direct 200 verified 2026-09-03 for `https://pleni.se/parti/moderaterna/`, `https://pleni.se/politiker/andreas-carlson/490b6787-c178-42e1-9ab8-e9d233939643/` and `https://pleni.se/debatt/stod-till-kollektivtrafiken/HD10533/` |
 | SEO4 | Topic pages | DEFERRED | `clips.topic` is null for all 5 514 clips; needs a pipeline taxonomy first. Nothing depends on it |
-| SEO5 | Sitemaps and search-engine submission | IN PROGRESS | Implemented locally 2026-09-03; index plus 7 children, 6 205 URLs, all well-formed and inside spec limits. Submission needs the owner |
-| SEO6 | Scheduled rebuild and stale-page cleanup | IN PROGRESS | Workflow and deploy-command cleanup written 2026-09-03; needs an InstaPods deploy-hook URL from the owner |
+| SEO5 | Sitemaps and search-engine submission | IN PROGRESS | `https://pleni.se/sitemap.xml` returned direct 200 with 7 child sitemaps and `robots.txt` names it on 2026-09-03. Google DNS verification and Google/Bing submission remain |
+| SEO6 | Scheduled rebuild and stale-page cleanup | BLOCKED | Cleanup is live in the 36-second InstaPods build. No deploy-hook URL exists in the pod Git settings or Integrations panel; InstaPods documents only an authenticated deploy API. Owner decision required before any alternative |
 | SEO7 | Watch-page performance and Core Web Vitals | IN PROGRESS | Watch pages ship inlined CSS, a preloaded poster and `preload="metadata"`; PageSpeed evidence needs the live site |
 | SEO8 | Measurement, guardrails and closeout | IN PROGRESS | All six guardrails exist as tests plus a CI precache assertion; the four-week measurement needs the live site |
 
-**Current completion:** 0 of 10 `DONE`. Every chunk except SEO4 and SEO2b is
-implemented and locally verified; each is held at `IN PROGRESS` because the
-remaining acceptance is deployment and owner action, not code. SEO4 is deferred
-on missing data, so the reachable target is 9 of 10.
+**Current completion:** 3 of 10 `DONE`. The SEO surface is live. SEO0 and SEO5
+await account-level search-engine actions, SEO6 awaits an owner decision because
+InstaPods exposes no deploy-hook URL, SEO7 awaits three PageSpeed measurements,
+and SEO8 includes the four-week result measurement. SEO4 is deferred on missing
+data and SEO2b remains a separate product chunk.
 
 Update this table in the same commit as the chunk's `PROGRESS.md` handoff.
 Production evidence must name the live URL checked and what was observed. A local
