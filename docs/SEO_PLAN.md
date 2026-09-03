@@ -89,10 +89,13 @@ This is not a compromise. It gives crawlers a fully-formed document with zero
 render budget spent, it survives a Supabase outage (the pages are already on
 disk), and it adds no runtime cost.
 
-The SPA still boots on top of the prerendered page and upgrades it to the real
-Pleni player. **The prerendered content and the hydrated content must show the
-same clip, the same transcript and the same speaker.** Serving crawlers something
-different from humans is cloaking; we are not doing that.
+**Amended during SEO2:** a clip watch page is a standalone document and does
+not boot the SPA. It carries inlined CSS, a real `<video controls poster src>`,
+the transcript, the facts, the Riksdagen link and links into the app — no
+`<div id="root">`, no module script. That removes the cloaking risk entirely
+and makes the poster the LCP element. Shell pages for app routes do boot the
+SPA, because that is all they are for. See ADR 014's amendment; closing the
+swipe-feed gap for a Google visitor is SEO2b, below.
 
 ### 3.2 URL scheme
 
@@ -102,11 +105,19 @@ slug.
 
 ```
 /klipp/<beskrivande-slug>/<clip_id>
-/politiker/<namn-slug>/<politicians.id>
-/parti/<partinamn-slug>
-/debatt/<beskrivande-slug>/<dokid>
-/amne/<amnes-slug>                      (SEO4, conditional)
+/politiker/<politicians.id>
+/politiker/<politicians.id>/klipp
+/parti/<kod>
+/parti/<kod>/klipp
+/debatt/<beskrivande-slug>/<dokid>      (SEO3)
+/amne/<amnes-slug>                      (SEO4, deferred)
 ```
+
+**Amended during SEO1** (see ADR 014's amendment): politician and party paths
+carry **no decorative slug**. The app pushes those URLs itself and only holds
+the id, so a slug would give one entity two URLs and one page two history
+entries — and every pushed URL needs a generated file, because the pod 404s the
+rest. Clip paths keep their slug because nothing in the app pushes them.
 
 **Why the id gets its own segment.** `clip_id` is `{dokid}_{anforande_id}_c{NN}`.
 We do not control `anforande_id`'s character set, so we cannot assume the id is
@@ -119,11 +130,8 @@ form.
 (`Q-2`). The old name-slug scheme split the five most-clipped ministers into two
 identities each — 380 clips, 21.6% of the catalogue, measured 2026-08-04. A name
 in a URL is a display string that changes when a minister changes portfolio. It
-is never the key. The readable half of the URL carries the name; the last segment
-carries the identity.
-
-Party is the exception: eight codes, a closed and stable set, so
-`/parti/moderaterna` is safe and reads better than `/parti/m`.
+is never the key. The name still ranks — it is in the title, the heading and the
+body, which is where the signal comes from.
 
 ### 3.3 Canonical host
 
@@ -178,8 +186,9 @@ Allowed states: `NOT STARTED`, `IN PROGRESS`, `DONE`, `BLOCKED`. A row becomes
 | Chunk | Deliverable | Status | Production evidence |
 |---|---|---|---|
 | SEO0 | Crawl foundation, host facts, baseline | IN PROGRESS | Implemented locally 2026-09-03; host facts measured against production and recorded in ADR 014. Awaiting deploy and owner Search Console verification |
-| SEO1 | Path routing alongside hash | NOT STARTED | — |
-| SEO2 | Prerendered clip watch pages | NOT STARTED | — |
+| SEO1 | Path routing alongside hash | IN PROGRESS | Implemented locally 2026-09-03; ships with SEO2 in one deploy |
+| SEO2 | Prerendered clip watch pages | IN PROGRESS | Implemented locally 2026-09-03; 5 514 watch pages + 624 shells generated from production data, 0 skipped |
+| SEO2b | In-app clip route so a watch page can open the feed | NOT STARTED | — |
 | SEO3 | Politician, party and debate hubs | NOT STARTED | — |
 | SEO4 | Topic pages | DEFERRED | `clips.topic` is null for all 5 514 clips; needs a pipeline taxonomy first. Nothing depends on it |
 | SEO5 | Sitemaps and search-engine submission | NOT STARTED | — |
@@ -187,8 +196,8 @@ Allowed states: `NOT STARTED`, `IN PROGRESS`, `DONE`, `BLOCKED`. A row becomes
 | SEO7 | Watch-page performance and Core Web Vitals | NOT STARTED | — |
 | SEO8 | Measurement, guardrails and closeout | NOT STARTED | — |
 
-**Current completion:** 0 of 9. SEO4 is deferred on missing data, so the
-reachable target is 8 of 9.
+**Current completion:** 0 of 10. SEO4 is deferred on missing data, so the
+reachable target is 9 of 10.
 
 Update this table in the same commit as the chunk's `PROGRESS.md` handoff.
 Production evidence must name the live URL checked and what was observed. A local
@@ -372,6 +381,37 @@ the SPA unchanged. Build wall-clock time for the full catalogue is recorded in
 
 ---
 
+### SEO2b — In-app clip route
+
+**Depends on:** SEO2. **Size:** medium. **Optional for indexing, wanted for the
+product.**
+
+**Objective:** let a visitor who lands on a watch page from Google continue into
+the swipe feed, instead of following a link back to `/senaste`.
+
+**Why it is its own chunk.** SEO2's watch pages are deliberately standalone: no
+`<div id="root">`, no module script, so there is no hydration and no way for the
+static and dynamic views to disagree. Giving the app a `clip` route means a new
+`AppRoute` member, a single-clip collection loader, a branch in `App.tsx`'s
+render tree, a new descriptor in the desktop route outlet, and a content-parity
+guarantee between the prerendered markup and the hydrated view. That is real
+product work and it must not be squeezed into the chunk that makes the catalogue
+indexable.
+
+**Build.** Add `{ view: "clip"; clipId: string }` to `AppRoute` with
+`/klipp/<slug>/<clip_id>` as its path — the slug is already decorative and
+ignored by the parser. Load the clip by id through `web/src/supabase.ts` and
+mount it in the existing bounded `CollectionScreen`, the same way the search
+feed hands off a scoped collection today. Then make the watch page boot the SPA,
+and keep the static markup as the pre-hydration view.
+
+**Acceptance:** the hydrated view shows the same clip the static markup shows,
+verified on three real production clips. A clip whose `politicianId` is null
+still works. The desktop route outlet stays exhaustive. Watch-page LCP does not
+regress past the SEO7 budget. The feed's four-source media window is unchanged.
+
+---
+
 ### SEO3 — Politician, party and debate hub pages
 
 **Depends on:** SEO2. **Size:** medium.
@@ -383,9 +423,16 @@ isolated leaves.
 **Scope — may modify:** `web/seo/`, `web/tests/`. **Must not modify:** anything
 outside the generator and its tests.
 
+**What SEO2 already left behind.** `/politiker/<uuid>`, `/politiker/<uuid>/klipp`,
+`/parti/<kod>` and `/parti/<kod>/klipp` already have generated **shells** — the
+built `index.html` patched with their own canonical and `noindex, follow`. They
+exist so the router's paths do not 404. This chunk replaces them with real
+content and removes the `noindex`. 614 shells were written for 299 politicians
+with clips plus the eight parties.
+
 **Build.** Extend the generator to emit:
 
-- `/politiker/<namn-slug>/<uuid>` — portrait, name, party, role, constituency,
+- `/politiker/<uuid>` — portrait, name, party, role, constituency,
   clip count, a paginated list of that politician's clips as real links, JSON-LD
   `ProfilePage` + `Person` (with `affiliation` and `sameAs` pointing at the
   Riksdagen profile), and `ItemList` of the clips.

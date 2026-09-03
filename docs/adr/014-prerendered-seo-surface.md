@@ -153,3 +153,55 @@ function. Freshness is handled by a scheduled rebuild instead (SEO6).
 
 **Keeping hash routes and adding metadata.** Produces one indexable URL with
 better metadata. It does not address the problem.
+
+---
+
+## Amendment, SEO1/SEO2 implementation — 2026-09-03
+
+Two decisions in the original text changed while the chunks were built. Both
+were driven by facts that only surfaced in implementation.
+
+### Politician and party paths carry no decorative slug
+
+The original scheme was `/politiker/<namn-slug>/<uuid>`. It does not survive
+contact with the router. The app pushes these URLs itself and only ever holds
+the id — a route is `{ view: "person", personId }`, with no name in it — so a
+slug would have to be either invented at navigation time or threaded through
+the route model. Either way one entity gets two URLs and one page gets two
+history entries, and every pushed URL needs a generated file behind it because
+the pod 404s the rest.
+
+The paths are therefore `/politiker/<politicians.id>` and `/parti/<code>`, and
+the SEO hub page lives at exactly the URL the app pushes. One URL per entity.
+The name still ranks: it is in the title, the heading and the body, which is
+where the signal actually comes from. Clip paths keep their slug
+(`/klipp/<slug>/<clip_id>`) because nothing in the app pushes them.
+
+### Watch pages do not boot the SPA
+
+The original text said the SPA would boot on top of a prerendered watch page
+and upgrade it. That would require a `clip` route in the app, a single-clip
+collection loader, a new branch in `App.tsx`'s render tree, a new descriptor in
+the desktop route outlet, and a guarantee that the hydrated view shows the same
+clip as the static markup or the page is cloaking.
+
+A watch page is instead a standalone document: inlined CSS, a real
+`<video controls poster src>`, the transcript, the facts, the Riksdagen link,
+and links into the app. It has no `<div id="root">` and loads no module script,
+which is asserted by test. This is strictly better for the indexing goal — a
+complete document, no render budget, no JavaScript dependency, the poster as
+the LCP element — and it removes the parity risk entirely.
+
+What it costs is the swipe feed for a visitor arriving from Google: they can
+play the clip immediately but must follow a link to reach the feed. Closing
+that gap is a product change worth doing deliberately, as its own chunk, not
+squeezed into the chunk that makes the catalogue indexable.
+
+### Titles say "om" for a subject and "i" for a sitting
+
+`sources.title` is a subject for interpellation debates and the format itself
+for a chamber sitting. Measured 2026-09-03: 335 of 377 debates carry a subject,
+38 are "Frågestund". "Andreas Carlson om Frågestund" is wrong, so a session
+title takes "i" instead. Detection is a small title list plus Riksdagen's
+`kam-*` debate-type family; an unknown type keeps the subject reading, which is
+correct for the large majority.

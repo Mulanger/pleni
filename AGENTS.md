@@ -86,8 +86,17 @@ Last updated: 2026-08-11.
   are in `docs/MOBILE_APP_UX_PWA_IMPLEMENTATION_PLAN.md`.
 - The React app lives in `web/`, but the InstaPods Git deploy currently runs from the repo root. Its working settings are:
   - Install command: `cd web && npm ci`
-  - Build command: `cd web && node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json && node ./node_modules/vite/bin/vite.js build && cd .. && rm -rf ./assets ./index.html ./dist && cp -R web/dist/. ./`
+  - Build command: `cd web && node ./node_modules/typescript/bin/tsc --noEmit -p tsconfig.json && node ./node_modules/vite/bin/vite.js build && node seo/prerender.mjs && cd .. && rm -rf ./assets ./index.html ./dist ./klipp ./politiker ./parti ./senaste ./sok ./foljer ./profil ./sparade ./legal ./robots.txt && cp -R web/dist/. ./`
   - Static host serves the pod root, so the build command copies `web/dist` contents to root. Do not change this back to a plain `npm ci` at repo root.
+  - **`node seo/prerender.mjs` must stay after `vite build`, never before it.**
+    `web/vite.config.ts` globs `**/*.html` into the service worker precache, so
+    HTML written before the Vite build turns a nine-entry app shell into one
+    entry per clip. The prerender writes about 6 100 files; the cleanup list
+    above removes the previous deploy's generated route roots so an unpublished
+    clip cannot keep a live page. Both lists must be kept in sync with
+    `APP_SHELL_ROUTES` in `web/src/navigation.ts`. **The InstaPods panel holds
+    the command that actually runs — editing this file changes documentation
+    only.**
 - Frontend env vars in InstaPods:
   - `VITE_SUPABASE_URL`
   - `VITE_SUPABASE_PUBLISHABLE_KEY`

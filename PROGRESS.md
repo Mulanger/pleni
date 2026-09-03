@@ -6301,3 +6301,118 @@ the owner, and neither stops SEO1/SEO2:
   was not used; the built `dist` was served on a spare port instead.
 - SEO0's remaining acceptance is deploy plus owner verification. SEO1 and SEO2
   can begin immediately and must land in one deploy.
+
+## SEO1 — Path routing alongside hash — IN PROGRESS 2026-09-03
+
+**Built:** `routeFromPath`, `pathForRoute`, `initialRoute` and
+`APP_SHELL_ROUTES` in `web/src/navigation.ts`; `useAppNavigation` now writes
+real paths with `pushState` and rewrites a legacy hash URL once with
+`replaceState`; a `popstate` listener in `web/src/pwa/usePwaExperience.ts`;
+`web/tests/path-routing.test.mjs`.
+
+**Tests:** 10 new routing tests inside a suite that went from 93 to 121 with
+SEO2. Every canonical path round-trips (`pathForRoute(routeFromPath(p)) === p`),
+every legacy hash route resolves to the identical route object, malformed paths
+fail home without throwing, and party paths accept only the eight real codes.
+TypeScript passes.
+
+**Contracts touched:** none. `AppRoute` is unchanged, so `App.tsx` and the
+desktop route outlet needed no edits at all.
+
+**Decisions made:**
+- Politician and party paths carry **no decorative slug**: `/politiker/<uuid>`
+  and `/parti/<kod>`. The app pushes these URLs and only ever holds the id, so a
+  slug would give one entity two URLs and one page two history entries — and
+  every pushed URL needs a generated file because the pod 404s the rest. This
+  amends the original scheme in ADR 014; the amendment is recorded there.
+- The home feed keeps its mode in the path (`/` and `/senaste`) rather than a
+  query, and default query values are omitted, so each route has exactly one
+  canonical path.
+- A legacy hash is honoured only in its original shape — a hash route at the
+  site root — so a real path route can never be overridden by a stray fragment.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none. SEO1 must not deploy without SEO2,
+because a path with no generated file 404s on the pod.
+
+**Next agent should know:** `APP_SHELL_ROUTES` in `navigation.ts` and the
+`APP_SHELLS` list in `web/seo/prerender.mjs` must stay in agreement; a test
+fails if a pushable route has no generated shell.
+
+## SEO2 — Prerendered clip watch pages — IN PROGRESS 2026-09-03
+
+**Built:** `web/seo/lib.mjs` (pure helpers), `web/seo/templates.mjs` (page
+templates), `web/seo/prerender.mjs` (the generator),
+`web/tests/seo-prerender.test.mjs`, a `prerender` script and an extended
+`build` script in `web/package.json`, and the updated InstaPods build command in
+`AGENTS.md` and `README.md`.
+
+**Tests:** 121 frontend Node tests pass, up from 93. TypeScript passes. The Vite
+production build passes and the generated worker still precaches **exactly 9
+entries** — verified by counting `{"revision":…}` records in `dist/sw.js` after
+the prerender wrote 6 139 HTML files. Project acceptance passes: 514 Python
+tests, 79 deselected, the known `audioop` warning, Ruff and strict mypy over 83
+source files.
+
+**Generated against production data 2026-09-03:**
+- **5 514 clip watch pages, 0 skipped**, across 377 debates.
+- 10 app shells and 614 entity shells (299 politicians with clips × 2 routes,
+  plus 8 parties × 2).
+- 6 139 `index.html` files in `dist` including the root.
+
+**Degradation verified:** with `VITE_SUPABASE_URL`/`VITE_SUPABASE_PUBLISHABLE_KEY`
+unset the generator writes the 10 app shells, logs, and **exits 0**; with an
+unreachable Supabase host it logs `clip fetch failed` and **exits 0**. A failed
+prerender cannot fail a deploy, which is the ADR 006 rule.
+
+**Local verification:** a real interpellation watch page was served and loaded at
+375×812. It rendered the brand, breadcrumbs, `<h1>`, byline, the Bunny WebP
+poster, the facts list, the full transcript, the Riksdagen source link, the
+onward links and the related-clips list. Title read "Andreas Carlson (KD) om
+Stöd till kollektivtrafiken — 12 juni 2026 | Pleni".
+
+**Contracts touched:** none. No pipeline code, migration, Bunny path, render
+geometry, service worker or feed logic changed.
+
+**Decisions made:**
+- **Watch pages do not boot the SPA.** No `<div id="root">`, no module script —
+  asserted by test. That removes the content-parity/cloaking risk completely and
+  makes the poster the LCP element. Closing the swipe-feed gap for a Google
+  visitor is registered as its own chunk, SEO2b.
+- **Shell pages are the built `index.html` patched**, not a reconstructed
+  document, so hashed asset URLs, icons, the manifest link and PWA metadata stay
+  correct as the build changes. `replaceOnce` throws if `index.html`'s head stops
+  matching, so a future head change fails in tests rather than shipping shells
+  that carry the home page's canonical.
+- **Entity shells are `noindex, follow`** until SEO3 gives them real content. 614
+  identical JavaScript-dependent pages would be duplicate thin content.
+- Titles say "om" for a debate subject and "i" for a chamber sitting. Measured:
+  335 of 377 debates carry a real subject, 38 are "Frågestund", so
+  "Andreas Carlson om Frågestund" had to become "i Frågestund".
+- Related-clip anchor text uses the clip's own title, not the speaker name.
+  Several clips from one speaker in one debate is the normal case and
+  `name (party)` repeated six times is useless as anchor text.
+- No new dependency. The generator uses Node's built-in `fetch`, matching the
+  app's own raw-PostgREST approach.
+
+**Observations (not fixed, out of scope):**
+- 299 of 364 politicians have at least one published clip. The other 65 get no
+  page, which is correct.
+- `clips.title` remains a truncated fragment. It is used for anchor text and
+  never for a page title. Fixing the generator's input belongs to the pipeline.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:**
+- **Run the prerender AFTER `vite build`, never before.** `vite.config.ts` globs
+  `**/*.html`, so HTML written first turns the nine-entry app shell into one
+  entry per clip. `npm run build` in `web/` has the right order.
+- The InstaPods build command now also removes the previous deploy's generated
+  route roots before copying, so an unpublished clip cannot keep a live page.
+  **That command must be updated in the InstaPods panel — editing `AGENTS.md`
+  changes documentation only.**
+- A full prerender over 5 514 clips takes a few seconds after the build; the
+  Supabase read is 12 paged requests of 500 rows.
+- SEO5 is the natural next chunk: the URL set now exists, so the sitemaps have
+  something to list. SEO3 upgrades the entity shells in place.
