@@ -1,6 +1,12 @@
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { ClerkProvider, useClerk, useSession, useUser } from "@clerk/react";
+import { ClerkProvider, useClerk } from "@clerk/react";
 import { svSE } from "@clerk/localizations";
+import {
+  SIGNED_OUT_VIEWER,
+  nextViewerIdentity,
+  type ViewerIdentity
+} from "./auth/viewer-identity";
 
 /**
  * Clerk configuration for the Pleni mobile app.
@@ -63,26 +69,36 @@ export function useViewer(): {
   }
 
   // eslint-disable-next-line react-hooks/rules-of-hooks -- build-time constant, see above.
-  const { isSignedIn, user } = useUser();
-  // eslint-disable-next-line react-hooks/rules-of-hooks -- build-time constant, see above.
   const clerk = useClerk();
+  // Clerk's modal and redirect flows update the mutable client resources first.
+  // Subscribe to that source directly so the app reacts immediately even when
+  // an SDK context render is delayed until the next browser navigation.
   // eslint-disable-next-line react-hooks/rules-of-hooks -- build-time constant, see above.
-  const { session } = useSession();
-  const createdAt = user?.createdAt?.getTime() ?? null;
-  const lastSignInAt = user?.lastSignInAt?.getTime() ?? null;
+  const [identity, setIdentity] = useState<ViewerIdentity>(() =>
+    nextViewerIdentity(SIGNED_OUT_VIEWER, clerk.user, clerk.session)
+  );
+  // eslint-disable-next-line react-hooks/rules-of-hooks -- build-time constant, see above.
+  useEffect(() => {
+    setIdentity((current) => nextViewerIdentity(current, clerk.user, clerk.session));
+    return clerk.addListener(({ user, session }) => {
+      setIdentity((current) => nextViewerIdentity(current, user, session));
+    });
+  }, [clerk]);
 
   return {
-    signedIn: !!isSignedIn,
-    userId: user?.id ?? null,
+    signedIn: identity.signedIn,
+    userId: identity.userId,
     // A successful sign-up starts the first session at essentially the same
     // time the user row is created. A normal sign-in has a newer
     // `lastSignInAt`, so it must never be mistaken for account creation.
     newAccountSession:
-      createdAt !== null && lastSignInAt !== null && Math.abs(lastSignInAt - createdAt) <= 60_000,
+      identity.createdAt !== null &&
+      identity.lastSignInAt !== null &&
+      Math.abs(identity.lastSignInAt - identity.createdAt) <= 60_000,
     // Only Clerk's explicit username is suggested. A full name or email local
     // part must never be turned into a public comment identity implicitly.
-    suggestedUsername: user?.username ?? null,
-    getAccessToken: async () => (await session?.getToken()) ?? null,
+    suggestedUsername: identity.suggestedUsername,
+    getAccessToken: async () => (await clerk.session?.getToken()) ?? null,
     requireSignIn: () => clerk.openSignIn({})
   };
 }

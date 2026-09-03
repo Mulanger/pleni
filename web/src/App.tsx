@@ -33,12 +33,11 @@ import {
   X
 } from "lucide-react";
 import {
-  Show,
   SignInButton,
   SignOutButton,
   SignUpButton,
   UserButton,
-  useUser
+  useClerk
 } from "@clerk/react";
 import {
   RecommendationApiError,
@@ -1455,6 +1454,7 @@ function App() {
                   route.view === "tab" && route.tab === "profil" ? (
                     <ProfileScreen
                       presentation="desktop"
+                      signedIn={viewer.signedIn}
                       consent={consent}
                       selectedParties={onboarding.parties.length}
                       savedCount={library.savedClips.length}
@@ -1678,6 +1678,7 @@ function App() {
             )}
             {tab === "profil" && (
               <ProfileScreen
+                signedIn={viewer.signedIn}
                 consent={consent}
                 selectedParties={onboarding.parties.length}
                 savedCount={library.savedClips.length}
@@ -5174,6 +5175,7 @@ function LegalScreen({
 
 function ProfileScreen({
   presentation = "mobile",
+  signedIn,
   consent,
   selectedParties,
   savedCount,
@@ -5195,6 +5197,7 @@ function ProfileScreen({
   onDeleteRecommendationData
 }: {
   presentation?: "mobile" | "desktop";
+  signedIn: boolean;
   consent: { personal: boolean; analytics: boolean; email: boolean };
   selectedParties: number;
   savedCount: number;
@@ -5243,7 +5246,7 @@ function ProfileScreen({
       <div className="panel-scroll">
         <div className="profile-desktop-grid">
         <div className="profile-primary-column">
-        <AccountCard onOpenLegal={onOpenLegal} />
+        <AccountCard signedIn={signedIn} onOpenLegal={onOpenLegal} />
         {/* These counts used to be invented ("Sparade klipp 24"). They are now
             the real length of the device-local library — see
             `library-store.ts`. Still not server-side: that is `C-9`, gated on
@@ -5442,7 +5445,13 @@ function ProfileScreen({
  * Three states: Clerk not configured, signed out, signed in. The anonymous
  * `Senaste` feed works in all three — signing in is never required to watch.
  */
-function AccountCard({ onOpenLegal }: { onOpenLegal: (page: LegalPageId) => void }) {
+function AccountCard({
+  signedIn,
+  onOpenLegal
+}: {
+  signedIn: boolean;
+  onOpenLegal: (page: LegalPageId) => void;
+}) {
   if (!clerkEnabled) {
     return (
       <div className="account-card account-card--muted">
@@ -5454,44 +5463,41 @@ function AccountCard({ onOpenLegal }: { onOpenLegal: (page: LegalPageId) => void
     );
   }
 
+  if (signedIn) {
+    return <SignedInAccountCard />;
+  }
+
   return (
-    <>
-      <Show when="signed-out">
-        <div className="account-card">
-          <div className="account-copy">
-            <strong>Logga in för ditt flöde</strong>
-            <span>Senaste fungerar utan konto. Med konto kan du spara klipp och följa politiker.</span>
-          </div>
-          <div className="account-actions">
-            <SignInButton mode="modal">
-              <button className="account-button account-button--primary">Logga in</button>
-            </SignInButton>
-            <SignUpButton mode="modal">
-              <button className="account-button">Skapa konto</button>
-            </SignUpButton>
-          </div>
-          <p className="account-legal-copy">
-            Genom att skapa konto godkänner du{" "}
-            <button type="button" onClick={() => onOpenLegal("terms")}>
-              användarvillkoren
-            </button>
-            . Läs hur vi hanterar personuppgifter under{" "}
-            <button type="button" onClick={() => onOpenLegal("privacy")}>
-              integritet
-            </button>
-            . Om du är under 13 år behöver du din vårdnadshavares tillstånd.
-          </p>
-        </div>
-      </Show>
-      <Show when="signed-in">
-        <SignedInAccountCard />
-      </Show>
-    </>
+    <div className="account-card">
+      <div className="account-copy">
+        <strong>Logga in för ditt flöde</strong>
+        <span>Senaste fungerar utan konto. Med konto kan du spara klipp och följa politiker.</span>
+      </div>
+      <div className="account-actions">
+        <SignInButton mode="modal">
+          <button className="account-button account-button--primary">Logga in</button>
+        </SignInButton>
+        <SignUpButton mode="modal">
+          <button className="account-button">Skapa konto</button>
+        </SignUpButton>
+      </div>
+      <p className="account-legal-copy">
+        Genom att skapa konto godkänner du{" "}
+        <button type="button" onClick={() => onOpenLegal("terms")}>
+          användarvillkoren
+        </button>
+        . Läs hur vi hanterar personuppgifter under{" "}
+        <button type="button" onClick={() => onOpenLegal("privacy")}>
+          integritet
+        </button>
+        . Om du är under 13 år behöver du din vårdnadshavares tillstånd.
+      </p>
+    </div>
   );
 }
 
 function SignedInAccountCard() {
-  const { user } = useUser();
+  const { user } = useClerk();
   const displayName = user?.fullName ?? user?.username ?? "Ditt konto";
   const email = user?.primaryEmailAddress?.emailAddress ?? "";
 

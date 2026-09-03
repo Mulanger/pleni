@@ -6196,3 +6196,38 @@ A 390×844 production check mounted the mobile feed and bottom navigation only.
 
 **Next agent should know:** the light desktop navigation is the approved
 baseline. Do not restore the navy background unless the owner requests it.
+
+## UI20.9 — Reactive account transitions — IN PROGRESS 2026-09-03
+
+**Built:** `web/src/clerk.tsx` now subscribes directly to Clerk's settled user
+and session emissions instead of depending only on a later context render. One
+shared viewer identity drives the desktop sidebar, Profile, Following, saved
+library guards, onboarding and recommendation-token access. Transitional
+undefined resources retain the last settled UI; complete sign-in and sign-out
+events update it immediately. `ProfileScreen` and `AccountCard` no longer use a
+second independent signed-in conditional, and signed-in profile copy reads the
+current Clerk client resource. The pure reducer lives in
+`web/src/auth/viewer-identity.ts`.
+
+**Tests:** four focused account-reactivity checks cover initial state,
+transitional loading, sign-in, sign-out, live token lookup and the shared
+Profile state. All 89 frontend Node tests pass. TypeScript, Vite production
+build and PWA verification pass with nine bounded app-shell entries and no
+video/private data. Full project acceptance passes with 514 Python tests, 79
+deselected, the known `audioop` warning, Ruff and strict mypy over 83 source
+files.
+
+**Contracts touched:** none. Clerk, Supabase, local-library and recommendation
+data formats are unchanged.
+
+**Decisions made:** update React from Clerk's documented client listener rather
+than automatically reloading the page. This preserves the active route, video
+position and unsaved UI state while still removing the manual-refresh defect.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** no implementation blocker. Production asset
+rollout and a live already-signed-in regression check remain.
+
+**Next agent should know:** release through `main`, verify the new JavaScript
+asset and signed-in desktop Profile on `pleni.se`, then mark UI20.9 `DONE`.
