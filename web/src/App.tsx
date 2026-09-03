@@ -1420,6 +1420,60 @@ function App() {
                       onTogglePerson={toggleFollowPolitician}
                       onToggleParty={toggleFollowParty}
                     />
+                  ) : null,
+                profile:
+                  route.view === "tab" && route.tab === "profil" ? (
+                    <ProfileScreen
+                      presentation="desktop"
+                      consent={consent}
+                      selectedParties={onboarding.parties.length}
+                      savedCount={library.savedClips.length}
+                      followedCount={library.followedPoliticians.length}
+                      followedPartyCount={library.followedParties.length}
+                      savedLoading={savedLoading}
+                      onOpenSaved={openSavedArchive}
+                      onOpenFollowing={() =>
+                        viewer.signedIn ? openFollowing() : viewer.requireSignIn()
+                      }
+                      onEditInterests={() => {
+                        if (!viewer.signedIn) {
+                          viewer.requireSignIn();
+                          return;
+                        }
+                        setOpenForYouAfterOnboarding(false);
+                        setOnboardingMode("interests");
+                        setShowOnboarding(true);
+                      }}
+                      onToggleConsent={(key) => {
+                        if (!viewer.signedIn) {
+                          viewer.requireSignIn();
+                          return;
+                        }
+                        if (key !== "personal" || !recommendationsEnabled) {
+                          saveOnboarding({
+                            ...onboarding,
+                            consent: { ...onboarding.consent, [key]: !onboarding.consent[key] }
+                          });
+                          return;
+                        }
+                        if (recommendationProfile.personalization) {
+                          void withdrawPersonalization();
+                        } else {
+                          setOpenForYouAfterOnboarding(false);
+                          setOnboardingMode("consent");
+                          setShowOnboarding(true);
+                        }
+                      }}
+                      recommendationsConnected={recommendationsEnabled}
+                      recommendationError={recommendationError}
+                      recommendationAction={recommendationAction}
+                      recommendationActionMessage={recommendationActionMessage}
+                      onExportRecommendationData={() => void exportMyRecommendationData()}
+                      onResetRecommendationData={() => void resetMyRecommendationData()}
+                      onDeleteRecommendationData={() => void deleteMyRecommendationData()}
+                      onOpenLegal={openLegal}
+                      pwa={pwa}
+                    />
                   ) : null
               }}
             />
@@ -5048,6 +5102,7 @@ function LegalScreen({
 }
 
 function ProfileScreen({
+  presentation = "mobile",
   consent,
   selectedParties,
   savedCount,
@@ -5068,6 +5123,7 @@ function ProfileScreen({
   onResetRecommendationData,
   onDeleteRecommendationData
 }: {
+  presentation?: "mobile" | "desktop";
   consent: { personal: boolean; analytics: boolean; email: boolean };
   selectedParties: number;
   savedCount: number;
@@ -5111,9 +5167,11 @@ function ProfileScreen({
     }
   ];
   return (
-    <section className="panel-screen">
+    <section className={presentation === "desktop" ? "panel-screen profile-screen profile-screen--desktop" : "panel-screen profile-screen"}>
       <Header title="Profil" />
       <div className="panel-scroll">
+        <div className="profile-desktop-grid">
+        <div className="profile-primary-column">
         <AccountCard onOpenLegal={onOpenLegal} />
         {/* These counts used to be invented ("Sparade klipp 24"). They are now
             the real length of the device-local library — see
@@ -5209,6 +5267,8 @@ function ProfileScreen({
             )}
           </Group>
         )}
+        </div>
+        <div className="profile-secondary-column">
         <Group title="Mina intressen">
           <ListRow
             title="Redigera mina intressen"
@@ -5290,6 +5350,8 @@ function ProfileScreen({
             )}
           </Group>
         )}
+        </div>
+        </div>
         <nav className="profile-legal-links" aria-label="Juridisk information">
           {LEGAL_PAGE_ORDER.map((page) => (
             <button key={page} type="button" onClick={() => onOpenLegal(page)}>

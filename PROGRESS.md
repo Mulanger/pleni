@@ -6038,3 +6038,31 @@ owner.
 
 **Next agent should know:** continue with UI20.4 Profile/account/onboarding,
 reusing every existing account, recommendation and PWA callback.
+
+## UI20.4 — Desktop Profile, account and onboarding — IN PROGRESS 2026-09-03
+
+**Built:** Profile now mounts as a real desktop route with the same Clerk states,
+real saved/followed totals, interest editor, personalization consent, data
+export/reset/delete actions and PWA installation state as mobile. Compact
+desktop keeps one ordered flow; normal desktop separates account/library from
+preferences/privacy. The shared onboarding dialog gains a wider, height-bounded
+desktop composition while retaining one state model and one set of callbacks.
+
+**Tests:** 82 frontend Node tests and TypeScript pass. Focused coverage confirms
+the desktop route reuses all three recommendation-data actions and the shared
+primary/secondary profile structure.
+
+**Contracts touched:** none. Clerk, recommendation, consent, export and PWA
+contracts are unchanged.
+
+**Decisions made:** Profile remains one shared screen with presentation-only
+layout changes. PWA/offline/update state is still rendered once by App, never
+duplicated by the desktop outlet.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** no implementation blocker. Production and
+signed-in browser acceptance are deferred until all desktop chunks are ready.
+
+**Next agent should know:** continue with UI20.5 Saved clips and legal pages.
+Use the shared bounded CollectionScreen and preserve the existing legal copy.

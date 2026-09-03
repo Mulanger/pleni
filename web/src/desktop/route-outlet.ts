@@ -75,7 +75,7 @@ export function describeDesktopRoute(route: AppRoute): DesktopRouteDescriptor {
       return {
         ...descriptor,
         focusKey: `tab:${route.tab}`,
-        available: route.tab === "sok" || route.tab === "foljer",
+        available: route.tab === "sok" || route.tab === "foljer" || route.tab === "profil",
         eyebrow: "Pleni på desktop",
         backAction: "home"
       };

@@ -10,7 +10,7 @@ const routes = [
   { hash: "#/hem/fordig", id: "home", available: true, action: "home" },
   { hash: "#/foljer", id: "following", available: true, action: "home" },
   { hash: "#/sok", id: "search", available: true, action: "home" },
-  { hash: "#/profil", id: "profile", available: false, action: "home" },
+  { hash: "#/profil", id: "profile", available: true, action: "home" },
   { hash: "#/person/alice", id: "person", available: true, action: "history" },
   { hash: "#/person/alice/clips?clip=c1", id: "person-clips", available: true, action: "history" },
   { hash: "#/party/S", id: "party", available: true, action: "history" },
@@ -121,4 +121,16 @@ test("desktop Following reuses account-bound library rows and split unfollow act
   assert.match(app, /event\.stopPropagation\(\);\s*onToggleParty/);
   assert.match(app, /event\.stopPropagation\(\);\s*onTogglePerson/);
   assert.match(app, /className="following-groups"/);
+});
+
+test("desktop Profile reuses account, preferences, recommendation and PWA actions", () => {
+  const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+
+  assert.match(app, /profile:\s*route\.view === "tab" && route\.tab === "profil"/);
+  assert.match(app, /<ProfileScreen\s+presentation="desktop"/);
+  assert.match(app, /onExportRecommendationData=\{\(\) => void exportMyRecommendationData\(\)\}/);
+  assert.match(app, /onResetRecommendationData=\{\(\) => void resetMyRecommendationData\(\)\}/);
+  assert.match(app, /onDeleteRecommendationData=\{\(\) => void deleteMyRecommendationData\(\)\}/);
+  assert.match(app, /className="profile-primary-column"/);
+  assert.match(app, /className="profile-secondary-column"/);
 });

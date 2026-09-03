@@ -42,7 +42,7 @@ by the nine listed rows, including the completed UI17 baseline.
 | UI20.1 | Politician and party pages | IN PROGRESS | Implementation and local production-data checks complete; release waits for the UI20.0 InstaPods gate |
 | UI20.2 | Search and search-result feed | IN PROGRESS | Locally implemented; production verification deferred until the combined desktop release |
 | UI20.3 | Following | IN PROGRESS | Locally implemented; production verification deferred until the combined desktop release |
-| UI20.4 | Profile, account and onboarding | NOT STARTED | — |
+| UI20.4 | Profile, account and onboarding | IN PROGRESS | Locally implemented; production verification deferred until the combined desktop release |
 | UI20.5 | Saved clips and legal pages | NOT STARTED | — |
 | UI20.6 | Cross-route integration and quality | NOT STARTED | — |
 | UI20.7 | Final production acceptance and closeout | NOT STARTED | — |
@@ -228,7 +228,7 @@ navigation regressions. No new persistence layer.
 
 ## UI20.4 — Profile, account and onboarding
 
-**Status:** `NOT STARTED`  
+**Status:** `IN PROGRESS`  
 **Depends on:** UI20.0 and UI20.3.  
 **Primary scope:** shared Profile/account/onboarding presentation, desktop
 styles, PWA placement and focused auth/privacy tests.

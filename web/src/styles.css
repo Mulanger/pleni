@@ -4917,6 +4917,67 @@ a {
     margin-top: 10px;
   }
 
+  .profile-screen--desktop {
+    width: 100%;
+    height: 100%;
+    background: #f7f7f4;
+  }
+
+  .profile-screen--desktop .panel-header {
+    padding: 42px clamp(38px, 5vw, 76px) 24px;
+    border-bottom-color: #dfdfd9;
+    background: transparent;
+  }
+
+  .profile-screen--desktop .panel-header h1 {
+    color: #17233c;
+    font-size: 38px;
+    letter-spacing: -0.035em;
+  }
+
+  .profile-screen--desktop .panel-scroll {
+    padding: 30px clamp(38px, 5vw, 76px) 56px;
+    scrollbar-width: thin;
+  }
+
+  .profile-screen--desktop .profile-desktop-grid,
+  .profile-screen--desktop .profile-legal-links,
+  .profile-screen--desktop .version {
+    width: min(100%, 1040px);
+  }
+
+  .profile-screen--desktop .group-body {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .profile-screen--desktop .list-row {
+    padding-inline: 4px;
+    border-bottom: 1px solid #e3e3dd;
+  }
+
+  .profile-screen--desktop .list-row--button:hover,
+  .profile-screen--desktop .list-row--button:focus-visible {
+    background: #eceff4;
+  }
+
+  .profile-screen--desktop .account-card {
+    border: 0;
+    border-left: 3px solid #31558e;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .profile-screen--desktop .profile-legal-links {
+    justify-content: flex-start;
+    gap: 18px;
+    padding-top: 22px;
+    border-top: 1px solid #dfdfd9;
+  }
+
   .pwa-status-stack {
     display: flex;
     top: 20px;
@@ -4946,6 +5007,13 @@ a {
 }
 
 @media (min-width: 1280px) {
+  .profile-screen--desktop .profile-desktop-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(42px, 5vw, 76px);
+    align-items: start;
+  }
+
   .following-screen--desktop .following-groups {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5406,6 +5474,22 @@ a {
 .onboarding-card--done { padding: 30px 24px; text-align: center; align-items: center; }
 .onboarding-card--done h2 { margin: 0 0 8px; font-size: 22px; letter-spacing: -0.02em; }
 .onboarding-card--done p { margin: 0 0 26px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+
+@media (min-width: 1100px) {
+  .onboarding-card {
+    width: min(520px, calc(100% - 48px));
+    max-height: min(calc(100svh - 48px), 760px);
+    border-radius: 18px;
+  }
+
+  .onboarding-body {
+    padding-inline: 34px;
+  }
+
+  .onboarding-actions {
+    justify-content: flex-end;
+  }
+}
 .onboarding-badge {
   width: 62px;
   height: 62px;
