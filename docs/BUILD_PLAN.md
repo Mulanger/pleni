@@ -2015,7 +2015,7 @@ The two chunks most likely to go wrong are **C7** (the two-scale scoring separat
 ## UI17 — Production desktop video feed — DONE 2026-09-02
 
 **Depends on:** UI14.5, UI15 and the public catalogue view from F2a. **Size:** large.
-**Status:** IMPLEMENTED LOCALLY 2026-09-02; production migration and deploy pending.
+**Status:** DONE and released 2026-09-02.
 
 **Objective.** Add a desktop-first presentation for the existing feed without
 creating a second player, changing 9:16 media or reopening completed mobile/PWA
@@ -2047,3 +2047,30 @@ the phone gate; 1100 px and above mounts one desktop `FeedScreen` with an exact
 same-debate clips. At most four media sources remain mounted. TypeScript, Node
 tests, production build, PWA verification, migration guards and the full project
 acceptance command must pass before release.
+
+## UI20 — Complete desktop parity roadmap — REGISTERED 2026-09-03
+
+**Depends on:** UI17 and the released mobile routes. **Size:** multi-session.
+
+**Objective.** Give every existing mobile route a complete desktop presentation
+at widths of 1100 px and wider without duplicating data, account or playback
+logic. Tablet remains out of scope and comments remain hidden under UI19.
+
+**Authoritative plan and chunk scope:**
+`docs/DESKTOP_COMPLETION_PLAN.md`. It owns the status dashboard, locked design
+and responsive contracts, dependencies, allowed scope and acceptance criteria
+for UI20.0 through UI20.7. Implement only one listed chunk at a time and update
+the dashboard plus `PROGRESS.md` in the same closeout.
+
+**Scope — roadmap registration only:**
+
+```
+docs/DESKTOP_COMPLETION_PLAN.md
+docs/BUILD_PLAN.md
+PROGRESS.md
+```
+
+**Acceptance for registration:** the roadmap records UI17 as the completed
+baseline, every remaining mobile route, explicit non-goals, per-chunk completion
+gates, the full desktop/mobile test matrix and a release/rollback protocol. No
+product code changes in this registration chunk.

@@ -5852,3 +5852,34 @@ desktop comment panel is not exposed to viewers.
 **Next agent should know:** rollback frontend first. Migration 031 is additive
 and safe to leave applied; use its down file only after the UI17 frontend no
 longer reads the new projection fields.
+
+## UI20 — Complete desktop parity roadmap — REGISTERED 2026-09-03
+
+**Built:** `docs/DESKTOP_COMPLETION_PLAN.md`, the authoritative tracker for the
+remaining desktop work. It records UI17 as the released baseline and divides
+full mobile-feature parity into UI20.0–UI20.7 with dependencies, primary scope,
+acceptance criteria, production gates and a four-state dashboard.
+
+**Tests:** documentation links/chunk headings and `git diff --check` verified.
+Frontend: 74 Node tests passed; TypeScript, Vite production build and PWA
+verification passed. Project acceptance: 514 passed, 79 deselected, one known
+`audioop` deprecation warning; Ruff and mypy passed. No product code, runtime
+contract or generated artifact changed.
+
+**Contracts touched:** none.
+
+**Decisions made:** desktop parity means every current mobile route at 1100 px
+and wider. The 700–1099 px phone gate stays. UI19 keeps comments globally hidden.
+Each functional chunk is independently tested, released and smoke-tested; a row
+becomes `DONE` only after its live evidence is recorded.
+
+**Observations (not fixed, out of scope):** the repository already contains an
+older unrelated UI17 label for compact profile counts. UI20 is used for this
+roadmap so no further identifier collision is introduced.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** begin with UI20.0 only. Work from a clean worktree
+based on current `origin/main`; do not modify or clean the owner's dirty local
+backfill branch. Update both the roadmap dashboard and this ledger at each chunk
+boundary.
