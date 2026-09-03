@@ -3866,8 +3866,8 @@ a {
     min-width: 0;
     flex-direction: column;
     padding: 28px 18px 22px;
-    border-right: 1px solid #e7e7e1;
-    background: rgba(250, 250, 248, 0.96);
+    border-right: 1px solid #203a61;
+    background: #13284d;
   }
 
   .desktop-brand {
@@ -3886,11 +3886,12 @@ a {
     display: block;
     width: auto;
     height: 36px;
+    border-radius: 9px;
     object-fit: contain;
   }
 
   .desktop-brand span {
-    color: #142b4d;
+    color: #fff;
     font-size: 22px;
     font-weight: 800;
     letter-spacing: -0.04em;
@@ -3913,7 +3914,7 @@ a {
     border: 0;
     border-radius: 12px;
     background: transparent;
-    color: #60605a;
+    color: rgba(255, 255, 255, 0.72);
     cursor: pointer;
     font-size: 14px;
     font-weight: 650;
@@ -3922,13 +3923,20 @@ a {
 
   .desktop-sidebar nav button:hover,
   .desktop-sidebar nav button:focus-visible {
-    background: #f0f0eb;
-    color: #17233c;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
   }
 
   .desktop-sidebar nav button.active {
-    background: #e9edf5;
+    background: #fff;
     color: #13284d;
+  }
+
+  .desktop-sidebar nav button:focus-visible,
+  .desktop-account > button:focus-visible,
+  .desktop-brand:focus-visible {
+    outline: 3px solid rgba(255, 255, 255, 0.54);
+    outline-offset: 3px;
   }
 
   .desktop-sidebar nav button svg {
@@ -3942,8 +3950,8 @@ a {
     gap: 11px;
     margin-top: auto;
     padding: 8px 10px;
-    border-top: 1px solid #e7e7e1;
-    color: #55554f;
+    border-top: 1px solid rgba(255, 255, 255, 0.16);
+    color: rgba(255, 255, 255, 0.72);
     font-size: 13px;
     font-weight: 650;
   }
@@ -4473,17 +4481,28 @@ a {
     color: #fff;
   }
 
-  .desktop-coming-soon {
-    display: flex;
-    width: min(520px, calc(100% - 64px));
+  .desktop-route-frame {
+    width: 100%;
     height: 100%;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    margin: 0 auto;
+    min-width: 0;
+    outline: none;
+    animation: desktopInspectorIn 180ms ease-out both;
   }
 
-  .desktop-coming-soon > span {
+  .desktop-page {
+    width: min(100%, 1120px);
+    height: 100%;
+    margin: 0 auto;
+    padding: clamp(34px, 5vh, 64px) clamp(32px, 5vw, 72px) 56px;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .desktop-page-header {
+    max-width: 720px;
+  }
+
+  .desktop-page-eyebrow {
     color: #71716a;
     font-size: 11px;
     font-weight: 750;
@@ -4491,36 +4510,112 @@ a {
     text-transform: uppercase;
   }
 
-  .desktop-coming-soon h1 {
-    margin: 12px 0 0;
+  .desktop-page-header h1 {
+    margin: 13px 0 0;
     color: #17233c;
-    font-size: clamp(34px, 4vw, 58px);
-    line-height: 1;
+    font-size: clamp(34px, 4vw, 56px);
+    line-height: 1.02;
     letter-spacing: -0.04em;
+    text-wrap: balance;
   }
 
-  .desktop-coming-soon p {
-    max-width: 430px;
+  .desktop-page-header > p {
+    max-width: 590px;
     margin: 18px 0 0;
-    color: #6e6e67;
+    color: #686862;
     font-size: 15px;
-    line-height: 1.55;
+    line-height: 1.6;
   }
 
-  .desktop-coming-soon button {
+  .desktop-back-action {
     display: flex;
-    min-height: 44px;
+    width: fit-content;
+    min-height: 42px;
     align-items: center;
     gap: 8px;
-    margin-top: 26px;
-    padding: 0 17px;
-    border: 0;
+    margin: 0 0 34px;
+    padding: 0 15px;
+    border: 1px solid #deded8;
     border-radius: 999px;
-    background: #13284d;
-    color: #fff;
+    background: transparent;
+    color: #263750;
     cursor: pointer;
     font-size: 13px;
     font-weight: 700;
+    transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+  }
+
+  .desktop-back-action:hover {
+    border-color: #c8ced8;
+    background: #eef1f6;
+    transform: translateY(-1px);
+  }
+
+  .desktop-back-action:focus-visible {
+    outline: 3px solid rgba(38, 79, 139, 0.3);
+    outline-offset: 3px;
+  }
+
+  .desktop-section {
+    margin-top: 44px;
+    padding-top: 24px;
+    border-top: 1px solid #e1e1db;
+  }
+
+  .desktop-section-heading {
+    max-width: 620px;
+    margin-bottom: 20px;
+  }
+
+  .desktop-section-heading h2 {
+    margin: 0;
+    color: #202c41;
+    font-size: 20px;
+    letter-spacing: -0.02em;
+  }
+
+  .desktop-section-heading p {
+    margin: 8px 0 0;
+    color: #74746d;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .desktop-state {
+    display: flex;
+    max-width: 650px;
+    align-items: flex-start;
+    gap: 12px;
+    color: #797972;
+  }
+
+  .desktop-state > svg {
+    flex: 0 0 auto;
+    margin-top: 1px;
+  }
+
+  .desktop-state > div {
+    min-width: 0;
+  }
+
+  .desktop-state strong {
+    display: block;
+    color: #343d4d;
+    font-size: 14px;
+  }
+
+  .desktop-state p {
+    margin: 6px 0 0;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .desktop-state--error > svg {
+    color: #a63c49;
+  }
+
+  .desktop-state-spinner {
+    animation: commentSpin 800ms linear infinite;
   }
 
   .pwa-status-stack {
@@ -4545,13 +4640,27 @@ a {
   .comment-sheet--inspector .comment-composer {
     padding-left: 20px;
   }
+
+  .desktop-page {
+    padding-inline: 38px;
+  }
 }
 
 @media (min-width: 1100px) and (prefers-reduced-motion: reduce) {
+  .desktop-route-frame,
   .desktop-inspector-content,
   .comment-sheet--inspector,
-  .desktop-related-status svg {
+  .desktop-related-status svg,
+  .desktop-state-spinner {
     animation: none;
+  }
+
+  .desktop-back-action {
+    transition: none;
+  }
+
+  .desktop-back-action:hover {
+    transform: none;
   }
 }
 

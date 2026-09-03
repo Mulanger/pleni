@@ -29,6 +29,8 @@ test("desktop reuses the bounded FeedScreen instead of mounting a second player"
   const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
   assert.match(app, /presentation="desktop"/);
+  assert.match(app, /key="desktop"/);
+  assert.match(app, /key="mobile"/);
   assert.match(app, /viewport === "desktop"/);
   assert.match(app, /viewport === "mobile"/);
   assert.match(app, /planMediaWindow\(/);

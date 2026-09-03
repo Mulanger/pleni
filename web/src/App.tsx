@@ -87,6 +87,7 @@ import {
   viewportSurface,
   type ViewportSurface
 } from "./desktop/layout-policy";
+import { DesktopRouteOutlet } from "./desktop/DesktopRouteOutlet";
 import { Onboarding } from "./onboarding";
 import { EMPTY_ONBOARDING, readOnboarding, writeOnboarding } from "./onboarding-store";
 import { EMPTY_LIBRARY, readLibrary, toggleInList, writeLibrary } from "./library-store";
@@ -1275,7 +1276,7 @@ function App() {
         />
       )}
       {viewport === "desktop" ? (
-        <main className="desktop-app" aria-label="Pleni desktop">
+        <main key="desktop" className="desktop-app" aria-label="Pleni desktop">
           <DesktopSidebar
             active={tab}
             signedIn={viewer.signedIn}
@@ -1283,36 +1284,36 @@ function App() {
             onChange={(nextTab) => navigate({ view: "tab", tab: nextTab, feedMode })}
           />
           <div className="desktop-content">
-            {route.view === "tab" && tab === "hem" ? (
-              <FeedScreen
-                presentation="desktop"
-                clips={clips}
-                feedMode={feedMode}
-                setFeedMode={changeFeedMode}
-                playbackSuspended={showOnboarding}
-                muted={muted}
-                setMuted={setMuted}
-                liked={liked}
-                saved={saved}
-                following={following}
-                loading={loading}
-                clipSource={clipSource}
-                feedError={feedError}
-                onLike={toggleLikeClip}
-                onSave={toggleSaveClip}
-                onToggleFollow={toggleFollowPolitician}
-                onOpenPerson={openPerson}
-              />
-            ) : (
-              <DesktopComingSoon
-                tab={tab}
-                onHome={() => navigate({ view: "tab", tab: "hem", feedMode })}
-              />
-            )}
+            <DesktopRouteOutlet
+              route={route}
+              onHome={() => navigate({ view: "tab", tab: "hem", feedMode })}
+              onBack={() => backTo({ view: "tab", tab, feedMode })}
+              home={
+                <FeedScreen
+                  presentation="desktop"
+                  clips={clips}
+                  feedMode={feedMode}
+                  setFeedMode={changeFeedMode}
+                  playbackSuspended={showOnboarding}
+                  muted={muted}
+                  setMuted={setMuted}
+                  liked={liked}
+                  saved={saved}
+                  following={following}
+                  loading={loading}
+                  clipSource={clipSource}
+                  feedError={feedError}
+                  onLike={toggleLikeClip}
+                  onSave={toggleSaveClip}
+                  onToggleFollow={toggleFollowPolitician}
+                  onOpenPerson={openPerson}
+                />
+              }
+            />
           </div>
         </main>
       ) : viewport === "mobile" ? (
-      <main className="mobile-app" aria-label="Pleni">
+      <main key="mobile" className="mobile-app" aria-label="Pleni">
         {showingSearchFeed && searchFeedCollection !== null ? (
           <CollectionScreen
             collection={searchFeedCollection}
@@ -1569,26 +1570,6 @@ function DesktopSidebar({
         )}
       </div>
     </aside>
-  );
-}
-
-function DesktopComingSoon({ tab, onHome }: { tab: Tab; onHome: () => void }) {
-  const labels: Record<Tab, string> = {
-    hem: "Hem",
-    foljer: "Följer",
-    sok: "Sök",
-    profil: "Profil"
-  };
-  return (
-    <section className="desktop-coming-soon">
-      <span>Pleni på desktop</span>
-      <h1>{labels[tab]} kommer snart</h1>
-      <p>Den här sidan är fortfarande optimerad för mobilen. Videoflödet är redo här på desktop.</p>
-      <button type="button" onClick={onHome}>
-        <Home size={17} />
-        Till videoflödet
-      </button>
-    </section>
   );
 }
 
