@@ -84,7 +84,7 @@ export function describeDesktopRoute(route: AppRoute): DesktopRouteDescriptor {
       return {
         id: "person",
         focusKey: `person:${route.personId}`,
-        available: false,
+        available: true,
         eyebrow: "Politiker",
         title: "Politikersidan kommer snart",
         description: "Profil, uppdrag och publicerade klipp finns kvar i mobilappen medan desktopvyn byggs.",
@@ -94,7 +94,7 @@ export function describeDesktopRoute(route: AppRoute): DesktopRouteDescriptor {
       return {
         id: "person-clips",
         focusKey: `person-clips:${route.personId}:${route.startId ?? "first"}`,
-        available: false,
+        available: true,
         eyebrow: "Politiker",
         title: "Politikerns klipp kommer snart",
         description: "Den fokuserade klippsamlingen öppnas fortfarande som vanligt i mobilappen.",
@@ -104,7 +104,7 @@ export function describeDesktopRoute(route: AppRoute): DesktopRouteDescriptor {
       return {
         id: "party",
         focusKey: `party:${route.partyCode}`,
-        available: false,
+        available: true,
         eyebrow: "Parti",
         title: "Partisidan kommer snart",
         description: "Partiets politiker och publicerade klipp finns kvar i mobilappen medan desktopvyn byggs.",
@@ -114,7 +114,7 @@ export function describeDesktopRoute(route: AppRoute): DesktopRouteDescriptor {
       return {
         id: "party-clips",
         focusKey: `party-clips:${route.partyCode}:${route.startId ?? "first"}`,
-        available: false,
+        available: true,
         eyebrow: "Parti",
         title: "Partiets klipp kommer snart",
         description: "Den fokuserade klippsamlingen öppnas fortfarande som vanligt i mobilappen.",

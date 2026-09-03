@@ -88,6 +88,7 @@ import {
   type ViewportSurface
 } from "./desktop/layout-policy";
 import { DesktopRouteOutlet } from "./desktop/DesktopRouteOutlet";
+import { createScrollMemory } from "./desktop/scroll-memory";
 import { Onboarding } from "./onboarding";
 import { EMPTY_ONBOARDING, readOnboarding, writeOnboarding } from "./onboarding-store";
 import { EMPTY_LIBRARY, readLibrary, toggleInList, writeLibrary } from "./library-store";
@@ -1288,27 +1289,89 @@ function App() {
               route={route}
               onHome={() => navigate({ view: "tab", tab: "hem", feedMode })}
               onBack={() => backTo({ view: "tab", tab, feedMode })}
-              home={
-                <FeedScreen
-                  presentation="desktop"
-                  clips={clips}
-                  feedMode={feedMode}
-                  setFeedMode={changeFeedMode}
-                  playbackSuspended={showOnboarding}
-                  muted={muted}
-                  setMuted={setMuted}
-                  liked={liked}
-                  saved={saved}
-                  following={following}
-                  loading={loading}
-                  clipSource={clipSource}
-                  feedError={feedError}
-                  onLike={toggleLikeClip}
-                  onSave={toggleSaveClip}
-                  onToggleFollow={toggleFollowPolitician}
-                  onOpenPerson={openPerson}
-                />
-              }
+              surfaces={{
+                home: (
+                  <FeedScreen
+                    presentation="desktop"
+                    clips={clips}
+                    feedMode={feedMode}
+                    setFeedMode={changeFeedMode}
+                    playbackSuspended={showOnboarding}
+                    muted={muted}
+                    setMuted={setMuted}
+                    liked={liked}
+                    saved={saved}
+                    following={following}
+                    loading={loading}
+                    clipSource={clipSource}
+                    feedError={feedError}
+                    onLike={toggleLikeClip}
+                    onSave={toggleSaveClip}
+                    onToggleFollow={toggleFollowPolitician}
+                    onOpenPerson={openPerson}
+                  />
+                ),
+                person: route.view === "person" ? (
+                  <PersonScreen
+                    presentation="desktop"
+                    scrollKey={`person:${route.personId}`}
+                    person={person}
+                    clips={personClips}
+                    loading={personLoading}
+                    onBack={closePerson}
+                    following={!!following[route.personId]}
+                    onToggleFollow={() => toggleFollowPolitician(route.personId)}
+                    onPlayClip={openPersonClips}
+                  />
+                ) : null,
+                party: route.view === "party" ? (
+                  <PartyScreen
+                    presentation="desktop"
+                    scrollKey={`party:${route.partyCode}`}
+                    party={party}
+                    clips={partyClips}
+                    politicians={partyPoliticians}
+                    loading={partyLoading}
+                    onBack={closeParty}
+                    following={!!followedParties[route.partyCode]}
+                    onToggleFollow={() => toggleFollowParty(route.partyCode)}
+                    onPlayClip={openPartyClips}
+                    onOpenPerson={openPerson}
+                  />
+                ) : null,
+                "person-clips": route.view === "person-clips" ? (
+                  <CollectionScreen
+                    presentation="desktop"
+                    collection={collection ?? { title: "Klipp", subtitle: "Laddar…", clips: [], startId: null }}
+                    onBack={() => backTo({ view: "person", tab, feedMode, personId: route.personId })}
+                    muted={muted}
+                    setMuted={setMuted}
+                    liked={liked}
+                    saved={saved}
+                    following={following}
+                    onLike={toggleLikeClip}
+                    onSave={toggleSaveClip}
+                    onToggleFollow={toggleFollowPolitician}
+                    onOpenPerson={openPerson}
+                  />
+                ) : null,
+                "party-clips": route.view === "party-clips" ? (
+                  <CollectionScreen
+                    presentation="desktop"
+                    collection={collection ?? { title: "Klipp", subtitle: "Laddar…", clips: [], startId: null }}
+                    onBack={() => backTo({ view: "party", tab, feedMode, partyCode: route.partyCode })}
+                    muted={muted}
+                    setMuted={setMuted}
+                    liked={liked}
+                    saved={saved}
+                    following={following}
+                    onLike={toggleLikeClip}
+                    onSave={toggleSaveClip}
+                    onToggleFollow={toggleFollowPolitician}
+                    onOpenPerson={openPerson}
+                  />
+                ) : null
+              }}
             />
           </div>
         </main>
@@ -1343,7 +1406,9 @@ function App() {
               backTo(
                 route.view === "saved-clips"
                   ? { view: "saved", tab: "profil", feedMode }
-                  : { view: "tab", tab, feedMode }
+                  : route.view === "person-clips"
+                    ? { view: "person", tab, feedMode, personId: route.personId }
+                    : { view: "party", tab, feedMode, partyCode: route.partyCode }
               )
             }
             muted={muted}
@@ -3270,6 +3335,7 @@ function DesktopClipInspector({
 function CollectionScreen({
   collection,
   onBack,
+  presentation = "mobile",
   muted,
   setMuted,
   liked,
@@ -3282,6 +3348,7 @@ function CollectionScreen({
 }: {
   collection: ClipCollection;
   onBack: () => void;
+  presentation?: "mobile" | "desktop";
   muted: boolean;
   setMuted: (muted: boolean) => void;
   liked: BooleanMap;
@@ -3294,6 +3361,7 @@ function CollectionScreen({
 }) {
   return (
     <FeedScreen
+      presentation={presentation}
       clips={collection.clips}
       feedMode="senaste"
       setFeedMode={() => undefined}
@@ -3312,7 +3380,7 @@ function CollectionScreen({
       initialClipId={collection.startId}
       emptyMessage="Inga klipp här ännu"
       header={
-        <div className="collection-bar">
+        <div className={presentation === "desktop" ? "collection-bar desktop-debate-bar" : "collection-bar"}>
           <button onClick={onBack} aria-label="Tillbaka">
             <ChevronLeft size={22} />
           </button>
@@ -5285,7 +5353,38 @@ function SavedScreen({
   );
 }
 
+const desktopProfileScrollPositions = createScrollMemory();
+
+function useProfileScrollPosition(scrollKey: string | null, enabled: boolean) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const element = scrollRef.current;
+    if (!enabled || !scrollKey || !element) {
+      return;
+    }
+    const position = desktopProfileScrollPositions.read(scrollKey);
+    const frame = window.requestAnimationFrame(() => {
+      element.scrollTop = position;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [enabled, scrollKey]);
+
+  const rememberScroll = useCallback(
+    (event: React.UIEvent<HTMLDivElement>) => {
+      if (enabled && scrollKey) {
+        desktopProfileScrollPositions.write(scrollKey, event.currentTarget.scrollTop);
+      }
+    },
+    [enabled, scrollKey]
+  );
+
+  return { scrollRef, rememberScroll };
+}
+
 function PartyScreen({
+  presentation = "mobile",
+  scrollKey = null,
   party,
   clips,
   politicians,
@@ -5296,6 +5395,8 @@ function PartyScreen({
   onPlayClip,
   onOpenPerson
 }: {
+  presentation?: "mobile" | "desktop";
+  scrollKey?: string | null;
   party: PartyProfile | null;
   clips: ClipItem[];
   politicians: Politician[];
@@ -5306,18 +5407,38 @@ function PartyScreen({
   onPlayClip: (clipId: string | null) => void;
   onOpenPerson: (personId: string) => void;
 }) {
+  const { scrollRef, rememberScroll } = useProfileScrollPosition(
+    scrollKey,
+    presentation === "desktop"
+  );
+  const playClip = (clipId: string | null) => {
+    if (presentation === "desktop" && scrollKey && scrollRef.current) {
+      desktopProfileScrollPositions.write(scrollKey, scrollRef.current.scrollTop);
+    }
+    onPlayClip(clipId);
+  };
+
   return (
-    <section className="party-screen">
-      <div className="person-topbar">
-        <button onClick={onBack} aria-label="Tillbaka">
-          <ChevronLeft size={24} />
-        </button>
-        <strong>{party?.name ?? "Parti"}</strong>
-        <button aria-label="Dela">
-          <Share2 size={19} />
-        </button>
-      </div>
-      <div className="panel-scroll person-scroll">
+    <section className={presentation === "desktop" ? "party-screen party-screen--desktop" : "party-screen"}>
+      {presentation === "mobile" ? (
+        <div className="person-topbar">
+          <button onClick={onBack} aria-label="Tillbaka">
+            <ChevronLeft size={24} />
+          </button>
+          <strong>{party?.name ?? "Parti"}</strong>
+          <button aria-label="Dela">
+            <Share2 size={19} />
+          </button>
+        </div>
+      ) : (
+        <div className="desktop-profile-toolbar">
+          <button className="desktop-back-action" type="button" onClick={onBack}>
+            <ChevronLeft size={18} />
+            <span>Tillbaka</span>
+          </button>
+        </div>
+      )}
+      <div ref={scrollRef} className="panel-scroll person-scroll" onScroll={rememberScroll}>
         {loading && !party && <ProfileSkeleton variant="party" />}
         {!loading && !party && (
           <div className="panel-empty" role="status">
@@ -5375,7 +5496,7 @@ function PartyScreen({
                     <button
                       className="mini-clip"
                       key={clip.id}
-                      onClick={() => onPlayClip(clip.id)}
+                      onClick={() => playClip(clip.id)}
                       aria-label={`Spela: ${clip.title}`}
                     >
                       <img src={clip.thumbUrl} alt="" loading="lazy" />
@@ -5419,6 +5540,8 @@ function PartyScreen({
 }
 
 function PersonScreen({
+  presentation = "mobile",
+  scrollKey = null,
   person,
   clips,
   loading,
@@ -5427,6 +5550,8 @@ function PersonScreen({
   onToggleFollow,
   onPlayClip
 }: {
+  presentation?: "mobile" | "desktop";
+  scrollKey?: string | null;
   person: Politician | null;
   clips: ClipItem[];
   loading: boolean;
@@ -5435,6 +5560,16 @@ function PersonScreen({
   onToggleFollow: () => void;
   onPlayClip: (clipId: string | null) => void;
 }) {
+  const { scrollRef, rememberScroll } = useProfileScrollPosition(
+    scrollKey,
+    presentation === "desktop"
+  );
+  const playClip = (clipId: string | null) => {
+    if (presentation === "desktop" && scrollKey && scrollRef.current) {
+      desktopProfileScrollPositions.write(scrollKey, scrollRef.current.scrollTop);
+    }
+    onPlayClip(clipId);
+  };
   const displayName = person ? cleanName(person.name) || person.name : "";
   const party = person ? PARTIES[person.party] : PARTIES.NONE;
   // The exact published total, which is not the same as how many were loaded
@@ -5443,17 +5578,26 @@ function PersonScreen({
   const total = person?.clipCount;
 
   return (
-    <section className="person-screen">
-      <div className="person-topbar">
-        <button onClick={onBack} aria-label="Tillbaka">
-          <ChevronLeft size={24} />
-        </button>
-        <strong>{displayName}</strong>
-        <button aria-label="Dela">
-          <Share2 size={19} />
-        </button>
-      </div>
-      <div className="panel-scroll person-scroll">
+    <section className={presentation === "desktop" ? "person-screen person-screen--desktop" : "person-screen"}>
+      {presentation === "mobile" ? (
+        <div className="person-topbar">
+          <button onClick={onBack} aria-label="Tillbaka">
+            <ChevronLeft size={24} />
+          </button>
+          <strong>{displayName}</strong>
+          <button aria-label="Dela">
+            <Share2 size={19} />
+          </button>
+        </div>
+      ) : (
+        <div className="desktop-profile-toolbar">
+          <button className="desktop-back-action" type="button" onClick={onBack}>
+            <ChevronLeft size={18} />
+            <span>Tillbaka</span>
+          </button>
+        </div>
+      )}
+      <div ref={scrollRef} className="panel-scroll person-scroll" onScroll={rememberScroll}>
         {loading && !person && <ProfileSkeleton variant="person" />}
         {!loading && !person && (
           <div className="panel-empty" role="status">
@@ -5506,7 +5650,7 @@ function PersonScreen({
                     <button
                       className="mini-clip"
                       key={clip.id}
-                      onClick={() => onPlayClip(clip.id)}
+                      onClick={() => playClip(clip.id)}
                       aria-label={`Spela: ${clip.title}`}
                     >
                       <img src={clip.thumbUrl} alt="" loading="lazy" />

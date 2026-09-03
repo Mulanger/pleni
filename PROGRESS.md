@@ -5930,3 +5930,50 @@ or repush the frontend. When the navy route-aware outlet is live, record the
 production viewport evidence, move the roadmap row to `DONE`, update completion
 to 2 of 9 and commit/push the documentation closeout. UI20.1 is next only after
 that gate.
+
+## UI20.1 — Politician and party desktop pages — IN PROGRESS 2026-09-03
+
+**Built:** the route-aware outlet now exposes `person`, `person-clips`, `party`
+and `party-clips` on desktop. The existing `PersonScreen`, `PartyScreen` and
+`CollectionScreen` receive an explicit presentation mode, so desktop reuses the
+mobile data, portrait/logo delivery, counts, follow guard and bounded
+`FeedScreen` rather than cloning any business logic. Compact desktop is one
+continuous column; widths from 1280 px use an editorial identity/content split.
+Decorative profile share controls remain mobile-only. Session-only keyed scroll
+memory restores the profile after opening a clip and stores no browsing data.
+
+**Tests:** 79 Node tests passed, including all desktop route descriptors, shared
+profile presentations, bounded collection playback and keyed/clamped scroll
+memory. TypeScript, Vite production build and PWA verification passed. Project
+acceptance: 514 passed, 79 deselected, one known `audioop` deprecation warning;
+Ruff and mypy passed.
+
+**Visual verification:** using the public production catalogue in the local
+build, 1440×900 showed Patrik Björck's real Riksdagen portrait, role and 15 real
+clips with no video mounted on the chooser. A selected clip opened the same
+desktop `FeedScreen` with three video elements and one playing; Back restored a
+non-zero profile scroll position. Socialdemokraterna rendered its verified logo,
+1,792 real clips, 102 politicians and 60 loaded clips. The 1100×720 compact
+layout stayed one column without horizontal overflow; 1280×720 used two columns
+without clipping the long party name. At 390×844 only the unchanged mobile party
+screen mounted, with no horizontal overflow. Signed-out Follow opened Clerk's
+login dialog through the existing account guard.
+
+**Contracts touched:** none. No Python contract, database migration, Supabase
+reader, Bunny path, video rendition or account persistence changed.
+
+**Decisions made:** identity remains the dominant visual; clips remain the main
+content. The desktop layout uses cardless dividers and real media. Direct profile
+clip hashes fall back to the correct person/party page, not the top-level tab.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** UI20.1 is locally complete but cannot be released
+or marked `DONE` until UI20.0 is observed in production. The available Chrome
+session reaches `app.instapods.com` but is signed out, so the host's stalled
+auto-deploy could not be inspected or restarted.
+
+**Next agent should know:** sign in to `app.instapods.com`, inspect/restart the
+`rikettv` deployment for current `origin/main`, then close UI20.0. After that,
+commit/push this UI20.1 implementation, run live person/party/profile-clip smoke
+checks and close UI20.1 before beginning UI20.2.

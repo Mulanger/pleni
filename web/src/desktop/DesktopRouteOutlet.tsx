@@ -2,24 +2,26 @@ import type { ReactNode } from "react";
 import type { AppRoute } from "../navigation";
 import { DesktopPage, DesktopRouteFrame, DesktopSection, DesktopState } from "./primitives";
 import { describeDesktopRoute } from "./route-outlet";
+import type { DesktopRouteId } from "./route-outlet";
 
 export function DesktopRouteOutlet({
   route,
-  home,
+  surfaces,
   onHome,
   onBack
 }: {
   route: AppRoute;
-  home: ReactNode;
+  surfaces: Partial<Record<DesktopRouteId, ReactNode>>;
   onHome: () => void;
   onBack: () => void;
 }) {
   const descriptor = describeDesktopRoute(route);
+  const surface = surfaces[descriptor.id];
 
   return (
     <DesktopRouteFrame focusKey={descriptor.focusKey}>
-      {descriptor.available ? (
-        home
+      {descriptor.available && surface ? (
+        surface
       ) : (
         <DesktopPage
           eyebrow={descriptor.eyebrow}

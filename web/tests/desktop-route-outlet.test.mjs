@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { describeDesktopRoute } from "../src/desktop/route-outlet.ts";
+import { createScrollMemory } from "../src/desktop/scroll-memory.ts";
 import { routeFromHash } from "../src/navigation.ts";
 
 const routes = [
@@ -10,10 +11,10 @@ const routes = [
   { hash: "#/foljer", id: "following", available: false, action: "home" },
   { hash: "#/sok", id: "search", available: false, action: "home" },
   { hash: "#/profil", id: "profile", available: false, action: "home" },
-  { hash: "#/person/alice", id: "person", available: false, action: "history" },
-  { hash: "#/person/alice/clips?clip=c1", id: "person-clips", available: false, action: "history" },
-  { hash: "#/party/S", id: "party", available: false, action: "history" },
-  { hash: "#/party/S/clips?clip=c1", id: "party-clips", available: false, action: "history" },
+  { hash: "#/person/alice", id: "person", available: true, action: "history" },
+  { hash: "#/person/alice/clips?clip=c1", id: "person-clips", available: true, action: "history" },
+  { hash: "#/party/S", id: "party", available: true, action: "history" },
+  { hash: "#/party/S/clips?clip=c1", id: "party-clips", available: true, action: "history" },
   { hash: "#/profil/saved", id: "saved", available: false, action: "history" },
   { hash: "#/profil/saved/clips?clip=c1", id: "saved-clips", available: false, action: "history" },
   { hash: "#/legal/privacy", id: "legal", available: false, action: "history" }
@@ -38,6 +39,17 @@ test("route identity changes when focused desktop content changes", () => {
   assert.match(legal.title, /Villkor/);
 });
 
+test("desktop profile scroll memory is session-only, keyed and bounded", () => {
+  const memory = createScrollMemory();
+  assert.equal(memory.read("person:a"), 0);
+  memory.write("person:a", 420);
+  memory.write("party:S", 180);
+  assert.equal(memory.read("person:a"), 420);
+  assert.equal(memory.read("party:S"), 180);
+  memory.write("person:a", -20);
+  assert.equal(memory.read("person:a"), 0);
+});
+
 test("desktop route architecture owns one focus boundary and shared primitives", () => {
   const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
   const outlet = readFileSync(
@@ -59,4 +71,31 @@ test("desktop route architecture owns one focus boundary and shared primitives",
   assert.match(primitives, /focus\(\{ preventScroll: true \}\)/);
   assert.match(styles, /\.desktop-back-action:focus-visible/);
   assert.match(styles, /prefers-reduced-motion: reduce/);
+});
+
+test("desktop profiles reuse mobile data components and the bounded collection player", () => {
+  const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const outlet = readFileSync(
+    new URL("../src/desktop/DesktopRouteOutlet.tsx", import.meta.url),
+    "utf8"
+  );
+  const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+
+  assert.match(app, /person: route\.view === "person"/);
+  assert.match(app, /party: route\.view === "party"/);
+  assert.match(app, /"person-clips": route\.view === "person-clips"/);
+  assert.match(app, /"party-clips": route\.view === "party-clips"/);
+  assert.match(app, /<PersonScreen\s+presentation="desktop"/);
+  assert.match(app, /<PartyScreen\s+presentation="desktop"/);
+  assert.match(app, /<CollectionScreen\s+presentation="desktop"/);
+  assert.match(app, /presentation=\{presentation\}/);
+  assert.match(app, /createScrollMemory/);
+  assert.match(app, /scrollKey=\{`person:/);
+  assert.match(app, /scrollKey=\{`party:/);
+  assert.match(app, /view: "person", tab, feedMode, personId: route\.personId/);
+  assert.match(app, /view: "party", tab, feedMode, partyCode: route\.partyCode/);
+  assert.match(outlet, /surfaces\[descriptor\.id\]/);
+  assert.match(styles, /@media \(min-width: 1280px\)/);
+  assert.match(styles, /\.person-screen--desktop \.person-scroll/);
+  assert.match(styles, /\.party-screen--desktop \.person-scroll/);
 });
