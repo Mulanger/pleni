@@ -6790,6 +6790,9 @@ function PartyScreen({
     presentation === "desktop"
   );
   const [showEveryPolitician, setShowEveryPolitician] = useState(false);
+  useEffect(() => {
+    setShowEveryPolitician(false);
+  }, [party?.abbr]);
   const playClip = (clipId: string | null) => {
     if (presentation === "desktop" && scrollKey && scrollRef.current) {
       desktopProfileScrollPositions.write(scrollKey, scrollRef.current.scrollTop);
@@ -6910,7 +6913,14 @@ function PartyScreen({
                   {politicians.length > 0 && (
                     <section className="desktop-rail-block">
                       <h2 className="desktop-rail-head">Politiker i {party.short}</h2>
-                      <div className="desktop-rail-people">
+                      <div
+                        className={
+                          showEveryPolitician
+                            ? "desktop-rail-people is-scrollable"
+                            : "desktop-rail-people"
+                        }
+                        id={`party-rail-people-${party.abbr}`}
+                      >
                         {railPoliticians.map((politician) => (
                           <DesktopRailPerson
                             key={politician.id}
@@ -6924,12 +6934,18 @@ function PartyScreen({
                         <button
                           className="desktop-rail-link"
                           type="button"
+                          aria-expanded={showEveryPolitician}
+                          aria-controls={`party-rail-people-${party.abbr}`}
                           onClick={() => setShowEveryPolitician((current) => !current)}
                         >
                           {showEveryPolitician
                             ? "Visa färre"
                             : `Alla ${formatNumber(politicians.length)} politiker`}
-                          <ChevronRight size={13} aria-hidden="true" />
+                          {showEveryPolitician ? (
+                            <ChevronUp size={13} aria-hidden="true" />
+                          ) : (
+                            <ChevronDown size={13} aria-hidden="true" />
+                          )}
                         </button>
                       )}
                     </section>
@@ -7119,6 +7135,10 @@ function PersonScreen({
     scrollKey,
     presentation === "desktop"
   );
+  const [showEveryPartyPeer, setShowEveryPartyPeer] = useState(false);
+  useEffect(() => {
+    setShowEveryPartyPeer(false);
+  }, [person?.id]);
   const playClip = (clipId: string | null) => {
     if (presentation === "desktop" && scrollKey && scrollRef.current) {
       desktopProfileScrollPositions.write(scrollKey, scrollRef.current.scrollTop);
@@ -7141,9 +7161,12 @@ function PersonScreen({
       facts.push({ label: "Senaste klipp", value: formatDate(clips[0].debateDate), text: true });
     }
     // Party colleagues, never the person whose page this is.
-    const peers = person
-      ? partyPeers.filter((peer) => peer.id !== person.id).slice(0, RAIL_PERSON_LIMIT)
+    const availablePeers = person
+      ? partyPeers.filter((peer) => peer.id !== person.id)
       : [];
+    const peers = showEveryPartyPeer
+      ? availablePeers
+      : availablePeers.slice(0, RAIL_PERSON_LIMIT);
     const partyIsPublic = person !== null && person.party !== "NONE";
 
     return (
@@ -7308,7 +7331,14 @@ function PersonScreen({
                   {peers.length > 0 && onOpenPerson && (
                     <section className="desktop-rail-block">
                       <h2 className="desktop-rail-head">Fler från {party.short}</h2>
-                      <div className="desktop-rail-people">
+                      <div
+                        className={
+                          showEveryPartyPeer
+                            ? "desktop-rail-people is-scrollable"
+                            : "desktop-rail-people"
+                        }
+                        id="person-party-peers"
+                      >
                         {peers.map((peer) => (
                           <DesktopRailPerson
                             key={peer.id}
@@ -7318,16 +7348,22 @@ function PersonScreen({
                           />
                         ))}
                       </div>
-                      {onOpenParty && (
+                      {availablePeers.length > RAIL_PERSON_LIMIT && (
                         <button
                           className="desktop-rail-link"
                           type="button"
-                          onClick={() => onOpenParty(person.party)}
+                          aria-expanded={showEveryPartyPeer}
+                          aria-controls="person-party-peers"
+                          onClick={() => setShowEveryPartyPeer((current) => !current)}
                         >
-                          {typeof partyProfile?.politicianCount === "number"
-                            ? `Alla ${formatNumber(partyProfile.politicianCount)} politiker`
-                            : "Alla politiker i partiet"}
-                          <ChevronRight size={13} aria-hidden="true" />
+                          {showEveryPartyPeer
+                            ? "Visa färre"
+                            : `Alla ${formatNumber(availablePeers.length)} kollegor`}
+                          {showEveryPartyPeer ? (
+                            <ChevronUp size={13} aria-hidden="true" />
+                          ) : (
+                            <ChevronDown size={13} aria-hidden="true" />
+                          )}
                         </button>
                       )}
                     </section>

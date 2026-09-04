@@ -7040,3 +7040,39 @@ app-shell entries and no video.
 public-data desktop paths are production-verified. The only accepted coverage
 gap is the signed-in Following state, which remains covered by frontend tests
 but was not opened using the owner's production account.
+
+## UI20.4 — Internally scrolling profile rosters — IN PROGRESS 2026-09-04
+
+**Built:** `web/src/App.tsx` now expands the complete party roster inside both
+the desktop party page and a desktop politician profile instead of extending
+the whole profile document. `web/src/styles.css` gives expanded rosters a
+bounded internal scroll region, and `web/tests/desktop-profile.test.mjs` covers
+both routes and their accessibility wiring.
+
+**Tests:** all 168 frontend Node tests pass; TypeScript passes; the production
+Vite/PWA build passes and still precaches exactly nine app-shell entries with
+no video/private data. Repository gate green: 514 Python tests, 79 deselected,
+the known `audioop` warning, Ruff clean and strict mypy clean over 83 source
+files.
+
+**Contracts touched:** none. No migration, dependency or mobile change.
+
+**Decisions made:**
+- Only the expanded politician list scrolls, at `min(430px, 52vh)`. The rail,
+  facts, gallery and outer profile scroll keep their existing layout.
+- The party page keeps its collapsed six-row preview. The politician page now
+  expands its colleagues in place instead of using the old party-page
+  navigation as a substitute for showing all.
+- Both toggles expose `aria-expanded` and `aria-controls`, switch their chevron
+  direction, and reset to the six-row preview when the selected party or
+  politician changes.
+- Mobile markup and behavior remain untouched.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** production verification remains: at desktop width,
+open `Alla … politiker` on a party and `Alla … kollegor` on a politician, then
+confirm each list caps its height and scrolls internally without widening or
+lengthening the profile layout.

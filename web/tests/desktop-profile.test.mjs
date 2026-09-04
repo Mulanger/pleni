@@ -52,6 +52,18 @@ test("the side column only asks for readers that already exist", () => {
   assert.match(styles, /\.desktop-rail-person\b/);
 });
 
+test("expanded party rosters scroll inside both desktop profile rails", () => {
+  assert.match(app, /const \[showEveryPolitician, setShowEveryPolitician\]/);
+  assert.match(app, /const \[showEveryPartyPeer, setShowEveryPartyPeer\]/);
+  assert.match(app, /showEveryPolitician[\s\S]{0,180}"desktop-rail-people is-scrollable"/);
+  assert.match(app, /showEveryPartyPeer[\s\S]{0,180}"desktop-rail-people is-scrollable"/);
+  assert.match(app, /aria-controls=\{`party-rail-people-\$\{party\.abbr\}`\}/);
+  assert.match(app, /aria-controls="person-party-peers"/);
+  assert.match(styles, /\.desktop-rail-people\.is-scrollable\s*\{[^}]*max-height:\s*min\(430px, 52vh\)/);
+  assert.match(styles, /\.desktop-rail-people\.is-scrollable\s*\{[^}]*overflow-y:\s*auto/);
+  assert.match(styles, /\.desktop-rail-people\.is-scrollable::-webkit-scrollbar\b/);
+});
+
 test("every figure on a profile masthead comes from a real count", () => {
   // `clipCount` and `politicianCount` are null when the count request failed.
   // A fact is pushed only when the value is a number, so "we did not count"

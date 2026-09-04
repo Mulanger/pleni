@@ -5333,6 +5333,31 @@ a {
     display: grid;
   }
 
+  /* Expanding a party roster must not turn the whole profile into an
+     eighty-row document. The rail keeps its place while only the roster
+     becomes a bounded, keyboard-scrollable region. */
+  .desktop-rail-people.is-scrollable {
+    max-height: min(430px, 52vh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 8px;
+    margin-right: -8px;
+    scrollbar-color: #a9a9a0 transparent;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+  }
+
+  .desktop-rail-people.is-scrollable::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .desktop-rail-people.is-scrollable::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: #a9a9a0;
+    background-clip: padding-box;
+  }
+
   .desktop-rail-person {
     display: grid;
     grid-template-columns: 36px minmax(0, 1fr) 13px;
@@ -5406,6 +5431,10 @@ a {
 
   .desktop-rail-link:hover {
     text-decoration: underline;
+  }
+
+  .desktop-rail-link svg {
+    flex: 0 0 auto;
   }
 
   .desktop-profile-back:focus-visible,
