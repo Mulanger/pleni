@@ -418,6 +418,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
   const [personClips, setPersonClips] = useState<ClipItem[]>([]);
   const [personLoading, setPersonLoading] = useState(false);
   const [party, setParty] = useState<PartyProfile | null>(null);
+  const [personPartyPeers, setPersonPartyPeers] = useState<Politician[]>([]);
   const [partyProfiles, setPartyProfiles] = useState<PartyProfile[]>([]);
   const [partyProfilesLoading, setPartyProfilesLoading] = useState(true);
   const [partyClips, setPartyClips] = useState<ClipItem[]>([]);
@@ -1058,6 +1059,37 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
     };
   }, [selectedPersonId]);
 
+  /**
+   * Party colleagues for the desktop person page's side column.
+   *
+   * Keyed on the party rather than the person, so walking between two people
+   * in the same party reuses the response. `party_profiles` is already loaded
+   * for every party at startup, so the card beside this list costs no request
+   * of its own.
+   */
+  useEffect(() => {
+    const code = person?.party ?? null;
+    if (code === null || code === "NONE") {
+      setPersonPartyPeers([]);
+      return;
+    }
+    let active = true;
+    loadPoliticiansForParty(code)
+      .then((peers) => {
+        if (active) {
+          setPersonPartyPeers(peers);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setPersonPartyPeers([]);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [person?.party]);
+
   /** Load a party's canonical metadata, current people and recent catalogue. */
   useEffect(() => {
     if (selectedPartyCode === null) {
@@ -1099,6 +1131,15 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
       active = false;
     };
   }, [selectedPartyCode]);
+
+  /** The party card beside a person, taken from the startup party_profiles read. */
+  const personPartyProfile = useMemo(
+    () =>
+      person && person.party !== "NONE"
+        ? partyProfiles.find((profile) => profile.abbr === person.party) ?? null
+        : null,
+    [partyProfiles, person]
+  );
 
   const openPerson = (personId: string) => {
     setCollection(null);
@@ -1392,7 +1433,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
       {viewport === "desktop" ? (
         <main key="desktop" className="desktop-app" aria-label="Pleni desktop">
           <DesktopSidebar
-            active={tab}
+            active={route.view === "tab" ? route.tab : null}
             signedIn={viewer.signedIn}
             onSignIn={viewer.requireSignIn}
             onChange={(nextTab) => navigate({ view: "tab", tab: nextTab, feedMode })}
@@ -1460,6 +1501,10 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
                     following={!!following[route.personId]}
                     onToggleFollow={() => toggleFollowPolitician(route.personId)}
                     onPlayClip={openPersonClips}
+                    partyProfile={personPartyProfile}
+                    partyPeers={personPartyPeers}
+                    onOpenParty={openParty}
+                    onOpenPerson={openPerson}
                   />
                 ) : null,
                 party: route.view === "party" ? (
@@ -1877,7 +1922,7 @@ function DesktopSidebar({
   onSignIn,
   onChange
 }: {
-  active: Tab;
+  active: Tab | null;
   signedIn: boolean;
   onSignIn: () => void;
   onChange: (tab: Tab) => void;
@@ -5718,6 +5763,18 @@ function SavedScreen({
 
 const desktopProfileScrollPositions = createScrollMemory();
 
+/**
+ * How many politicians a profile side column lists before it collapses.
+ *
+ * The party page can expand to the full membership in place; a person page
+ * sends the viewer to the party page instead, which is where the whole list
+ * belongs.
+ */
+const RAIL_PERSON_LIMIT = 6;
+
+/** Three rows of three: what the gallery frame shows before it scrolls. */
+const GALLERY_VISIBLE_TILES = 9;
+
 function useProfileScrollPosition(scrollKey: string | null, enabled: boolean) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -5743,6 +5800,216 @@ function useProfileScrollPosition(scrollKey: string | null, enabled: boolean) {
   );
 
   return { scrollRef, rememberScroll };
+}
+
+/**
+ * Context bar for a desktop profile route.
+ *
+ * Replaces the 78px toolbar that carried nothing but a Back button. A profile
+ * is not one of the four tabs, so the breadcrumb — not a lit sidebar item —
+ * is what says where the viewer is.
+ */
+function DesktopProfileBar({
+  kind,
+  name,
+  onBack
+}: {
+  kind: string;
+  name: string;
+  onBack: () => void;
+}) {
+  return (
+    <div className="desktop-profile-bar">
+      <button className="desktop-profile-back" type="button" onClick={onBack}>
+        <ChevronLeft size={16} aria-hidden="true" />
+        <span>Tillbaka</span>
+      </button>
+      <nav className="desktop-profile-crumbs" aria-label="Var du är">
+        <span>{kind}</span>
+        <ChevronRight size={13} aria-hidden="true" />
+        <b>{name}</b>
+      </nav>
+    </div>
+  );
+}
+
+type DesktopFact = { label: string; value: string; text?: boolean };
+
+/**
+ * The masthead fact strip.
+ *
+ * Callers pass only facts they actually read from the catalogue. A count that
+ * could not be fetched is `null` upstream and never reaches this list, so an
+ * unknown total renders as absent rather than as zero (`Q-2`, and the UI20
+ * rule against invented figures).
+ */
+function DesktopProfileFacts({ items }: { items: DesktopFact[] }) {
+  if (items.length === 0) {
+    return null;
+  }
+  return (
+    <dl className="desktop-profile-facts">
+      {items.map((item) => (
+        <div key={item.label}>
+          <dt>{item.label}</dt>
+          <dd className={item.text ? "is-text" : undefined}>{item.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** One labelled row in a profile side column. */
+function DesktopRailFact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="desktop-rail-fact">
+      <dt>{label}</dt>
+      <dd>{children}</dd>
+    </div>
+  );
+}
+
+/** A politician row in a profile side column. */
+function DesktopRailPerson({
+  politician,
+  detail,
+  onOpen
+}: {
+  politician: Politician;
+  detail: string;
+  onOpen: () => void;
+}) {
+  const name = cleanName(politician.name) || politician.name;
+  return (
+    <button className="desktop-rail-person" type="button" onClick={onOpen}>
+      <Avatar name={name} party={politician.party} size="sm" imageUrl={politician.avatarUrl} />
+      <b>{name}</b>
+      {detail && <small>{detail}</small>}
+      <ChevronRight size={13} aria-hidden="true" />
+    </button>
+  );
+}
+
+/**
+ * The clip gallery on a desktop profile page.
+ *
+ * The newest clip leads with its full sentence — desktop has room for the line
+ * that the mobile card truncates mid-word — and the rest sit in a three-up
+ * grid inside its own scroll frame, so the masthead and side column stay put
+ * while the viewer browses. The frame's height comes from an aspect ratio
+ * rather than a pixel value, which keeps three whole rows visible and a sliver
+ * of the fourth at every desktop width.
+ */
+function DesktopClipGallery({
+  clips,
+  loading,
+  total,
+  emptyTitle,
+  emptyDetail,
+  captionFor,
+  leadMeta,
+  onPlayClip
+}: {
+  clips: ClipItem[];
+  loading: boolean;
+  total: number | null;
+  emptyTitle: string;
+  emptyDetail: string;
+  captionFor: (clip: ClipItem) => string;
+  leadMeta: (clip: ClipItem) => ReactNode;
+  onPlayClip: (clipId: string | null) => void;
+}) {
+  const [lead, ...rest] = clips;
+  const hasMoreThanLoaded = typeof total === "number" && total > clips.length;
+  // The frame reserves three rows' worth of height. Below a fourth row there
+  // is nothing to scroll to, so a short catalogue renders a plain grid rather
+  // than a tall box with empty space under it.
+  const scrolls = rest.length > GALLERY_VISIBLE_TILES;
+
+  return (
+    <section className="desktop-clip-gallery">
+      <div className="desktop-section-head">
+        <h2>Senaste klipp</h2>
+        {typeof total === "number" && (
+          <span className="desktop-section-count">{formatNumber(total)} publicerade</span>
+        )}
+        {clips.length > 1 && <span className="desktop-section-order">Nyast först</span>}
+      </div>
+
+      {loading && clips.length === 0 && <ClipGridSkeleton />}
+      {!loading && clips.length === 0 && (
+        <div className="panel-empty" role="status">
+          <strong>{emptyTitle}</strong>
+          <span>{emptyDetail}</span>
+        </div>
+      )}
+
+      {lead && (
+        <article className="desktop-lead-clip">
+          <button
+            className="mini-clip desktop-lead-thumb"
+            type="button"
+            onClick={() => onPlayClip(lead.id)}
+            aria-label={`Spela: ${lead.title}`}
+          >
+            <img src={lead.thumbUrl} alt="" loading="lazy" />
+            <span className="mini-clip-duration">{formatDuration(lead.durationS)}</span>
+          </button>
+          <div className="desktop-lead-copy">
+            <span className="desktop-lead-kicker">Senaste klippet</span>
+            {/* The full sentence, not the 55-character `title` the mobile card
+                shows — the truncation exists for a 9:16 overlay, not for a
+                746px column. */}
+            <h3>{lead.transcript || lead.title}</h3>
+            <div className="desktop-lead-meta">{leadMeta(lead)}</div>
+            <button className="desktop-lead-play" type="button" onClick={() => onPlayClip(lead.id)}>
+              <Play size={13} aria-hidden="true" />
+              Spela klippet
+            </button>
+          </div>
+        </article>
+      )}
+
+      {rest.length > 0 && (
+        <div className={scrolls ? "desktop-gallery-frame" : undefined}>
+          <div className={scrolls ? "desktop-gallery-scroll" : undefined}>
+            <div className="clip-grid">
+              {rest.map((clip) => (
+                <button
+                  className="mini-clip"
+                  key={clip.id}
+                  type="button"
+                  onClick={() => onPlayClip(clip.id)}
+                  aria-label={`Spela: ${clip.title}`}
+                >
+                  <img src={clip.thumbUrl} alt="" loading="lazy" />
+                  <span className="mini-clip-duration">{formatDuration(clip.durationS)}</span>
+                  <span className="mini-clip-copy">
+                    <b>{clip.title}</b>
+                    {/* Q-8: every clip shows its debate date, here as well as
+                        in the feed. Target for "old content without a visible
+                        date" is exactly zero. */}
+                    <small>{captionFor(clip)}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {clips.length > 0 && (
+        <p className="desktop-gallery-foot" role="status">
+          <span>
+            {typeof total === "number"
+              ? `Visar ${formatNumber(clips.length)} av ${formatNumber(total)} klipp`
+              : `Visar ${formatNumber(clips.length)} klipp`}
+          </span>
+          {hasMoreThanLoaded && <span>Spela alla för att se hela samlingen</span>}
+        </p>
+      )}
+    </section>
+  );
 }
 
 function PartyScreen({
@@ -5774,6 +6041,7 @@ function PartyScreen({
     scrollKey,
     presentation === "desktop"
   );
+  const [showEveryPolitician, setShowEveryPolitician] = useState(false);
   const playClip = (clipId: string | null) => {
     if (presentation === "desktop" && scrollKey && scrollRef.current) {
       desktopProfileScrollPositions.write(scrollKey, scrollRef.current.scrollTop);
@@ -5781,26 +6049,182 @@ function PartyScreen({
     onPlayClip(clipId);
   };
 
+  if (presentation === "desktop") {
+    const railPoliticians = showEveryPolitician ? politicians : politicians.slice(0, RAIL_PERSON_LIMIT);
+    const facts: DesktopFact[] = [];
+    if (party && typeof party.politicianCount === "number") {
+      facts.push({ label: "Politiker", value: formatNumber(party.politicianCount) });
+    }
+    if (party && typeof party.clipCount === "number") {
+      facts.push({ label: "Publicerade klipp", value: formatNumber(party.clipCount) });
+    }
+    if (clips.length > 0) {
+      facts.push({ label: "Senaste klipp", value: formatDate(clips[0].debateDate), text: true });
+    }
+
+    return (
+      <section className="party-screen party-screen--desktop">
+        <DesktopProfileBar kind="Parti" name={party?.name ?? "Parti"} onBack={onBack} />
+        <div ref={scrollRef} className="panel-scroll desktop-profile-scroll" onScroll={rememberScroll}>
+          {loading && !party && <ProfileSkeleton variant="party" />}
+          {!loading && !party && (
+            <div className="panel-empty" role="status">
+              <strong>Partisidan kunde inte hämtas</strong>
+              <span>Försök igen om en stund.</span>
+            </div>
+          )}
+          {party && (
+            <>
+              <header className="desktop-profile-hero">
+                <div className="desktop-profile-hero-inner">
+                  <div className="desktop-profile-mark">
+                    <PartyAvatar
+                      party={party.abbr}
+                      color={party.color}
+                      logoUrl={party.logoUrl}
+                      size="xl"
+                    />
+                  </div>
+                  <div className="desktop-profile-identity">
+                    <span className="desktop-profile-eyebrow">Riksdagsparti</span>
+                    <h1>{party.name}</h1>
+                    {/* The party colour identifies without colouring the whole
+                        masthead: one rule, not a tinted plate. */}
+                    <span
+                      className="desktop-party-rule"
+                      style={{ background: party.color }}
+                      aria-hidden="true"
+                    />
+                    <DesktopProfileFacts items={facts} />
+                  </div>
+                  <div className="desktop-profile-actions">
+                    <button
+                      className="desktop-action-primary"
+                      type="button"
+                      onClick={() => playClip(null)}
+                      disabled={clips.length === 0}
+                    >
+                      <Play size={16} aria-hidden="true" />
+                      Spela alla klipp
+                    </button>
+                    <button
+                      className={following ? "desktop-action-follow is-following" : "desktop-action-follow"}
+                      type="button"
+                      onClick={onToggleFollow}
+                    >
+                      {following ? "Följer" : "Följ"}
+                    </button>
+                  </div>
+                </div>
+              </header>
+
+              <div className="desktop-profile-body">
+                <div className="desktop-profile-main">
+                  <DesktopClipGallery
+                    clips={clips}
+                    loading={loading}
+                    total={party.clipCount}
+                    emptyTitle="Inga publicerade klipp"
+                    emptyDetail="Partiets politiker har inga klipp i katalogen ännu."
+                    captionFor={(clip) =>
+                      [
+                        cleanName(clip.politicianName ?? clip.speakerName) || clip.speakerName,
+                        formatDate(clip.debateDate)
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
+                    }
+                    leadMeta={(clip) => (
+                      <>
+                        {clip.politicianId !== null ? (
+                          <button type="button" onClick={() => onOpenPerson(clip.politicianId as string)}>
+                            {cleanName(clip.politicianName ?? clip.speakerName) || clip.speakerName}
+                          </button>
+                        ) : (
+                          <span>{clip.speakerName}</span>
+                        )}
+                        <i aria-hidden="true" />
+                        <span>{formatDate(clip.debateDate)}</span>
+                        <i aria-hidden="true" />
+                        <span>{formatDuration(clip.durationS)}</span>
+                        {clip.anforandetyp && <em>{clip.anforandetyp}</em>}
+                      </>
+                    )}
+                    onPlayClip={playClip}
+                  />
+                </div>
+
+                <aside className="desktop-profile-rail">
+                  {politicians.length > 0 && (
+                    <section className="desktop-rail-block">
+                      <h2 className="desktop-rail-head">Politiker i {party.short}</h2>
+                      <div className="desktop-rail-people">
+                        {railPoliticians.map((politician) => (
+                          <DesktopRailPerson
+                            key={politician.id}
+                            politician={politician}
+                            detail={[politician.role, politician.constituency].filter(Boolean).join(" · ")}
+                            onOpen={() => onOpenPerson(politician.id)}
+                          />
+                        ))}
+                      </div>
+                      {politicians.length > RAIL_PERSON_LIMIT && (
+                        <button
+                          className="desktop-rail-link"
+                          type="button"
+                          onClick={() => setShowEveryPolitician((current) => !current)}
+                        >
+                          {showEveryPolitician
+                            ? "Visa färre"
+                            : `Alla ${formatNumber(politicians.length)} politiker`}
+                          <ChevronRight size={13} aria-hidden="true" />
+                        </button>
+                      )}
+                    </section>
+                  )}
+
+                  <section className="desktop-rail-block">
+                    <h2 className="desktop-rail-head">Om partiet</h2>
+                    <dl className="desktop-rail-facts">
+                      <DesktopRailFact label="Beteckning">
+                        <span className="desktop-rail-party">
+                          <i style={{ background: party.color }} aria-hidden="true" />
+                          {party.abbr}
+                        </span>
+                      </DesktopRailFact>
+                      {typeof party.politicianCount === "number" && (
+                        <DesktopRailFact label="Politiker">
+                          {formatNumber(party.politicianCount)}
+                        </DesktopRailFact>
+                      )}
+                      {typeof party.clipCount === "number" && (
+                        <DesktopRailFact label="Publicerade klipp">
+                          {formatNumber(party.clipCount)}
+                        </DesktopRailFact>
+                      )}
+                      <DesktopRailFact label="Källa">Sveriges riksdag</DesktopRailFact>
+                    </dl>
+                  </section>
+                </aside>
+              </div>
+            </>
+          )}
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <section className={presentation === "desktop" ? "party-screen party-screen--desktop" : "party-screen"}>
-      {presentation === "mobile" ? (
-        <div className="person-topbar">
-          <button onClick={onBack} aria-label="Tillbaka">
-            <ChevronLeft size={24} />
-          </button>
-          <strong>{party?.name ?? "Parti"}</strong>
-          <button aria-label="Dela">
-            <Share2 size={19} />
-          </button>
-        </div>
-      ) : (
-        <div className="desktop-profile-toolbar">
-          <button className="desktop-back-action" type="button" onClick={onBack}>
-            <ChevronLeft size={18} />
-            <span>Tillbaka</span>
-          </button>
-        </div>
-      )}
+    <section className="party-screen">
+      <div className="person-topbar">
+        <button onClick={onBack} aria-label="Tillbaka">
+          <ChevronLeft size={24} />
+        </button>
+        <strong>{party?.name ?? "Parti"}</strong>
+        <button aria-label="Dela">
+          <Share2 size={19} />
+        </button>
+      </div>
       <div ref={scrollRef} className="panel-scroll person-scroll" onScroll={rememberScroll}>
         {loading && !party && <ProfileSkeleton variant="party" />}
         {!loading && !party && (
@@ -5911,7 +6335,11 @@ function PersonScreen({
   onBack,
   following,
   onToggleFollow,
-  onPlayClip
+  onPlayClip,
+  partyProfile = null,
+  partyPeers = [],
+  onOpenParty,
+  onOpenPerson
 }: {
   presentation?: "mobile" | "desktop";
   scrollKey?: string | null;
@@ -5922,6 +6350,10 @@ function PersonScreen({
   following: boolean;
   onToggleFollow: () => void;
   onPlayClip: (clipId: string | null) => void;
+  partyProfile?: PartyProfile | null;
+  partyPeers?: Politician[];
+  onOpenParty?: (partyCode: PartyCode) => void;
+  onOpenPerson?: (personId: string) => void;
 }) {
   const { scrollRef, rememberScroll } = useProfileScrollPosition(
     scrollKey,
@@ -5940,26 +6372,222 @@ function PersonScreen({
   // as zero.
   const total = person?.clipCount;
 
+  if (presentation === "desktop") {
+    const facts: DesktopFact[] = [];
+    if (typeof total === "number") {
+      facts.push({ label: "Publicerade klipp", value: formatNumber(total) });
+    }
+    if (clips.length > 0) {
+      facts.push({ label: "Senaste klipp", value: formatDate(clips[0].debateDate), text: true });
+    }
+    // Party colleagues, never the person whose page this is.
+    const peers = person
+      ? partyPeers.filter((peer) => peer.id !== person.id).slice(0, RAIL_PERSON_LIMIT)
+      : [];
+    const partyIsPublic = person !== null && person.party !== "NONE";
+
+    return (
+      <section className="person-screen person-screen--desktop">
+        <DesktopProfileBar kind="Politiker" name={displayName || "Politiker"} onBack={onBack} />
+        <div ref={scrollRef} className="panel-scroll desktop-profile-scroll" onScroll={rememberScroll}>
+          {loading && !person && <ProfileSkeleton variant="person" />}
+          {!loading && !person && (
+            <div className="panel-empty" role="status">
+              <strong>Profilen kunde inte hämtas</strong>
+              <span>Försök igen om en stund.</span>
+            </div>
+          )}
+          {person && (
+            <>
+              <header className="desktop-profile-hero">
+                <div className="desktop-profile-hero-inner">
+                  {/* Riksdagen's official portraits are upright. A circle crops
+                      the shoulders off a press photograph; the rectangle keeps
+                      the frame the photographer shot. */}
+                  <div className="desktop-profile-portrait">
+                    <Avatar
+                      name={displayName}
+                      party={person.party}
+                      size="xl"
+                      imageUrl={person.avatarUrl}
+                    />
+                    {person.avatarUrl && <span className="portrait-credit">Foto: Sveriges riksdag</span>}
+                  </div>
+                  <div className="desktop-profile-identity">
+                    {person.role && <span className="desktop-profile-eyebrow">{person.role}</span>}
+                    <h1>{displayName}</h1>
+                    <div className="desktop-profile-affiliation">
+                      <PartyAvatar
+                        party={person.party}
+                        color={party.color}
+                        logoUrl={party.logoUrl}
+                      />
+                      {partyIsPublic && onOpenParty ? (
+                        <button type="button" onClick={() => onOpenParty(person.party)}>
+                          {party.name}
+                        </button>
+                      ) : (
+                        <span className="is-plain">{party.name}</span>
+                      )}
+                      {person.constituency && (
+                        <>
+                          <i aria-hidden="true" />
+                          <span className="is-plain">{person.constituency}</span>
+                        </>
+                      )}
+                    </div>
+                    <DesktopProfileFacts items={facts} />
+                  </div>
+                  <div className="desktop-profile-actions">
+                    <button
+                      className="desktop-action-primary"
+                      type="button"
+                      onClick={() => playClip(null)}
+                      disabled={clips.length === 0}
+                    >
+                      <Play size={16} aria-hidden="true" />
+                      Spela alla klipp
+                    </button>
+                    <button
+                      className={following ? "desktop-action-follow is-following" : "desktop-action-follow"}
+                      type="button"
+                      onClick={onToggleFollow}
+                    >
+                      {following ? "Följer" : "Följ"}
+                    </button>
+                  </div>
+                </div>
+              </header>
+
+              <div className="desktop-profile-body">
+                <div className="desktop-profile-main">
+                  <DesktopClipGallery
+                    clips={clips}
+                    loading={loading}
+                    total={typeof total === "number" ? total : null}
+                    emptyTitle="Inga publicerade klipp"
+                    emptyDetail="Den här talaren har inga klipp i katalogen ännu."
+                    captionFor={(clip) =>
+                      [clip.sourceTitle, formatDate(clip.debateDate)].filter(Boolean).join(" · ")
+                    }
+                    leadMeta={(clip) => (
+                      <>
+                        {clip.sourceTitle && <span>{clip.sourceTitle}</span>}
+                        {clip.sourceTitle && <i aria-hidden="true" />}
+                        <span>{formatDate(clip.debateDate)}</span>
+                        <i aria-hidden="true" />
+                        <span>{formatDuration(clip.durationS)}</span>
+                        {clip.anforandetyp && <em>{clip.anforandetyp}</em>}
+                      </>
+                    )}
+                    onPlayClip={playClip}
+                  />
+                </div>
+
+                <aside className="desktop-profile-rail">
+                  <section className="desktop-rail-block">
+                    <h2 className="desktop-rail-head">Om</h2>
+                    <dl className="desktop-rail-facts">
+                      <DesktopRailFact label="Parti">
+                        <span className="desktop-rail-party">
+                          <i style={{ background: party.color }} aria-hidden="true" />
+                          {party.name}
+                        </span>
+                      </DesktopRailFact>
+                      {person.constituency && (
+                        <DesktopRailFact label="Valkrets">{person.constituency}</DesktopRailFact>
+                      )}
+                      {person.role && <DesktopRailFact label="Uppdrag">{person.role}</DesktopRailFact>}
+                      {typeof total === "number" && (
+                        <DesktopRailFact label="Publicerade klipp">
+                          {formatNumber(total)}
+                        </DesktopRailFact>
+                      )}
+                      <DesktopRailFact label="Källa">Sveriges riksdag</DesktopRailFact>
+                    </dl>
+                  </section>
+
+                  {partyIsPublic && partyProfile && onOpenParty && (
+                    <section className="desktop-rail-block">
+                      <h2 className="desktop-rail-head">Parti</h2>
+                      <div className="desktop-rail-party-card">
+                        <PartyAvatar
+                          party={partyProfile.abbr}
+                          color={partyProfile.color}
+                          logoUrl={partyProfile.logoUrl}
+                        />
+                        <b>{partyProfile.name}</b>
+                        <span>
+                          {[
+                            typeof partyProfile.politicianCount === "number"
+                              ? `${formatNumber(partyProfile.politicianCount)} politiker`
+                              : null,
+                            typeof partyProfile.clipCount === "number"
+                              ? `${formatNumber(partyProfile.clipCount)} klipp`
+                              : null
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                      </div>
+                      <button
+                        className="desktop-rail-link"
+                        type="button"
+                        onClick={() => onOpenParty(person.party)}
+                      >
+                        Till partisidan
+                        <ChevronRight size={13} aria-hidden="true" />
+                      </button>
+                    </section>
+                  )}
+
+                  {peers.length > 0 && onOpenPerson && (
+                    <section className="desktop-rail-block">
+                      <h2 className="desktop-rail-head">Fler från {party.short}</h2>
+                      <div className="desktop-rail-people">
+                        {peers.map((peer) => (
+                          <DesktopRailPerson
+                            key={peer.id}
+                            politician={peer}
+                            detail={[peer.role, peer.constituency].filter(Boolean).join(" · ")}
+                            onOpen={() => onOpenPerson(peer.id)}
+                          />
+                        ))}
+                      </div>
+                      {onOpenParty && (
+                        <button
+                          className="desktop-rail-link"
+                          type="button"
+                          onClick={() => onOpenParty(person.party)}
+                        >
+                          {typeof partyProfile?.politicianCount === "number"
+                            ? `Alla ${formatNumber(partyProfile.politicianCount)} politiker`
+                            : "Alla politiker i partiet"}
+                          <ChevronRight size={13} aria-hidden="true" />
+                        </button>
+                      )}
+                    </section>
+                  )}
+                </aside>
+              </div>
+            </>
+          )}
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <section className={presentation === "desktop" ? "person-screen person-screen--desktop" : "person-screen"}>
-      {presentation === "mobile" ? (
-        <div className="person-topbar">
-          <button onClick={onBack} aria-label="Tillbaka">
-            <ChevronLeft size={24} />
-          </button>
-          <strong>{displayName}</strong>
-          <button aria-label="Dela">
-            <Share2 size={19} />
-          </button>
-        </div>
-      ) : (
-        <div className="desktop-profile-toolbar">
-          <button className="desktop-back-action" type="button" onClick={onBack}>
-            <ChevronLeft size={18} />
-            <span>Tillbaka</span>
-          </button>
-        </div>
-      )}
+    <section className="person-screen">
+      <div className="person-topbar">
+        <button onClick={onBack} aria-label="Tillbaka">
+          <ChevronLeft size={24} />
+        </button>
+        <strong>{displayName}</strong>
+        <button aria-label="Dela">
+          <Share2 size={19} />
+        </button>
+      </div>
       <div ref={scrollRef} className="panel-scroll person-scroll" onScroll={rememberScroll}>
         {loading && !person && <ProfileSkeleton variant="person" />}
         {!loading && !person && (
@@ -6036,6 +6664,7 @@ function PersonScreen({
     </section>
   );
 }
+
 
 function FeedSkeleton() {
   return (

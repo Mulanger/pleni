@@ -6807,3 +6807,86 @@ by tests; the production deploy supplies the public Supabase values.
 embedded payload. Keep route identity authoritative and never let a slug or
 unvalidated JSON choose the clip. Generated clip HTML must continue to be
 written only after the Vite build so it stays outside the service-worker cache.
+
+## UI20.1b — Desktop politician and party pages redesigned — IN PROGRESS 2026-09-04
+
+**Built:** `web/src/App.tsx` (`DesktopProfileBar`, `DesktopProfileFacts`,
+`DesktopRailFact`, `DesktopRailPerson`, `DesktopClipGallery`, desktop branches
+of `PersonScreen` and `PartyScreen`), `web/src/styles.css` (`.desktop-profile-*`,
+`.desktop-gallery-*`, `.desktop-rail-*`), `web/tests/desktop-profile.test.mjs`.
+
+**Why:** the desktop profile surfaces were the released mobile markup with two
+class modifiers on. Measured at 1440×900 before the change: the hero was
+`max-width: 760px` inside a 1210 px workspace (37% of the row beside the name
+empty), `.desktop-profile-toolbar` reserved 78 px for a lone Back button, the
+section heading read “Antal klipp: 112” where a heading belonged, the party hero
+was a 10% colour wash, and a party's politician list sat below the whole clip
+grid, roughly 1100 px down.
+
+**What it is now:** a 56 px context bar with a breadcrumb; a full-width masthead
+on `#fbfbf9` carrying an upright 176×220 portrait (or a 132 px party mark), the
+name at up to 52 px, the party line, a fact strip and two actions; then a
+gallery beside a side column. `Spela alla klipp` is the primary action and opens
+the existing `person-clips` / `party-clips` collection through the same
+`FeedScreen`; desktop previously had no way to start a profile's feed at all.
+The gallery is three tiles across with the newest clip leading in full sentence
+form, and it scrolls inside its own frame so the masthead and side column stay
+put. The side column carries the facts, the party card and party colleagues on a
+person page, and the membership list — moved up from the page foot — on a party
+page.
+
+**Tests:** 8 new frontend tests in `web/tests/desktop-profile.test.mjs`; two
+assertions in `desktop-route-outlet.test.mjs` updated from `.person-scroll` to
+`.desktop-profile-scroll`. All 152 frontend Node tests pass, TypeScript passes,
+the Vite production build passes and still precaches exactly nine app-shell
+entries. Repository gate green: 514 Python tests, 79 deselected, the known
+`audioop` warning, Ruff clean, strict mypy clean over 83 source files.
+
+**Local verification:** politician and party routes checked at 1100, 1280, 1440,
+1920 and 375 px against a temporary local reader stub (reverted; not committed),
+because the checked-in local env has no Supabase key. No console errors and no
+horizontal page overflow at any width. At 1440 px the tiles measure 231×410, the
+gallery frame is 1366 px tall — 3.2 rows — over 3332 px of content, and its
+scrollbar renders. `Spela alla klipp` navigated to `/parti/moderaterna/klipp/`
+with two video elements mounted and none playing until activation; Back restored
+the party page with its scroll position and unmounted the media. The mobile
+profile rendered byte-identically to the released product at 375 px.
+
+**Contracts touched:** none. No migration, no new reader, no new render size.
+
+**Decisions made:**
+- The gallery's height is `aspect-ratio: 1 / 1.82` rather than a pixel value, so
+  three whole rows survive every desktop width instead of only the one the
+  design was measured at. The frame is applied only above nine grid tiles, so a
+  short catalogue renders a plain grid instead of a tall box of empty space.
+- The side column's width is `clamp(296px, 23vw, 336px)` with a matching gap. A
+  fixed 336 px rail at the 1280 px breakpoint took the three tiles down to
+  185 px — narrower than they are one breakpoint below.
+- A profile route is not a tab, so `DesktopSidebar` receives `Tab | null` and
+  lights nothing. It previously kept the last visited tab lit, so `Sök` stayed
+  highlighted while the viewer read a politician page.
+- The person page's side column reuses `loadPoliticiansForParty()` keyed on the
+  party, and takes the party card from the `party_profiles` read that already
+  runs at startup — one extra request per party, none per person.
+- Only counts the catalogue reports reach the masthead. `clipCount` and
+  `politicianCount` are `null` when the count request failed and are then
+  absent, never zero. The party page's “Visas här” statistic is gone from
+  desktop: it counted the rows that happened to load.
+- The upright portrait is a deliberate departure from the circular avatar used
+  in the feed, search and Följer. Riksdagen's official portraits are upright and
+  a circle crops the shoulders out of them.
+- Mobile is untouched. Every rule is inside `@media (min-width: 1100px)` and
+  both screens keep their existing mobile branch verbatim.
+
+**Observations (not fixed, out of scope):** `web/vite.config.ts` sets
+`envDir: ".."`, so a local `web/.env.local` is silently ignored — env files
+belong at the repository root. This cost a debugging cycle and is worth a line
+in the runbook.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** production verification is still outstanding. The
+side column's party card renders only when `partyProfiles` is populated, which
+needs the live Supabase values, so it could not be seen locally. Check it on
+`pleni.se` at 1440 px together with real portraits, which are the masthead's
+visual anchor and were initials-only in local verification.

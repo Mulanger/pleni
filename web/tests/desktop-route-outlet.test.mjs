@@ -146,8 +146,8 @@ test("desktop profiles reuse mobile data components and the bounded collection p
   assert.match(app, /view: "party", tab, feedMode, partyCode: route\.partyCode/);
   assert.match(outlet, /surfaces\[descriptor\.id\]/);
   assert.match(styles, /@media \(min-width: 1280px\)/);
-  assert.match(styles, /\.person-screen--desktop \.person-scroll/);
-  assert.match(styles, /\.party-screen--desktop \.person-scroll/);
+  assert.match(styles, /\.person-screen--desktop \.desktop-profile-scroll/);
+  assert.match(styles, /\.party-screen--desktop \.desktop-profile-scroll/);
 });
 
 test("desktop clip entry reuses the bounded feed player with the requested clip first", () => {
