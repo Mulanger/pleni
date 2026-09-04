@@ -6753,7 +6753,7 @@ recrawled and may continue to show its cached favicon/title for days or weeks.
 versioned. Do not reuse that URL for different artwork; publish another stable
 versioned URL and request homepage reindexing instead.
 
-## SEO2b — Watch-page entry into För dig — IN PROGRESS 2026-09-04
+## SEO2b — Watch-page entry into För dig — DONE 2026-09-04
 
 **Built:** `/klipp/<slug>/<clip_id>/` is now a first-class public app route.
 The prerender still sends the complete video, transcript, facts, primary-source
@@ -6768,6 +6768,19 @@ production build passed; `verify-pwa-build.mjs` confirmed exactly nine precache
 entries and no video/private data. The full repository gate passed: 514 Python
 tests, 79 deselected, the known `audioop` warning, Ruff clean and strict mypy
 clean over 83 source files.
+
+**Production evidence:** InstaPods deployed `b9b4ec1` successfully in 7m 43s.
+The exact owner-reported URL
+`https://pleni.se/klipp/andreas-carlson-en-tunnel-under-sodertalje-kanal/HD10184_41_c01/`
+opened in the desktop För dig surface with `HD10184_41_c01` as the first clip,
+played with time advancing, loaded 61 feed rows and enabled navigation. Moving
+to the next clip activated Ebba Busch's “Halvledare avgörande för Sveriges
+framtid som industrination”; three video elements were mounted before the move
+and four after it, preserving the bounded media window. Three additional
+sitemap-selected production pages (`HBC120240116sd_1_c01`, `HD10124_25_c03`,
+`HD10209_19_c01`) each had exact agreement between final route id, static video
+`src`, bootstrap `videoUrl` and `VideoObject.contentUrl`, plus a non-empty
+transcript, Riksdagen source, React root and production module.
 
 **Contracts touched:** none.
 
@@ -6788,8 +6801,7 @@ only the Clerk development key, so a local full-catalogue prerender cannot query
 Supabase. The generator's real-row shape and no-environment fallback are covered
 by tests; the production deploy supplies the public Supabase values.
 
-**Blocked / needs a decision:** none. Production deployment and three live
-clip-parity checks remain before this row becomes DONE.
+**Blocked / needs a decision:** none.
 
 **Next agent should know:** `web/src/clip-entry.ts` is the trust boundary for the
 embedded payload. Keep route identity authoritative and never let a slug or
