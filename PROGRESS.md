@@ -6808,7 +6808,7 @@ embedded payload. Keep route identity authoritative and never let a slug or
 unvalidated JSON choose the clip. Generated clip HTML must continue to be
 written only after the Vite build so it stays outside the service-worker cache.
 
-## UI20.1b — Desktop politician and party pages redesigned — IN PROGRESS 2026-09-04
+## UI20.1b — Desktop politician and party pages redesigned — DONE 2026-09-04
 
 **Built:** `web/src/App.tsx` (`DesktopProfileBar`, `DesktopProfileFacts`,
 `DesktopRailFact`, `DesktopRailPerson`, `DesktopClipGallery`, desktop branches
@@ -6885,13 +6885,18 @@ in the runbook.
 
 **Blocked / needs a decision:** none.
 
-**Next agent should know:** production verification is still outstanding. The
-side column's party card renders only when `partyProfiles` is populated, which
-needs the live Supabase values, so it could not be seen locally. Check it on
-`pleni.se` at 1440 px together with real portraits, which are the masthead's
-visual anchor and were initials-only in local verification.
+**Production verification:** live at `pleni.se` on commit `9822b9b`. At
+1440×900, Adam Reuterskiöld's canonical profile rendered the verified Bunny
+portrait at 192 px intrinsic width, the Moderaterna party card, four catalogue
+clips and the colleagues rail. The document matched the viewport width and the
+browser console had no errors.
 
-## UI20.2b — Desktop search: party roll-downs — IN PROGRESS 2026-09-04
+**Next agent should know:** the real portrait, party-card and desktop-layout
+gaps from local verification are closed. Signed-in follow actions were not
+exercised because production verification deliberately did not authenticate as
+the owner.
+
+## UI20.2b — Desktop search: party roll-downs — DONE 2026-09-04
 
 **Built:** `web/src/App.tsx` (`DesktopPartyDirectory`, `PARTY_MEMBER_LIMIT`,
 `SearchScreen` wiring), `web/src/styles.css` (`.party-directory-*`,
@@ -6962,15 +6967,17 @@ rather than this one surface.
 
 **Blocked / needs a decision:** none.
 
-**Next agent should know:** production verification is still outstanding for
-both UI20.1b and this chunk. The real party logos could not be seen locally —
-`party_profiles.logo_url` is null without Supabase, so every mark rendered as
-the party-coloured letter fallback. Check the eight marks on `pleni.se/sok` at
-1440 px; that fallback path is exactly what the `party-logo-policy` module
-exists to manage, and a broken CDN mark degrades to the same letter rather than
-to an empty box.
+**Production verification:** live at `pleni.se/sok` on commit `9822b9b`. All
+eight party triggers rendered their content-addressed Bunny marks with positive
+intrinsic widths. The old duplicate `Riksdagspartier` group was absent;
+Moderaterna opened one 360 px roll-down with both actions and 83 real
+politicians. There was no horizontal overflow and no browser-console error.
 
-## UI20.3 — Profile pagination and desktop Following — IN PROGRESS 2026-09-04
+**Next agent should know:** the real-logo and live-data gaps from local
+verification are closed. The short-window upward-flip observation remains a
+future shared-popover concern, not a release blocker.
+
+## UI20.3 — Profile pagination and desktop Following — DONE 2026-09-04
 
 **Built:** cursor pagination in `web/src/supabase.ts`, pagination state and
 desktop gallery controls in `web/src/App.tsx`, duplicate-safe page merging in
@@ -7020,7 +7027,16 @@ tests; final live verification will not sign in as the owner.
 
 **Blocked / needs a decision:** none.
 
-**Next agent should know:** production verification is still outstanding for
-UI20.1b–UI20.3. After deploy, check the signed-out Following page, real party
-marks on Search, a real profile portrait/rail and `Hämta fler klipp` on a
-profile whose catalogue exceeds 60 rows.
+**Production verification:** InstaPods served the new JS/CSS release
+(`index-zxCCYbpm.js`, `index-i7vfDIbW.css`) from `pleni.se`. Signed-out Följer
+rendered the new copy and 380 px account panel at 1440×900 without the invented
+zero subtitle, overflow or console errors. Moderaterna reported 1,424 clips;
+`Hämta fler klipp` grew the gallery 60 → 120 → 180 with no error, and the
+second page retained the outer 1,267 px and inner 0 px scroll positions exactly.
+The production service worker precaches the current JS/CSS among exactly nine
+app-shell entries and no video.
+
+**Next agent should know:** UI20.1b–UI20.3 are released and their signed-out,
+public-data desktop paths are production-verified. The only accepted coverage
+gap is the signed-in Following state, which remains covered by frontend tests
+but was not opened using the owner's production account.
