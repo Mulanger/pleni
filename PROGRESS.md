@@ -7041,7 +7041,7 @@ public-data desktop paths are production-verified. The only accepted coverage
 gap is the signed-in Following state, which remains covered by frontend tests
 but was not opened using the owner's production account.
 
-## UI20.4 — Internally scrolling profile rosters — IN PROGRESS 2026-09-04
+## UI20.4 — Internally scrolling profile rosters — DONE 2026-09-04
 
 **Built:** `web/src/App.tsx` now expands the complete party roster inside both
 the desktop party page and a desktop politician profile instead of extending
@@ -7072,7 +7072,14 @@ files.
 
 **Blocked / needs a decision:** none.
 
-**Next agent should know:** production verification remains: at desktop width,
-open `Alla … politiker` on a party and `Alla … kollegor` on a politician, then
-confirm each list caps its height and scrolls internally without widening or
-lengthening the profile layout.
+**Production verification:** live at `pleni.se` on commit `ca5669d`. At
+1440×900, Moderaterna expanded from six to 83 rows inside a 430 px region with
+4,897 px scroll height and `overflow-y: auto`; the outer page stayed 2,111 px
+high and the document stayed exactly viewport-wide. Adam Reuterskiöld's profile
+expanded from six to 82 colleagues inside the same 430 px region with 4,838 px
+scroll height. Both toggles changed to `Visa färre`, exposed
+`aria-expanded="true"`, and produced no browser-console errors.
+
+**Next agent should know:** the collapse/long-page defect is closed on both
+desktop profile routes and verified against production data. Mobile remains
+unchanged.
