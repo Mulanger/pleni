@@ -7191,7 +7191,15 @@ views from Enhanced Measurement and must not be presented as ad inventory.
 ads in the EEA, Pleni still needs a separate advertising project, network terms,
 certified CMP/TCF decision where required, and ad-render/viewability measurement.
 
-**Production verification:** pending InstaPods deployment from `origin/main`.
+**Production verification:** live at `pleni.se` from code commit `3baa7f0`
+with asset `index-ClZjwYoe.js`. In a fresh production origin the first-visit
+dialog was present and zero `googletagmanager.com` scripts existed. `Endast
+nödvändiga` closed the dialog and kept the count at zero. Opening `Analys och
+cookies` from the signed-out desktop Profile and choosing `Acceptera analys`
+loaded exactly one Google tag and changed the profile subtitle to `Analys är
+tillåten`. Choosing `Endast nödvändiga` from settings then triggered the strict
+reload, removed the tag (count zero) and restored the `Endast nödvändiga`
+subtitle. No account or sign-in was needed for any privacy control.
 
 **Next agent should know:** validate `clip_impression`, `qualified_view`,
 `video_start`, `video_progress`, `video_complete` and `watch_time` in GA4 after
