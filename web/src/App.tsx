@@ -102,6 +102,7 @@ import { LEGAL_PAGE_ORDER, LEGAL_PAGES, LEGAL_VERSION } from "./legal";
 import type { LegalPageId } from "./legal";
 import { personPathSlug, useAppNavigation } from "./navigation";
 import { PartyLogo } from "./party-logo";
+import { filterPartyMembers } from "./party-member-filter";
 import { appendUniqueProfileClips } from "./profile-clip-order";
 import {
   createPortraitDelivery,
@@ -4897,9 +4898,8 @@ function FollowingScreen({
  * appear in the 60 most recent clips, out of 165 with published clips — so
  * searching for almost anyone returned nothing.
  */
-/** How many politician rows one party roll-down asks for. Covers every
- *  riksdag party; the foot says so when a party ever exceeds it. */
-const PARTY_MEMBER_LIMIT = 100;
+/** One party can exceed 100 rows; 200 covers a full current Riksdag party. */
+const PARTY_MEMBER_LIMIT = 200;
 
 /**
  * The eight riksdag parties as one row of roll-downs.
@@ -4909,8 +4909,8 @@ const PARTY_MEMBER_LIMIT = 100;
  * eight parties while looking nothing alike — and the one carrying the
  * verified party mark and the whole name was the one below the fold. This is
  * that list's appearance, promoted to where the chips were, with the members
- * list the mobile party page has folded into each party: the party page, the
- * search filter the chips used to own, then the politicians themselves.
+ * list the mobile party page has folded into each party: the party page, a
+ * local name filter, then the politicians themselves.
  *
  * The list scrolls inside the panel because Socialdemokraterna has 107
  * politicians; a roll-down must not become a page.
@@ -4919,20 +4919,20 @@ function DesktopPartyDirectory({
   profiles,
   loading,
   onOpenParty,
-  onOpenPerson,
-  onSetPartyFilter
+  onOpenPerson
 }: {
   profiles: PartyProfile[];
   loading: boolean;
   onOpenParty: (profile: PartyProfile) => void;
   onOpenPerson: (politician: Politician) => void;
-  onSetPartyFilter: (party: PartyCode) => void;
 }) {
   const [openCode, setOpenCode] = useState<PartyCode | null>(null);
+  const [memberQuery, setMemberQuery] = useState("");
   const [members, setMembers] = useState<Partial<Record<PartyCode, Politician[]>>>({});
   const [failedCode, setFailedCode] = useState<PartyCode | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const memberScrollRef = useRef<HTMLDivElement | null>(null);
   const triggersRef = useRef(new Map<PartyCode, HTMLButtonElement>());
 
   /** Fetch a party's politicians the first time its menu opens, then keep them. */
@@ -4976,9 +4976,6 @@ function DesktopPartyDirectory({
         trigger?.focus();
         return;
       }
-      if (event.key === "Tab") {
-        setOpenCode(null);
-      }
     };
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -4988,22 +4985,30 @@ function DesktopPartyDirectory({
     };
   }, [openCode]);
 
-  /** Opening moves focus into the panel, so the keyboard follows the eye. */
+  /** Opening moves focus to the name filter so typing can begin immediately. */
   useEffect(() => {
     if (openCode === null) {
       return;
     }
-    menuRef.current?.querySelector<HTMLElement>("[data-menu-item]")?.focus();
+    menuRef.current?.querySelector<HTMLInputElement>("[data-menu-search]")?.focus();
   }, [openCode]);
 
-  // Every row carries `tabIndex={-1}`, so Tab leaves the panel rather than
-  // walking 107 politicians. The arrows move inside it instead.
+  /** A changed filter always starts at the top of its shorter result list. */
+  useEffect(() => {
+    memberScrollRef.current?.scrollTo({ top: 0 });
+  }, [memberQuery, openCode]);
+
+  // Only the first result joins the Tab order, so Tab does not walk hundreds
+  // of names. The arrows still move through the complete filtered result.
   const moveMenuFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.target instanceof HTMLInputElement && event.key !== "ArrowDown") {
+      return;
+    }
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
       return;
     }
     const items = Array.from(
-      menuRef.current?.querySelectorAll<HTMLElement>("[data-menu-item]") ?? []
+      menuRef.current?.querySelectorAll<HTMLElement>("[data-member-item]") ?? []
     );
     if (items.length === 0) {
       return;
@@ -5022,7 +5027,18 @@ function DesktopPartyDirectory({
   };
 
   return (
-    <section className="party-directory" ref={rootRef} aria-label="Riksdagspartier">
+    <section
+      className="party-directory"
+      ref={rootRef}
+      aria-label="Riksdagspartier"
+      onBlur={(event) => {
+        const next = event.relatedTarget;
+        if (next instanceof Node && rootRef.current?.contains(next)) {
+          return;
+        }
+        setOpenCode(null);
+      }}
+    >
       <div className="party-directory-head">
         <h2>Riksdagspartier</h2>
         <span>Öppna ett parti för partisidan och dess ledamöter</span>
@@ -5039,8 +5055,13 @@ function DesktopPartyDirectory({
           {profiles.map((profile) => {
             const open = openCode === profile.abbr;
             const panelId = `party-menu-${profile.abbr}`;
+            const filterId = `${panelId}-member-filter`;
             const list = members[profile.abbr];
+            const visibleMembers = list === undefined
+              ? undefined
+              : filterPartyMembers(list, memberQuery);
             const listFailed = failedCode === profile.abbr && list === undefined;
+            const hasMemberQuery = memberQuery.trim().length > 0;
             const summary = [
               typeof profile.politicianCount === "number"
                 ? `${formatNumber(profile.politicianCount)} ledamöter`
@@ -5065,9 +5086,13 @@ function DesktopPartyDirectory({
                   }}
                   className={open ? "party-directory-trigger is-open" : "party-directory-trigger"}
                   aria-expanded={open}
-                  aria-haspopup="true"
+                  aria-haspopup="dialog"
                   aria-controls={panelId}
-                  onClick={() => setOpenCode(open ? null : profile.abbr)}
+                  onClick={() => {
+                    setMemberQuery("");
+                    setFailedCode(null);
+                    setOpenCode(open ? null : profile.abbr);
+                  }}
                 >
                   {/* The verified CDN mark, with the party-coloured letter as
                       the fallback — the same PartyAvatar the old list used. */}
@@ -5084,7 +5109,7 @@ function DesktopPartyDirectory({
                   <div
                     className="party-menu"
                     id={panelId}
-                    role="menu"
+                    role="dialog"
                     aria-label={profile.name}
                     ref={menuRef}
                     onKeyDown={moveMenuFocus}
@@ -5102,9 +5127,6 @@ function DesktopPartyDirectory({
                     <div className="party-menu-actions">
                       <button
                         type="button"
-                        role="menuitem"
-                        tabIndex={-1}
-                        data-menu-item=""
                         className="party-menu-action"
                         onClick={() => {
                           setOpenCode(null);
@@ -5115,29 +5137,46 @@ function DesktopPartyDirectory({
                         Öppna partisidan
                         <ChevronRight className="party-menu-action-end" size={13} aria-hidden="true" />
                       </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        tabIndex={-1}
-                        data-menu-item=""
-                        className="party-menu-action"
-                        onClick={() => {
-                          setOpenCode(null);
-                          onSetPartyFilter(profile.abbr);
-                        }}
-                      >
-                        <Sliders size={15} aria-hidden="true" />
-                        Visa klipp från {profile.short}
-                        <ChevronRight className="party-menu-action-end" size={13} aria-hidden="true" />
-                      </button>
+                    </div>
+
+                    <div className="party-menu-filter">
+                      <label className="sr-only" htmlFor={filterId}>
+                        Filtrera ledamöter i {profile.name}
+                      </label>
+                      <Search size={15} aria-hidden="true" />
+                      <input
+                        id={filterId}
+                        type="search"
+                        value={memberQuery}
+                        data-menu-search=""
+                        autoComplete="off"
+                        spellCheck={false}
+                        placeholder="Sök namn"
+                        onChange={(event) => setMemberQuery(event.target.value)}
+                      />
+                      {memberQuery && (
+                        <button
+                          type="button"
+                          aria-label="Rensa namnfilter"
+                          onClick={() => setMemberQuery("")}
+                        >
+                          <X size={13} aria-hidden="true" />
+                        </button>
+                      )}
                     </div>
 
                     <div className="party-menu-listhead">
                       <span>Ledamöter</span>
-                      {list !== undefined && <i>{formatNumber(list.length)}</i>}
+                      {list !== undefined && visibleMembers !== undefined && (
+                        <i aria-live="polite">
+                          {hasMemberQuery
+                            ? `${formatNumber(visibleMembers.length)} av ${formatNumber(list.length)}`
+                            : formatNumber(list.length)}
+                        </i>
+                      )}
                     </div>
 
-                    <div className="party-menu-scroll">
+                    <div className="party-menu-scroll" ref={memberScrollRef}>
                       {list === undefined && !listFailed && (
                         <div role="status" aria-label="Hämtar ledamöter">
                           <span className="sr-only">Hämtar ledamöter…</span>
@@ -5160,7 +5199,16 @@ function DesktopPartyDirectory({
                           Inga registrerade ledamöter.
                         </p>
                       )}
-                      {list?.map((politician) => {
+                      {list !== undefined &&
+                        list.length > 0 &&
+                        visibleMembers?.length === 0 && (
+                          <div className="party-menu-no-results" role="status">
+                            <Search size={18} aria-hidden="true" />
+                            <strong>Inga namn hittade</strong>
+                            <span>Prova ett annat namn.</span>
+                          </div>
+                        )}
+                      {visibleMembers?.map((politician, index) => {
                         const name = cleanName(politician.name) || politician.name;
                         const detail = [politician.role, politician.constituency]
                           .filter(Boolean)
@@ -5168,9 +5216,8 @@ function DesktopPartyDirectory({
                         return (
                           <button
                             type="button"
-                            role="menuitem"
-                            tabIndex={-1}
-                            data-menu-item=""
+                            tabIndex={index === 0 ? 0 : -1}
+                            data-member-item=""
                             className="party-menu-person"
                             key={politician.id}
                             onClick={() => {
@@ -5698,7 +5745,6 @@ function SearchScreen({
                 loading={partyProfilesLoading}
                 onOpenParty={openParty}
                 onOpenPerson={openPerson}
-                onSetPartyFilter={setPartyFilter}
               />
             )}
             {recentSearches.length > 0 && (
@@ -6488,9 +6534,8 @@ const desktopProfileScrollPositions = createScrollMemory();
 /**
  * How many politicians a profile side column lists before it collapses.
  *
- * The party page can expand to the full membership in place; a person page
- * sends the viewer to the party page instead, which is where the whole list
- * belongs.
+ * Both desktop profile routes can expand the full membership in a bounded
+ * internal scroll region without stretching the outer document.
  */
 const RAIL_PERSON_LIMIT = 6;
 

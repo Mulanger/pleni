@@ -7083,3 +7083,45 @@ scroll height. Both toggles changed to `Visa färre`, exposed
 **Next agent should know:** the collapse/long-page defect is closed on both
 desktop profile routes and verified against production data. Mobile remains
 unchanged.
+
+## UI20.5 — Live member filtering in Search party menus — IN PROGRESS 2026-09-04
+
+**Built:** the desktop party roll-down in `web/src/App.tsx` replaces `Visa klipp
+från …` with an auto-focused `Sök namn` field that filters the open party's
+member list while the viewer types. `web/src/party-member-filter.ts` owns the
+accent-, case- and whitespace-insensitive match; `web/src/styles.css` provides
+the compact field and centered no-result state; `web/src/supabase.ts` raises
+the party-member read from 100 to 200 rows. Focused coverage lives in
+`web/tests/search-party-directory.test.mjs` and
+`web/tests/party-member-filter.test.mjs`.
+
+**Tests:** all 171 frontend Node tests pass; TypeScript passes; the production
+Vite/PWA build passes and still precaches exactly nine app-shell entries with
+no video/private data. Repository gate green: 514 Python tests, 79 deselected,
+the known `audioop` warning, Ruff clean and strict mypy clean over 83 source
+files.
+
+**Contracts touched:** none. No migration, dependency or mobile change.
+
+**Decisions made:**
+- Filtering is local over the already fetched party roster, so each keystroke
+  makes no new network request and preserves the server's alphabetical order.
+- The 100-row ceiling is now 200 in both the menu and shared party reader so a
+  party with more than 100 names can actually be searched in full.
+- Empty matches show the exact centered state `Inga namn hittade` inside the
+  existing scroll frame. The live count reads `x av y`, and changing the query
+  returns the internal list to its top.
+- The roll-down is now an accessible dialog rather than an ARIA menu, because
+  it contains a text input. Opening focuses that input; Arrow Down enters the
+  filtered results, Escape returns focus to the party trigger, and moving focus
+  outside closes the panel.
+- Mobile Search and the main topic/person search behavior remain unchanged.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** production verification remains: open
+Socialdemokraterna on desktop Search, confirm more than 100 rows load, filter a
+real name and a nonexistent name, then verify the live count, centered empty
+state, internal scroll and keyboard focus behavior.

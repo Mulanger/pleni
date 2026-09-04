@@ -5644,7 +5644,8 @@ a {
 
   .party-directory-trigger:focus-visible,
   .party-menu-action:focus-visible,
-  .party-menu-person:focus-visible {
+  .party-menu-person:focus-visible,
+  .party-menu-filter button:focus-visible {
     outline: 3px solid rgba(38, 79, 139, 0.32);
     outline-offset: -2px;
   }
@@ -5741,6 +5742,67 @@ a {
 
   .party-menu-action:hover {
     background: #eceff4;
+  }
+
+  .party-menu-filter {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin: 10px 12px 4px;
+    color: #888880;
+  }
+
+  .party-menu-filter > svg {
+    position: absolute;
+    left: 12px;
+    pointer-events: none;
+  }
+
+  .party-menu-filter input {
+    width: 100%;
+    height: 40px;
+    padding: 0 38px 0 36px;
+    border: 1px solid #d9d9d1;
+    border-radius: 10px;
+    background: #f9f9f7;
+    color: #17233c;
+    font: inherit;
+    font-size: 13px;
+    transition: border-color 130ms ease, background 130ms ease, box-shadow 130ms ease;
+  }
+
+  .party-menu-filter input::placeholder {
+    color: #919189;
+  }
+
+  .party-menu-filter input::-webkit-search-cancel-button {
+    appearance: none;
+  }
+
+  .party-menu-filter input:focus {
+    border-color: #9babc2;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(49, 85, 142, 0.1);
+    outline: none;
+  }
+
+  .party-menu-filter button {
+    position: absolute;
+    right: 7px;
+    display: grid;
+    width: 27px;
+    height: 27px;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: #777770;
+    cursor: pointer;
+  }
+
+  .party-menu-filter button:hover {
+    background: #e9e9e4;
   }
 
   .party-menu-listhead {
@@ -5853,6 +5915,26 @@ a {
     color: #79796f;
     font-size: 12.5px;
     line-height: 1.45;
+  }
+
+  .party-menu-no-results {
+    display: grid;
+    min-height: 100%;
+    place-content: center;
+    justify-items: center;
+    gap: 5px;
+    padding: 24px;
+    color: #85857d;
+    text-align: center;
+  }
+
+  .party-menu-no-results strong {
+    color: #343d50;
+    font-size: 13px;
+  }
+
+  .party-menu-no-results span {
+    font-size: 11.5px;
   }
 
   .party-menu-foot {

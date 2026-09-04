@@ -603,7 +603,7 @@ export async function loadPartyProfile(code: PartyCode): Promise<PartyProfile | 
 /** Current politician records for a party, ordered by display name. */
 export async function loadPoliticiansForParty(
   code: PartyCode,
-  limit = 100
+  limit = 200
 ): Promise<Politician[]> {
   return searchPoliticians("", { party: code, limit });
 }
