@@ -2107,3 +2107,44 @@ and the feed's media scheduler are all out of scope.
 **Status:** SEO0 implemented locally 2026-09-03, pending deploy and owner Search
 Console verification. SEO4 is deferred — `clips.topic` is null across all 5 514
 published clips — and nothing depends on it.
+
+---
+
+## UI21 — Consent-gated aggregate web analytics — DONE 2026-09-04
+
+**Depends on:** the released frontend and SEO clip routes. **Size:** medium.
+
+**Objective.** Add privacy-conscious aggregate product analytics without
+turning browsing, searches or political interests into advertising profiles.
+Google Analytics may load only after an explicit analytics choice. A feed clip
+impression is qualified independently from an ad impression and requires at
+least 72% visibility for one continuous second while the document is visible.
+
+**Scope — may create or modify:**
+
+```
+web/src/{analytics.ts,analytics-consent.ts,AnalyticsConsentBanner.tsx}
+web/src/{App.tsx,legal.ts,styles.css,vite-env.d.ts}
+web/tests/analytics*.test.mjs
+{.env.example,web/.env.example}
+docs/privacy/{OPERATING_POLICY.md,DATA_FLOW_INVENTORY.md,DPIA.md}
+docs/BUILD_PLAN.md
+PROGRESS.md
+```
+
+**Scope — must not touch:** `src/contracts.py`, pipeline stages, Supabase
+schemas, recommendation telemetry, search-query analytics, comment text,
+Clerk identity data, ad serving, service-worker caching or Bunny objects.
+
+**Acceptance:** no Google request before consent; rejecting remains a true
+no-load path; accepting loads the configured tag; withdrawal stops collection
+and clears first-party GA cookies; both choices have equal prominence and the
+setting stays reachable from Profile and the cookie-information page. Real
+catalogue clips emit one qualified impression after the visibility dwell, one
+play start, one three-second qualified view, 25/50/75 progress milestones, one
+completion and bounded foreground watch time per clip/app session. Prefetch,
+buffering, hidden tabs, samples and automatic loops do not create views. No
+user id, name, email, search text, follow/like/save state, comment or inferred
+political preference is sent. TypeScript, frontend tests, production build,
+PWA verification and the full project acceptance command must pass before
+release.

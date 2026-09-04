@@ -4,6 +4,8 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL?: string;
   readonly VITE_SUPABASE_PUBLISHABLE_KEY?: string;
   readonly VITE_CLERK_PUBLISHABLE_KEY?: string;
+  /** Public GA4 measurement id. The released Pleni stream is used when omitted. */
+  readonly VITE_GA_MEASUREMENT_ID?: string;
   /** Off until migrations 018/019 and all three Edge Functions are deployed. */
   readonly VITE_RECOMMENDATIONS_ENABLED?: string;
   /** Off until UI16.8 completes its privacy, quality and release gates. */

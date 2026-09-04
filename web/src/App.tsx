@@ -9,6 +9,7 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpRight,
+  BarChart3,
   Bookmark,
   CheckCircle2,
   ChevronDown,
@@ -57,6 +58,28 @@ import {
   setRecommendationConsent,
   syncRecommendationPreferences
 } from "./account";
+import {
+  ANALYTICS_STATE_EVENT,
+  QUALIFIED_IMPRESSION_DWELL_MS,
+  QUALIFIED_IMPRESSION_FRACTION,
+  QUALIFIED_VIEW_WATCH_MS,
+  isAnalyticsEnabled,
+  disableAnalytics,
+  enableAnalytics,
+  trackClipImpression,
+  trackQualifiedView,
+  trackVideoComplete,
+  trackVideoProgress,
+  trackVideoStart,
+  trackWatchTime
+} from "./analytics";
+import type { FeedAnalyticsContext } from "./analytics";
+import {
+  readAnalyticsConsent,
+  writeAnalyticsConsent
+} from "./analytics-consent";
+import type { AnalyticsConsentChoice } from "./analytics-consent";
+import { AnalyticsConsentBanner } from "./AnalyticsConsentBanner";
 import { clerkEnabled, useViewer } from "./clerk";
 import {
   COMMENT_MAX_LENGTH,
@@ -307,7 +330,7 @@ const PROFILE_CLIP_PAGE_SIZE = 60;
  * Written down once and used both to pick the active clip and, later, to decide
  * what an impression is. A metric with two definitions is a metric with none.
  */
-const IMPRESSION_VISIBLE_FRACTION = 0.72;
+const IMPRESSION_VISIBLE_FRACTION = QUALIFIED_IMPRESSION_FRACTION;
 
 /**
  * How long a clip must hold the visibility lead before it becomes active
@@ -397,6 +420,8 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
   const preferenceSyncQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [feedReloadKey, setFeedReloadKey] = useState(0);
   const pwa = usePwaExperience(feedNetworkFailed);
+  const [analyticsConsent, setAnalyticsConsent] = useState(readAnalyticsConsent);
+  const [analyticsSettingsOpen, setAnalyticsSettingsOpen] = useState(false);
   const selectedPersonId =
     route.view === "person" || route.view === "person-clips" ? route.personId : null;
   const selectedPartyCode =
@@ -481,6 +506,14 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
   useLayoutEffect(() => {
     applyBrowserTheme(darkSurface ? "dark" : "light");
   }, [darkSurface]);
+
+  useEffect(() => {
+    if (analyticsConsent?.analytics === "granted") {
+      enableAnalytics();
+    } else {
+      disableAnalytics();
+    }
+  }, [analyticsConsent?.analytics]);
 
   useEffect(() => {
     let active = true;
@@ -1390,6 +1423,29 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
     navigate({ view: "legal", tab: "profil", feedMode, page });
   };
 
+  const chooseAnalytics = (choice: AnalyticsConsentChoice) => {
+    const previousChoice = analyticsConsent?.analytics ?? null;
+    const next = writeAnalyticsConsent(choice);
+    setAnalyticsConsent(next);
+    setAnalyticsSettingsOpen(false);
+    if (choice === "granted") {
+      enableAnalytics();
+    } else {
+      disableAnalytics();
+      // A loaded Google tag cannot be unloaded completely. Reloading only
+      // after a withdrawal restores the same strict no-tag state as a first
+      // visit that chose "Endast nödvändiga".
+      if (previousChoice === "granted") {
+        window.location.reload();
+      }
+    }
+  };
+
+  const openCookieInformation = () => {
+    setAnalyticsSettingsOpen(false);
+    openLegal("storage");
+  };
+
   const closeDesktopRoute = useCallback(() => {
     if (showingSearchFeed) {
       closeTopicSearchFeed();
@@ -1503,6 +1559,15 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
     <>
       {viewport === "tablet-gate" && <WideScreenMessage />}
       <PwaStatusStack pwa={pwa} />
+      {(analyticsConsent === null || analyticsSettingsOpen) && (
+        <AnalyticsConsentBanner
+          currentChoice={analyticsConsent?.analytics ?? null}
+          settingsOpen={analyticsSettingsOpen}
+          onChoose={chooseAnalytics}
+          onClose={() => setAnalyticsSettingsOpen(false)}
+          onOpenCookieInfo={openCookieInformation}
+        />
+      )}
       {viewer.signedIn && showOnboarding && (
         <Onboarding
           initial={onboarding}
@@ -1599,6 +1664,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
                 clip: route.view === "clip" ? (
                   <FeedScreen
                     presentation="desktop"
+                    analyticsContext="seo_clip"
                     clips={entryFeedClips}
                     feedMode="fordig"
                     setFeedMode={changeFeedMode}
@@ -1662,6 +1728,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
                 "person-clips": route.view === "person-clips" ? (
                   <CollectionScreen
                     presentation="desktop"
+                    analyticsContext="person"
                     collection={collection ?? { title: "Klipp", subtitle: "Laddar…", clips: [], startId: null }}
                     onBack={() => backTo({ view: "person", tab, feedMode, personId: route.personId })}
                     muted={muted}
@@ -1678,6 +1745,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
                 "party-clips": route.view === "party-clips" ? (
                   <CollectionScreen
                     presentation="desktop"
+                    analyticsContext="party"
                     collection={collection ?? { title: "Klipp", subtitle: "Laddar…", clips: [], startId: null }}
                     onBack={() => backTo({ view: "party", tab, feedMode, partyCode: route.partyCode })}
                     muted={muted}
@@ -1697,6 +1765,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
                       <CollectionScreen
                         presentation="desktop"
                         collection={searchFeedCollection}
+                        analyticsContext="search"
                         onBack={closeTopicSearchFeed}
                         muted={muted}
                         setMuted={setMuted}
@@ -1760,6 +1829,8 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
                       presentation="desktop"
                       signedIn={viewer.signedIn}
                       consent={consent}
+                      analyticsChoice={analyticsConsent?.analytics ?? null}
+                      onOpenAnalyticsSettings={() => setAnalyticsSettingsOpen(true)}
                       selectedParties={onboarding.parties.length}
                       savedCount={library.savedClips.length}
                       followedCount={library.followedPoliticians.length}
@@ -1825,6 +1896,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
                   route.view === "saved-clips" ? (
                     <CollectionScreen
                       presentation="desktop"
+                      analyticsContext="saved"
                       collection={collection ?? { title: "Sparade klipp", subtitle: "Laddar…", clips: [], startId: null }}
                       onBack={() => backTo({ view: "saved", tab: "profil", feedMode })}
                       muted={muted}
@@ -1845,6 +1917,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
                       page={route.page}
                       onBack={() => backTo({ view: "tab", tab: "profil", feedMode })}
                       onNavigate={openLegal}
+                      onOpenCookieSettings={() => setAnalyticsSettingsOpen(true)}
                     />
                   ) : null
               }}
@@ -1855,6 +1928,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
       <main key="mobile" className="mobile-app" aria-label="Pleni">
         {showingSearchFeed && searchFeedCollection !== null ? (
           <CollectionScreen
+            analyticsContext="search"
             collection={searchFeedCollection}
             onBack={closeTopicSearchFeed}
             muted={muted}
@@ -1872,9 +1946,17 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
             page={route.page}
             onBack={() => backTo({ view: "tab", tab: "profil", feedMode })}
             onNavigate={openLegal}
+            onOpenCookieSettings={() => setAnalyticsSettingsOpen(true)}
           />
         ) : route.view === "person-clips" || route.view === "party-clips" || route.view === "saved-clips" ? (
           <CollectionScreen
+            analyticsContext={
+              route.view === "person-clips"
+                ? "person"
+                : route.view === "party-clips"
+                  ? "party"
+                  : "saved"
+            }
             collection={
               collection ?? { title: "Klipp", subtitle: "Laddar…", clips: [], startId: null }
             }
@@ -1931,6 +2013,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
           <>
             {tab === "hem" && (
               <FeedScreen
+                analyticsContext={route.view === "clip" ? "seo_clip" : undefined}
                 clips={route.view === "clip" ? entryFeedClips : clips}
                 feedMode={feedMode}
                 setFeedMode={changeFeedMode}
@@ -2001,6 +2084,8 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
               <ProfileScreen
                 signedIn={viewer.signedIn}
                 consent={consent}
+                analyticsChoice={analyticsConsent?.analytics ?? null}
+                onOpenAnalyticsSettings={() => setAnalyticsSettingsOpen(true)}
                 selectedParties={onboarding.parties.length}
                 savedCount={library.savedClips.length}
                 followedCount={library.followedPoliticians.length}
@@ -2495,6 +2580,7 @@ function FeedItemRow({
 function FeedScreen({
   clips: suppliedClips,
   presentation = "mobile",
+  analyticsContext,
   feedMode,
   setFeedMode,
   playbackSuspended = false,
@@ -2518,6 +2604,7 @@ function FeedScreen({
 }: {
   clips: ClipItem[];
   presentation?: "mobile" | "desktop";
+  analyticsContext?: FeedAnalyticsContext;
   feedMode: FeedMode;
   setFeedMode: (mode: FeedMode) => void;
   /** Keeps the visible frame in place while a modal surface covers the feed. */
@@ -2551,6 +2638,9 @@ function FeedScreen({
   const clips = presentation === "desktop" && debateContext
     ? debateContext.clips
     : suppliedClips;
+  const effectiveAnalyticsContext: FeedAnalyticsContext = debateContext
+    ? "debate"
+    : analyticsContext ?? (feedMode === "fordig" ? "home_for_you" : "home_latest");
   const mainFeedActiveId = useRef<string | null>(initialClipId);
   const [activeId, setActiveId] = useState(initialClipId ?? clips[0]?.id ?? "");
   const [paused, setPaused] = useState<BooleanMap>({});
@@ -2591,9 +2681,18 @@ function FeedScreen({
   const playbackSuspendedRef = useRef(playbackSuspended);
   const activeIdRef = useRef(activeId);
   const commentClipRef = useRef(commentClip);
+  const analyticsRatiosRef = useRef<Record<string, number>>({});
+  const analyticsWatchMsRef = useRef<Record<string, number>>({});
+  const [analyticsRevision, setAnalyticsRevision] = useState(0);
   activeIdRef.current = activeId;
   playbackSuspendedRef.current = playbackSuspended;
   commentClipRef.current = commentClip;
+
+  useEffect(() => {
+    const refreshAnalyticsState = () => setAnalyticsRevision((revision) => revision + 1);
+    window.addEventListener(ANALYTICS_STATE_EVENT, refreshAnalyticsState);
+    return () => window.removeEventListener(ANALYTICS_STATE_EVENT, refreshAnalyticsState);
+  }, []);
 
   const activateClip = useCallback(
     (clipId: string) => {
@@ -2915,6 +3014,15 @@ function FeedScreen({
     loopCounts.current[clipId] = (loopCounts.current[clipId] ?? 0) + 1;
     if (clipId !== activeId) {
       return;
+    }
+    const clip = clips.find((candidate) => candidate.id === clipId);
+    if (
+      clip &&
+      clipSource === "supabase" &&
+      document.visibilityState === "visible" &&
+      (analyticsRatiosRef.current[clipId] ?? 0) >= QUALIFIED_IMPRESSION_FRACTION
+    ) {
+      trackVideoComplete(clip, effectiveAnalyticsContext);
     }
     video.currentTime = 0;
     playWithMutedFallback(clipId, video);
@@ -3310,6 +3418,144 @@ function FeedScreen({
       }
     };
   }, [activateClip, clips]);
+
+  /**
+   * A feed impression is deliberately stricter than activation: one winning
+   * clip must occupy 72% of its own feed viewport for a continuous second,
+   * with the page visible. Fast swipes, neighboring preload rows and hidden
+   * tabs therefore never become views.
+   */
+  useEffect(() => {
+    const scroll = feedScrollRef.current;
+    analyticsRatiosRef.current = {};
+    if (!scroll || !isAnalyticsEnabled()) return;
+
+    let pendingWinner: string | null = null;
+    let dwellTimer: number | null = null;
+
+    const cancelDwell = () => {
+      pendingWinner = null;
+      if (dwellTimer !== null) {
+        window.clearTimeout(dwellTimer);
+        dwellTimer = null;
+      }
+    };
+
+    const bestVisibleClip = (): string | null => {
+      let best: string | null = null;
+      let bestRatio = QUALIFIED_IMPRESSION_FRACTION;
+      Object.entries(analyticsRatiosRef.current).forEach(([clipId, ratio]) => {
+        if (ratio >= bestRatio) {
+          best = clipId;
+          bestRatio = ratio;
+        }
+      });
+      return best;
+    };
+
+    const schedule = () => {
+      if (document.visibilityState !== "visible" || playbackSuspendedRef.current) {
+        cancelDwell();
+        return;
+      }
+      const winner = bestVisibleClip();
+      if (winner === null) {
+        cancelDwell();
+        return;
+      }
+      if (winner === pendingWinner) return;
+      cancelDwell();
+      pendingWinner = winner;
+      dwellTimer = window.setTimeout(() => {
+        dwellTimer = null;
+        if (
+          pendingWinner !== winner ||
+          document.visibilityState !== "visible" ||
+          playbackSuspendedRef.current ||
+          activeIdRef.current !== winner ||
+          (analyticsRatiosRef.current[winner] ?? 0) < QUALIFIED_IMPRESSION_FRACTION
+        ) {
+          return;
+        }
+        const clipIndex = clips.findIndex((clip) => clip.id === winner);
+        const clip = clips[clipIndex];
+        if (clip && clipSource === "supabase") {
+          trackClipImpression(clip, effectiveAnalyticsContext, clipIndex);
+        }
+      }, QUALIFIED_IMPRESSION_DWELL_MS);
+    };
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const clipId = (entry.target as HTMLElement).dataset.clipId;
+          if (clipId) analyticsRatiosRef.current[clipId] = entry.intersectionRatio;
+        });
+        schedule();
+      },
+      { root: scroll, threshold: [0, 0.25, 0.5, QUALIFIED_IMPRESSION_FRACTION, 0.9, 1] }
+    );
+    scroll.querySelectorAll<HTMLElement>("[data-clip-id]").forEach((element) => observer.observe(element));
+    document.addEventListener("visibilitychange", schedule);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", schedule);
+      cancelDwell();
+      analyticsRatiosRef.current = {};
+    };
+  }, [analyticsRevision, clipSource, clips, effectiveAnalyticsContext, playbackSuspended]);
+
+  /** Count only wall-clock time during real, foreground playback. */
+  useEffect(() => {
+    const clip = clips.find((candidate) => candidate.id === activeId);
+    if (!clip || clipSource !== "supabase" || clip.isSample || !isAnalyticsEnabled()) {
+      return;
+    }
+    let lastTick = performance.now();
+    const tick = () => {
+      const now = performance.now();
+      const elapsed = Math.min(1_000, Math.max(0, now - lastTick));
+      lastTick = now;
+      const video = videoRefs.current[clip.id];
+      const eligible =
+        isAnalyticsEnabled() &&
+        document.visibilityState === "visible" &&
+        !playbackSuspendedRef.current &&
+        commentClipRef.current === null &&
+        activeIdRef.current === clip.id &&
+        (analyticsRatiosRef.current[clip.id] ?? 0) >= QUALIFIED_IMPRESSION_FRACTION &&
+        video !== null &&
+        video !== undefined &&
+        !video.paused &&
+        !video.ended &&
+        video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+      if (!eligible || !video) return;
+
+      trackVideoStart(clip, effectiveAnalyticsContext);
+      const total = (analyticsWatchMsRef.current[clip.id] ?? 0) + elapsed;
+      analyticsWatchMsRef.current[clip.id] = total;
+      if (total >= QUALIFIED_VIEW_WATCH_MS) {
+        trackQualifiedView(clip, effectiveAnalyticsContext);
+      }
+      trackVideoProgress(
+        clip,
+        effectiveAnalyticsContext,
+        video.currentTime,
+        Number.isFinite(video.duration) ? video.duration : clip.durationS
+      );
+      if (video.duration > 0 && video.currentTime / video.duration >= 0.95) {
+        trackVideoComplete(clip, effectiveAnalyticsContext);
+      }
+    };
+
+    const interval = window.setInterval(tick, 250);
+    return () => {
+      window.clearInterval(interval);
+      const watched = analyticsWatchMsRef.current[clip.id] ?? 0;
+      trackWatchTime(clip, effectiveAnalyticsContext, watched);
+      delete analyticsWatchMsRef.current[clip.id];
+    };
+  }, [activeId, analyticsRevision, clipSource, clips, effectiveAnalyticsContext]);
 
   useEffect(() => {
     pauseAllPlayback();
@@ -3832,6 +4078,7 @@ function CollectionScreen({
   collection,
   onBack,
   presentation = "mobile",
+  analyticsContext,
   muted,
   setMuted,
   liked,
@@ -3845,6 +4092,7 @@ function CollectionScreen({
   collection: ClipCollection;
   onBack: () => void;
   presentation?: "mobile" | "desktop";
+  analyticsContext: FeedAnalyticsContext;
   muted: boolean;
   setMuted: (muted: boolean) => void;
   liked: BooleanMap;
@@ -3858,6 +4106,7 @@ function CollectionScreen({
   return (
     <FeedScreen
       presentation={presentation}
+      analyticsContext={analyticsContext}
       clips={collection.clips}
       feedMode="senaste"
       setFeedMode={() => undefined}
@@ -6021,12 +6270,14 @@ function LegalScreen({
   presentation = "mobile",
   page,
   onBack,
-  onNavigate
+  onNavigate,
+  onOpenCookieSettings
 }: {
   presentation?: "mobile" | "desktop";
   page: LegalPageId;
   onBack: () => void;
   onNavigate: (page: LegalPageId) => void;
+  onOpenCookieSettings: () => void;
 }) {
   const document = LEGAL_PAGES[page];
   return (
@@ -6043,7 +6294,12 @@ function LegalScreen({
           <span className="legal-kicker">Pleni</span>
           <h1>{document.title}</h1>
           <p>{document.summary}</p>
-          <time dateTime={LEGAL_VERSION}>Gäller från 14 augusti 2026 · version {LEGAL_VERSION}</time>
+          <time dateTime={LEGAL_VERSION}>Gäller från 4 september 2026 · version {LEGAL_VERSION}</time>
+          {page === "storage" && (
+            <button type="button" className="legal-cookie-settings" onClick={onOpenCookieSettings}>
+              Ändra analysinställningar
+            </button>
+          )}
         </header>
 
         <div className="legal-document">
@@ -6103,6 +6359,8 @@ function ProfileScreen({
   presentation = "mobile",
   signedIn,
   consent,
+  analyticsChoice,
+  onOpenAnalyticsSettings,
   selectedParties,
   savedCount,
   followedCount,
@@ -6125,6 +6383,8 @@ function ProfileScreen({
   presentation?: "mobile" | "desktop";
   signedIn: boolean;
   consent: { personal: boolean; analytics: boolean; email: boolean };
+  analyticsChoice: AnalyticsConsentChoice | null;
+  onOpenAnalyticsSettings: () => void;
   selectedParties: number;
   savedCount: number;
   followedCount: number;
@@ -6301,6 +6561,21 @@ function ProfileScreen({
               {recommendationError}
             </div>
           )}
+        </Group>
+        <Group title="Integritet">
+          <ListRow
+            title="Analys och cookies"
+            subtitle={
+              analyticsChoice === "granted"
+                ? "Analys är tillåten · ändra eller återkalla när du vill"
+                : analyticsChoice === "denied"
+                  ? "Endast nödvändiga · ändra ditt val när du vill"
+                  : "Inget val gjort · Google Analytics är inte laddat"
+            }
+            icon={<BarChart3 size={18} />}
+            onClick={onOpenAnalyticsSettings}
+            chevron
+          />
         </Group>
         {recommendationsConnected && (
           <Group title="Mina rekommendationsdata">

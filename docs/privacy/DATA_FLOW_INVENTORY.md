@@ -1,6 +1,6 @@
 # Data-flow inventory
 
-Current release inventory, updated 2026-08-27. “Basis” is the project's in-house GDPR
+Current release inventory, updated 2026-09-04. “Basis” is the project's in-house GDPR
 analysis under the F0-2 risk acceptance; it has not been reviewed by counsel.
 
 The rule-based recommender and submitted topic search are available in the
@@ -37,6 +37,8 @@ setting: <https://platform.openai.com/docs/models/default-usage-policies-by-endp
 |---|---|---|---|---|
 | `riket.onboarding.v1:<clerk_user_id>`: selected parties, personalisation flag, completion time | Signed-in viewer → that browser only | Remember optional onboarding choices for that account | Explicit personalisation choice; storage requested by the viewer. Article 9(2)(a) is the planned condition if the choice is used to reveal political opinion. | Until changed or browser site data is cleared. Legacy `leaning` properties are ignored and disappear on the next write. |
 | `riket.library.v1:<clerk_user_id>`: followed people/parties, saved/liked clip ids | Signed-in viewer → that browser only | Provide follows, saves and likes requested by the viewer | Necessary to provide the requested device-local feature. | Until toggled off or browser site data is cleared. |
+| `pleni.analytics-consent.v1`: granted/denied, notice version, decision time | Viewer → that browser only | Remember and enforce the separate analytics choice | Necessary to remember the viewer's requested privacy setting; no Google storage before an analytics grant | Until the notice version changes or browser site data is cleared. |
+| `_ga`, `_ga_<measurement-id>` after grant only | Google Analytics tag → viewer's first-party Pleni cookie jar | Distinguish browser sessions and calculate aggregate usage | GDPR 6(1)(a) consent and prior terminal-storage consent | Google documents up to two years; Pleni clears accessible GA cookies on withdrawal. |
 | Player state: current time, duration, visible/active clip | Video element → React memory | Play, pause, seek and choose the active inline video | Necessary transient application state; not persistent terminal storage. | Page lifetime only. |
 
 The former bare `riket.onboarding.v1` and `riket.library.v1` keys are not
@@ -75,9 +77,24 @@ short-lived Clerk JWT only for authenticated RPC calls.
 A Bunny object URL identifies the requested clip. Pleni does not currently join
 CDN access logs to a Clerk account or use them as a viewing-history profile.
 
+## Optional aggregate analytics
+
+| Data | Source → destination | Purpose | Basis / separation | Retention criterion |
+|---|---|---|---|---|
+| Client id, session context, IP/network request data, browser/device fields, approximate geography and current public page URL | Consenting viewer → Google Analytics 4 property `G-STDL8RHDCX` | Aggregate visits, devices, acquisition and geography | Consent. Google tag is absent before grant. No GA `user_id`, Clerk id, account fields or advertising consent. Google states GA does not log/store individual IP addresses. | GA event-level setting: 2 months; aggregate reports may remain longer; processor/security logs follow Google's terms. |
+| `clip_impression`: public clip id, canonical clip page path, feed context/position and public duration | Consenting viewer → Google Analytics | Count one qualified content exposure after 72% visibility for one continuous foreground second | Consent; content performance only. Not joined to account, explicit preferences or recommender state and not an ad impression | Same GA retention. In-browser dedupe state lasts only for the current app session. |
+| `video_start`, `qualified_view`, `video_progress`, `video_complete`, `watch_time` with clip id/context/duration and bounded measurement | Consenting viewer → Google Analytics | Understand real playback, three-second views, depth, completion and foreground time | Consent. Prefetch, samples, hidden tabs and repeated automatic loops excluded. Search text, comments, likes, saves, follows and political-interest fields forbidden | Same GA retention. Wall-clock accumulator is page-memory only and deleted after emission/exit. |
+
+The canonical clip path necessarily identifies which public speech was viewed.
+That can reveal political subject matter even without a named viewer. The
+controls are prior opt-in, no account link, no Google Signals/advertising
+consent, data minimisation, short event retention and immediate withdrawal.
+Analytics remains separate from political personalisation and advertising.
+
 ## Purposes not present
 
-- No first-party web analytics.
+- No account-linked, recommendation or advertising analytics. Optional
+  consented aggregate GA4 analytics is described above.
 - No advertising, ad measurement or promoted political placement.
 - No email marketing.
 - No server-side follows, saves, likes, onboarding preferences or inferred

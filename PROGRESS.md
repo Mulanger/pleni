@@ -7134,3 +7134,66 @@ There were no console errors or horizontal overflow.
 **Next agent should know:** the desktop Search party menu now has complete,
 production-verified live member filtering. No follow-up is required for this
 change.
+
+## UI21 — Consent-gated aggregate web analytics — DONE 2026-09-04
+
+**Built:** `web/src/analytics-consent.ts` owns a versioned, separate analytics
+choice; `web/src/analytics.ts` loads GA4 measurement `G-STDL8RHDCX` only after
+grant and emits bounded content/playback events; `web/src/AnalyticsConsentBanner.tsx`
+and `web/src/styles.css` provide the equal-weight first-visit/settings surface.
+`web/src/App.tsx` connects the existing bounded player, every feed context,
+Profile and the Cookies page. The public legal copy and the three internal
+privacy records now describe the exact flow and advertising firewall.
+
+**Tests:** all 177 frontend Node tests pass, including six new analytics tests;
+TypeScript passes; the production Vite/PWA build passes and precaches exactly
+nine app-shell entries. Repository gate green after directing pytest's temp
+files to the sandbox-writable `test_outputs` directory: 514 Python tests, 79
+deselected, the known `audioop` warning, Ruff clean and strict mypy clean over
+83 source files.
+
+**Visual verification:** the first-visit panel was inspected in the real local
+browser at desktop width and 375×812. It remains a non-modal bottom surface,
+both choices are equal-sized, expanded details and actions stay inside the
+mobile viewport (the action row ended at 782 px in an 812 px viewport), and
+keyboard semantics are exposed. The only local notice was the expected missing
+network configuration in the isolated checkout.
+
+**Contracts touched:** none. No migration, Supabase data, recommendation
+telemetry, search query, service-worker rule or media scheduler changed.
+
+**Decisions made:**
+- Basic Consent Mode is literal: no Google script or request exists before a
+  grant. Denial stays tag-free; withdrawal denies all Google categories, clears
+  accessible GA cookies and reloads to remove the already-executed tag.
+- Consent is site-level, account-independent and separate from the Article 9
+  political-personalisation choice. The saved record contains only decision,
+  notice version and time.
+- A clip impression requires one continuous second at 72% visibility in a
+  visible document. Starts require actual foreground playback; the three-second
+  view, progress, completion and wall-clock watch time are session-deduplicated.
+  Prefetch, buffering, samples, hidden tabs and repeated automatic loops cannot
+  manufacture new views.
+- Qualified feed impressions also emit a page view with the existing canonical
+  `/klipp/<slug>/<id>/` SEO URL. A canonical SEO entry relies on GA's current
+  page view and does not emit a duplicate manual view.
+- No Clerk id, email/name, search text, follow/like/save state, comment or
+  political-preference field is sent. Google Signals and every advertising
+  consent category remain disabled. These metrics are explicitly not ad
+  impressions.
+
+**Observations (not fixed, out of scope):** GA4 event-level retention is already
+two months. The reliable clip KPIs are `clip_impression` and `qualified_view`;
+the general GA page-view total can also include ordinary History API route
+views from Enhanced Measurement and must not be presented as ad inventory.
+
+**Blocked / needs a decision:** none for this release. Before future personalised
+ads in the EEA, Pleni still needs a separate advertising project, network terms,
+certified CMP/TCF decision where required, and ad-render/viewability measurement.
+
+**Production verification:** pending InstaPods deployment from `origin/main`.
+
+**Next agent should know:** validate `clip_impression`, `qualified_view`,
+`video_start`, `video_progress`, `video_complete` and `watch_time` in GA4 after
+consenting on production. Do not create GA audiences or join these events to
+Clerk/recommendation data.

@@ -1,4 +1,4 @@
-export const LEGAL_VERSION = "2026-08-14";
+export const LEGAL_VERSION = "2026-09-04";
 
 export type LegalPageId = "terms" | "privacy" | "storage" | "about";
 
@@ -106,8 +106,21 @@ export const LEGAL_PAGES: Record<LegalPageId, LegalPage> = {
       {
         title: "När du tittar utan konto",
         paragraphs: [
-          "Pleni skapar ingen anonym tittarprofil och har ingen egen analys- eller annonsspårning i den här versionen. Appen hämtar sin kod från webbhotellet och video samt bilder från Bunny CDN. Dessa leverantörer kan behandla tekniska begäransuppgifter som IP-adress, tidpunkt, webbläsare, land och den fil eller adress som begärs för leverans, felsökning och säkerhet.",
-          "Videospelaren använder aktuell tid och synlighet för uppspelning i webbläsaren. Pleni skickar eller sparar inte din tittarhistorik i en egen användarprofil i den här versionen."
+          "Appen hämtar sin kod från webbhotellet och video samt bilder från Bunny CDN. Dessa leverantörer kan behandla tekniska begäransuppgifter som IP-adress, tidpunkt, webbläsare, land och den fil eller adress som begärs för leverans, felsökning och säkerhet.",
+          "Google Analytics är avstängt tills du uttryckligen tillåter analys. Om du väljer Endast nödvändiga laddas inte Google-taggen och Pleni skickar inga analys- eller videohändelser till Google."
+        ]
+      },
+      {
+        title: "Frivillig besöks- och videoanalys",
+        paragraphs: [
+          "Om du väljer Acceptera analys använder Pleni Google Analytics 4 för att förstå antal besök, ungefärlig enhets- och geografisk fördelning samt hur offentliga klipp används. Google kan sätta ett slumpmässigt klient-id i förstapartscookies och behandla IP-adress, webbläsar- och enhetsuppgifter, tidpunkt, sidans adress samt de mätvärden Pleni skickar. Rättslig grund är ditt samtycke enligt GDPR 6.1 a och ditt val enligt lagen om elektronisk kommunikation.",
+          "Ett klipp räknas som visat först när minst 72 procent varit synligt i en sekund i en synlig flik. Uppspelning mäts som start, tre sekunders kvalificerad visning, 25/50/75 procent, slutförande och faktisk förgrundstid. Förladdning, buffring, dolda flikar och automatiska omspelningar skapar inte nya visningar.",
+          "Pleni skickar inte Clerk-id, namn, e-post, söktext, följningar, gillningar, sparade klipp, kommentarer eller en politisk intresseprofil till Google. Analysvalet är fristående från För dig och används inte för att personalisera flödet eller annonser. Google Signals och personanpassade annonssignaler är avstängda i Plenis tagg.",
+          "Du kan ändra eller återkalla valet under Profil eller Cookies. När du återkallar slutar Plenis analyskod skicka händelser, förstapartscookies för Google Analytics rensas och sidan laddas om till ett strikt läge utan Google-tagg."
+        ],
+        links: [
+          { label: "Google – integritet för företagstjänster", href: "https://business.safety.google/privacy/" },
+          { label: "Google Analytics dataskydd", href: "https://support.google.com/analytics/answer/6004245?hl=sv" }
         ]
       },
       {
@@ -153,11 +166,12 @@ export const LEGAL_PAGES: Record<LegalPageId, LegalPage> = {
       {
         title: "Mottagare och överföringar",
         paragraphs: [
-          "Pleni använder Clerk för identitet, Supabase för publicerade klippmetadata och kommentarer, Bunny för media och CDN samt InstaPods för den statiska webbappen. Leverantörerna och deras underleverantörer kan behandla uppgifter inom och utanför EES.",
-          "Clerk beskriver EU–USA Data Privacy Framework och EU:s standardavtalsklausuler som överföringsmekanismer. Övriga leverantörers aktuella avtal, regioner och underleverantörer ska verifieras i den interna leverantörsförteckningen; du kan begära aktuell information via kontaktadressen."
+          "Pleni använder Clerk för identitet, Supabase för publicerade klippmetadata och kommentarer, Bunny för media och CDN, InstaPods för den statiska webbappen och – endast efter analysval – Google för Analytics. Leverantörerna och deras underleverantörer kan behandla uppgifter inom och utanför EES.",
+          "Clerk och Google beskriver EU–USA Data Privacy Framework och EU:s standardavtalsklausuler som överföringsmekanismer. Övriga leverantörers aktuella avtal, regioner och underleverantörer ska verifieras i den interna leverantörsförteckningen; du kan begära aktuell information via kontaktadressen."
         ],
         links: [
           { label: "Clerks dataskyddsavtal", href: "https://clerk.com/legal/dpa" },
+          { label: "Googles villkor för personuppgiftsbehandling", href: "https://business.safety.google/adsprocessorterms/" },
           { label: "Bunny GDPR", href: "https://bunny.net/gdpr/" },
           { label: "Bunnys underleverantörer", href: "https://bunny.net/gdpr/sub-processors/" }
         ]
@@ -172,13 +186,14 @@ export const LEGAL_PAGES: Record<LegalPageId, LegalPage> = {
           "Kontouppgifter behandlas medan kontot finns och därefter enligt Clerks nödvändiga säkerhets-, backup- och rättsliga perioder.",
           "En offentlig kommentar finns kvar tills du tar bort den eller Pleni modererar den. Raderad kommentarstext töms, medan en minimal post kan finnas kvar för databasens integritet och modereringshistorik.",
           "Anmälningar och modereringshändelser sparas så länge de behövs för att hantera ärendet, missbruk, invändningar eller rättsliga anspråk.",
-          "Tekniska leverans- och säkerhetsloggar följer respektive leverantörs konfiguration och nödvändiga säkerhetsperiod."
+          "Tekniska leverans- och säkerhetsloggar följer respektive leverantörs konfiguration och nödvändiga säkerhetsperiod.",
+          "Google Analytics händelsedata är inställd på två månaders lagring. Sammanställda rapporter kan finnas kvar längre. Förstapartscookies kan annars leva i upp till två år men rensas på Plenis domän när du återkallar valet."
         ]
       },
       {
         title: "Dina rättigheter",
         paragraphs: [
-          "Du kan, när GDPR är tillämplig, begära tillgång, rättelse, radering, begränsning och dataportabilitet samt invända mot behandling som bygger på berättigat intresse. Du kan när som helst återkalla ett personaliseringsval utan att tidigare behandling blir olaglig.",
+          "Du kan, när GDPR är tillämplig, begära tillgång, rättelse, radering, begränsning och dataportabilitet samt invända mot behandling som bygger på berättigat intresse. Du kan när som helst återkalla personalisering eller analys utan att tidigare behandling blir olaglig.",
           "Under Profil kan du direkt hämta rekommendationsdata som JSON, återställa rekommendationerna eller radera hela rekommendationsprofilen. Du kan också mejla kontakt@pleni.se. Vi kan behöva kontrollera att begäran gäller rätt konto. Du har rätt att klaga hos Integritetsskyddsmyndigheten, IMY."
         ],
         links: [
@@ -192,13 +207,20 @@ export const LEGAL_PAGES: Record<LegalPageId, LegalPage> = {
     id: "storage",
     shortTitle: "Cookies",
     title: "Cookies och lokal lagring",
-    summary: "Vad som sparas i webbläsaren och varför Pleni inte visar en generell cookiebanner.",
+    summary: "Vad som sparas i webbläsaren, vad som är nödvändigt och hur du styr frivillig analys.",
     sections: [
       {
         title: "Plenis princip",
         paragraphs: [
-          "Pleni använder inte cookies eller lokal lagring för annonsering och har ingen egen webbanalys i den här versionen. Vi visar därför inte en generell cookiebanner för anonyma besökare.",
-          "Lagring som behövs för inloggning eller en funktion du själv begär används för just det ändamålet. Valfri personalisering är avstängd tills du aktivt slår på den."
+          "Pleni använder inte cookies eller lokal lagring för annonsering. Google Analytics och dess förstapartscookies är frivilliga och laddas först när du aktivt väljer Acceptera analys. Det är lika enkelt att välja Endast nödvändiga.",
+          "Lagring som behövs för inloggning eller en funktion du själv begär används för just det ändamålet. Analysval och personalisering är två separata val; inget av dem krävs för att se det offentliga innehållet."
+        ]
+      },
+      {
+        title: "Google Analytics – frivillig analys",
+        paragraphs: [
+          "Efter samtycke kan Google Analytics sätta _ga och _ga_<mät-id>. De används för att skilja webbläsarsessioner och beräkna sammanställd besöks- och videostatistik. Normal maximal cookie-livslängd är två år och kan förnyas vid ett nytt besök.",
+          "Pleni laddar inte Google-taggen före samtycke. Google Signals, annonspersonalisering och annonslagring är avstängda. Återkallande stoppar Plenis mätning, rensar åtkomliga GA-cookies på pleni.se och laddar om sidan utan taggen."
         ]
       },
       {
@@ -214,14 +236,15 @@ export const LEGAL_PAGES: Record<LegalPageId, LegalPage> = {
         bullets: [
           "riket.onboarding.v1:<konto-id> – dina frivilliga onboardingval, en lokal kopia av personaliseringsstatus och när flödet slutfördes eller hoppades över. Sparas tills du ändrar eller rensar valet. När För dig är aktivt är serverns samtyckespost styrande.",
           "riket.library.v1:<konto-id> – följda personer och partier samt gillade och sparade klipp. Uppdateras när du använder funktionen och finns kvar tills den rensas.",
+          "pleni.analytics-consent.v1 – ditt separata ja eller nej till analys, informationsversion och tidpunkt. Behövs för att komma ihåg valet och finns kvar tills informationen ändras eller webbplatsdata rensas.",
           "Äldre ospecificerade nycklar kan finnas kvar från tidigare versioner men läses inte in i ett nytt konto."
         ]
       },
       {
         title: "Så ändrar eller rensar du",
         paragraphs: [
-          "Personalisering kan stängas av, exporteras, återställas eller raderas under Profil. Webbläsarens inställningar kan radera Plenis webbplatsdata och Clerk-cookies. Då loggas du ut och lokala intressen, följningar, gillningar och sparade klipp kan försvinna från den enheten.",
-          "Om Pleni inför analys, marknadsföring eller annan lagring som inte är nödvändig kommer den att vara avstängd tills ett separat val har gjorts, och det ska vara lika enkelt att tacka nej som ja."
+          "Analys kan tillåtas eller återkallas via Analys och cookies under Profil eller knappen högst upp på denna sida. Personalisering kan stängas av, exporteras, återställas eller raderas separat under Profil.",
+          "Webbläsarens inställningar kan radera all webbplatsdata och Clerk-cookies. Då loggas du ut och lokala intressen, följningar, gillningar och sparade klipp kan försvinna från enheten; nästa besök frågar på nytt om analys."
         ]
       }
     ]

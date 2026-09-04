@@ -1,6 +1,6 @@
 # Privacy, safety and legal operating policy
 
-Decision record for the current release, updated 2026-08-27.
+Decision record for the current release, updated 2026-09-04.
 
 Implementation note, 2026-08-14: the owner approved the explicit-choice V1
 policy and its production release. It excludes playback history, inference and
@@ -56,22 +56,54 @@ frontend kill switch; it is not the normal production state.
 
 ## Cookies and terminal storage (F0-8)
 
-- Anonymous viewing has no Pleni analytics or advertising storage.
+- Google Analytics is optional and uses Basic Consent Mode: the Google tag is
+  not requested, configured or sent data before an explicit analytics grant.
+- The first-visit surface is non-blocking and gives `Acceptera analys` and
+  `Endast nödvändiga` equal prominence. Continued browsing is never consent.
+- The versioned `pleni.analytics-consent.v1` localStorage record remembers the
+  choice. It contains only granted/denied, notice version and decision time.
+- A denial keeps the tag absent. Withdrawal disables custom events, denies all
+  Google consent categories, clears accessible `_ga*` cookies and reloads into
+  the strict no-tag state.
 - Clerk auth/session storage is classified as strictly necessary only when the
   viewer asks to register, sign in or use an authenticated feature.
 - Library localStorage is written only after a signed-in viewer follows, likes
   or saves something and is necessary to remember that requested feature.
 - Onboarding localStorage is written only after a signed-in viewer completes or
   skips the flow. Personalisation defaults off.
-- Any new analytics, marketing, cross-site or non-essential storage requires a
-  fresh inventory entry and a prior consent choice with equal accept/reject
-  prominence. Continued browsing is never consent.
+- Any new analytics purpose, marketing, cross-site or non-essential storage
+  requires a fresh inventory entry, DPIA review and a prior choice. The current
+  analytics choice does not authorize advertising.
+
+## Aggregate analytics boundary (UI21)
+
+- Measurement ID `G-STDL8RHDCX` belongs to the Pleni GA4 web stream. It is
+  public configuration, never a secret.
+- A `clip_impression` requires one continuous second at 72% visibility in a
+  visible document. Prefetch, buffering, samples and fast swipes are excluded.
+- `video_start` requires real foreground playback; `qualified_view` requires
+  three seconds; progress uses 25/50/75%; completion is first 95%/ended; watch
+  time is capped wall-clock time and emitted once per clip/app session.
+- Events are session-deduplicated. Automatic replay never creates a second
+  impression, start, qualified view or completion.
+- Allowed content fields are clip id, canonical public clip path, feed context,
+  one-based position, public duration and measurement values.
+- Forbidden fields are Clerk/user id, email, name, search text, topic facets,
+  follow/like/save state, comment content and any explicit or inferred political
+  preference. No GA `user_id` is set and GA data is not joined to Clerk or the
+  recommendation profile.
+- Google Signals, advertising storage, ad-user data and ad personalisation are
+  denied. Analytics must not create an audience or advertising export.
+- GA page views and `clip_impression` are product analytics, not proof that an
+  ad was rendered or viewable. Future ad measurement needs its own inventory,
+  consent/CMP decision and network-specific definition.
 
 ## Advertising firewall (F0-10)
 
 Pleni carries no advertising, sponsored ranking or promoted political
 placement. Viewer political-interest data, follows, watch history and inferred
-state may not be disclosed to or queried by an ad system. Introducing any such
+state may not be disclosed to or queried by an ad system. Aggregate GA events
+may not be repurposed into advertising audiences. Introducing any such
 feature is a separate legal/architecture project and cannot be enabled by a
 configuration flag in the existing recommender.
 
@@ -116,6 +148,11 @@ production schema. V1 creates no raw playback event, inferred profile or model
 lineage row, so no period is assigned to data that does not exist. Provider
 backup and log deletion windows remain governed by the verified provider
 configuration and processor terms.
+
+GA4 event-level retention is configured to two months. Aggregate reports can
+remain longer. GA first-party cookies can otherwise persist for up to two years
+but are cleared on withdrawal where Pleni can access them. The local consent
+record remains until its notice version changes or site data is cleared.
 
 Deletion removes public comment text immediately but may retain a minimal row
 and moderation evidence. Such retained data may not be reused for ranking or

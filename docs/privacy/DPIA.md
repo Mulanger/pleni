@@ -1,6 +1,6 @@
 # Data protection impact assessment
 
-Draft for owner approval, updated 2026-08-26. Scope: current Pleni web app plus the
+Draft with UI21 analytics addendum, updated 2026-09-04. Scope: current Pleni web app plus the
 planned personalised political-video recommender described in
 `docs/RECOMMENDATION_LAUNCH_PLAN.md`.
 
@@ -9,8 +9,15 @@ planned personalised political-video recommender described in
 The planned system evaluates internet behaviour and can infer political
 interests, a GDPR Article 9 special category. The combination of systematic
 evaluation/profiling and sensitive data is likely high risk. This DPIA must be
-approved and re-run before watch history, exposure events or inferred political
-state are collected from real viewers.
+approved and re-run before account-linked watch history, recommendation
+exposure events or inferred political state are collected from real viewers.
+
+The owner approved UI21's narrower aggregate analytics implementation on
+2026-09-04. It sends consented, content-level clip events to Google Analytics
+without a Clerk id, GA `user_id`, search text, explicit preferences or a join to
+the recommendation profile. This addendum does not approve behavioural
+personalisation, account-linked viewing history, advertising audiences or ad
+measurement.
 
 The current release is materially narrower: it serves a public feed, keeps
 follows/preferences in account-scoped browser storage, and does not send watch
@@ -36,9 +43,10 @@ benefit is relevance and discovery, not prediction of voting behaviour,
 eligibility, creditworthiness, employment, health, policing or another
 high-impact outcome.
 
-Data subjects are Swedish/EU viewers with accounts. Politicians appearing in
-the catalogue are also data subjects, but the high-risk viewer profile is the
-focus of this DPIA.
+Data subjects are Swedish/EU viewers, including anonymous consenting browsers
+for UI21 and viewers with accounts for the recommender. Politicians appearing
+in the catalogue are also data subjects, but the high-risk viewer profile is
+the focus of this DPIA.
 
 ## 3. Necessity and proportionality
 
@@ -46,6 +54,12 @@ focus of this DPIA.
 - Personalisation must default off and be enabled by a separate affirmative
   action with a versioned notice.
 - No analytics or email consent may be bundled with political personalisation.
+- Aggregate analytics must remain optional, non-blocking and unavailable to
+  Google before the separate affirmative choice. Denial and withdrawal must
+  preserve the complete public product.
+- Clip analytics may use only public clip identity/path, feed context, position,
+  duration and bounded playback measurements. It may not carry or join an
+  account id, search text, preference, follow, like, save or comment.
 - Explicit choices should be preferred over behavioural inference.
 - The system must collect only events that demonstrably improve the ranking;
   raw video URLs/CDN logs must not become a shadow analytics source.
@@ -77,6 +91,8 @@ not remove the Article 5, 6, 9, 12–15, 21, 25, 32 and 35 obligations.
 | Consent is coerced by blocking the public feed | High / high | `Senaste` works without account or consent; onboarding appears only after sign-in and can be skipped. | Low. |
 | Privacy notice is mistaken for contractual consent | Medium / medium | Separate terms and privacy links; no “accept privacy policy” checkbox. | Low. |
 | Watch history is collected through CDN logs without consent | Medium / high | Do not join/access Bunny logs for recommendations; provider logs limited to delivery/security; document any future access. | Low/medium pending provider configuration audit. |
+| A GA client id plus a political clip URL becomes a cross-service political profile | Medium / high | Prior opt-in; no tag before grant; no Clerk/GA user id, Google Signals, ad storage or ad personalisation; two-month event retention; no export/audience/recommender join; immediate cookie clearing and strict reload on withdrawal. | Low/medium. Google still receives consented content-level activity and technical request data; processor/account configuration requires periodic review. |
+| Fast swipes, prefetch or autoplay inflate claimed views | High / medium | One-second continuous dwell at 72% visibility, visible-document and real-playback gates, wall-clock accumulation, sample exclusion and per-session dedupe. Report `clip_impression`/`qualified_view` separately from ad impressions. | Low. Production DebugView validation remains a release check. |
 | Filter bubble or political imbalance | High / medium | Full chronological alternative, input controls, per-clip explanations, documented 5/2/2 mix and deterministic speech/speaker/party caps. No neutrality claim or paid placement. | Accepted for explicit V1; measurement remains required before learned ranking. |
 | Minors are excluded or over-identified unnecessarily | Medium / medium | No universal age gate or DOB; clear under-13 guardian rule; child-readable information; risk-based reassessment for new features. | Low for current content. |
 | Harmful/illegal comments remain public | Medium / high | In-context reporting, rate limits, moderation state, operator email, reasons and objection path. | Medium; response SLO and operator coverage need measurement. |
@@ -115,6 +131,7 @@ replace deployment validation against the real database or owner approval.
 
 Engineering draft complete: 2026-08-09.
 
-Owner approval: **pending**. Approval of UI12 and its low-friction account flow
-does not by itself approve collection of server-side watch history or inferred
-political profiles.
+Owner approval: **UI21 aggregate analytics approved 2026-09-04**. Approval of
+UI12/UI21 does not approve server-side or account-linked watch history,
+behavioural inference, advertising audiences or inferred political profiles;
+those remain pending and require a new DPIA decision.
