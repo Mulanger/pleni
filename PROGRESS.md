@@ -7084,7 +7084,7 @@ scroll height. Both toggles changed to `Visa färre`, exposed
 desktop profile routes and verified against production data. Mobile remains
 unchanged.
 
-## UI20.5 — Live member filtering in Search party menus — IN PROGRESS 2026-09-04
+## UI20.5 — Live member filtering in Search party menus — DONE 2026-09-04
 
 **Built:** the desktop party roll-down in `web/src/App.tsx` replaces `Visa klipp
 från …` with an auto-focused `Sök namn` field that filters the open party's
@@ -7121,7 +7121,16 @@ files.
 
 **Blocked / needs a decision:** none.
 
-**Next agent should know:** production verification remains: open
-Socialdemokraterna on desktop Search, confirm more than 100 rows load, filter a
-real name and a nonexistent name, then verify the live count, centered empty
-state, internal scroll and keyboard focus behavior.
+**Production verification:** live on `pleni.se/sok` from code commit `de9dab3`.
+At 1440 x 900, Socialdemokraterna loaded all 109 names inside the 252 px internal
+scroll area (5,347 px scroll content), rather than stopping at the former
+100-row ceiling. The input received focus when the party opened and the old clip
+action was absent. `Anders Ygeman` returned one row and `1 av 109`; an unknown
+name returned zero rows, `0 av 109` and the centered `Inga namn hittade` state.
+Both queries reset the internal scroll to the top, clearing restored all 109
+rows, and Escape closed the dialog and returned focus to the party trigger.
+There were no console errors or horizontal overflow.
+
+**Next agent should know:** the desktop Search party menu now has complete,
+production-verified live member filtering. No follow-up is required for this
+change.
