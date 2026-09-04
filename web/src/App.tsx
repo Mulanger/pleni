@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Dispatch, ReactNode, SetStateAction } from "react";
+import type {
+  Dispatch,
+  KeyboardEvent as ReactKeyboardEvent,
+  ReactNode,
+  SetStateAction
+} from "react";
 import {
   ArrowDown,
   ArrowUp,
   ArrowUpRight,
   Bookmark,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Clock3,
   Download,
   Flag,
@@ -4485,6 +4492,318 @@ function FollowingScreen({
  * appear in the 60 most recent clips, out of 165 with published clips — so
  * searching for almost anyone returned nothing.
  */
+/** How many politician rows one party roll-down asks for. Covers every
+ *  riksdag party; the foot says so when a party ever exceeds it. */
+const PARTY_MEMBER_LIMIT = 100;
+
+/**
+ * The eight riksdag parties as one row of roll-downs.
+ *
+ * Desktop search used to ask for the party twice: eight letter chips in the
+ * header and a `Riksdagspartier` list 550px further down, pointing at the same
+ * eight parties while looking nothing alike — and the one carrying the
+ * verified party mark and the whole name was the one below the fold. This is
+ * that list's appearance, promoted to where the chips were, with the members
+ * list the mobile party page has folded into each party: the party page, the
+ * search filter the chips used to own, then the politicians themselves.
+ *
+ * The list scrolls inside the panel because Socialdemokraterna has 107
+ * politicians; a roll-down must not become a page.
+ */
+function DesktopPartyDirectory({
+  profiles,
+  loading,
+  onOpenParty,
+  onOpenPerson,
+  onSetPartyFilter
+}: {
+  profiles: PartyProfile[];
+  loading: boolean;
+  onOpenParty: (profile: PartyProfile) => void;
+  onOpenPerson: (politician: Politician) => void;
+  onSetPartyFilter: (party: PartyCode) => void;
+}) {
+  const [openCode, setOpenCode] = useState<PartyCode | null>(null);
+  const [members, setMembers] = useState<Partial<Record<PartyCode, Politician[]>>>({});
+  const [failedCode, setFailedCode] = useState<PartyCode | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const triggersRef = useRef(new Map<PartyCode, HTMLButtonElement>());
+
+  /** Fetch a party's politicians the first time its menu opens, then keep them. */
+  useEffect(() => {
+    if (openCode === null || members[openCode] !== undefined) {
+      return;
+    }
+    let active = true;
+    loadPoliticiansForParty(openCode, PARTY_MEMBER_LIMIT)
+      .then((rows) => {
+        if (active) {
+          setMembers((current) => ({ ...current, [openCode]: rows }));
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setFailedCode(openCode);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [members, openCode]);
+
+  /** A click anywhere else, or Escape, closes. Escape puts focus back. */
+  useEffect(() => {
+    if (openCode === null) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && rootRef.current?.contains(event.target)) {
+        return;
+      }
+      setOpenCode(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        const trigger = triggersRef.current.get(openCode);
+        setOpenCode(null);
+        trigger?.focus();
+        return;
+      }
+      if (event.key === "Tab") {
+        setOpenCode(null);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openCode]);
+
+  /** Opening moves focus into the panel, so the keyboard follows the eye. */
+  useEffect(() => {
+    if (openCode === null) {
+      return;
+    }
+    menuRef.current?.querySelector<HTMLElement>("[data-menu-item]")?.focus();
+  }, [openCode]);
+
+  // Every row carries `tabIndex={-1}`, so Tab leaves the panel rather than
+  // walking 107 politicians. The arrows move inside it instead.
+  const moveMenuFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+      return;
+    }
+    const items = Array.from(
+      menuRef.current?.querySelectorAll<HTMLElement>("[data-menu-item]") ?? []
+    );
+    if (items.length === 0) {
+      return;
+    }
+    event.preventDefault();
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? items.length - 1
+          : event.key === "ArrowDown"
+            ? Math.min(current + 1, items.length - 1)
+            : Math.max(current - 1, 0);
+    items[next]?.focus();
+  };
+
+  return (
+    <section className="party-directory" ref={rootRef} aria-label="Riksdagspartier">
+      <div className="party-directory-head">
+        <h2>Riksdagspartier</h2>
+        <span>Öppna ett parti för partisidan och dess ledamöter</span>
+      </div>
+      {loading && profiles.length === 0 ? (
+        <div className="party-directory-grid" role="status" aria-label="Hämtar partier">
+          <span className="sr-only">Hämtar partier…</span>
+          {Array.from({ length: 8 }, (_, index) => (
+            <span className="party-directory-skeleton skeleton-shape" aria-hidden="true" key={index} />
+          ))}
+        </div>
+      ) : (
+        <div className="party-directory-grid">
+          {profiles.map((profile) => {
+            const open = openCode === profile.abbr;
+            const panelId = `party-menu-${profile.abbr}`;
+            const list = members[profile.abbr];
+            const listFailed = failedCode === profile.abbr && list === undefined;
+            const summary = [
+              typeof profile.politicianCount === "number"
+                ? `${formatNumber(profile.politicianCount)} ledamöter`
+                : null,
+              typeof profile.clipCount === "number"
+                ? `${formatNumber(profile.clipCount)} klipp`
+                : null
+            ]
+              .filter(Boolean)
+              .join(" · ");
+
+            return (
+              <div className="party-directory-item" key={profile.abbr}>
+                <button
+                  type="button"
+                  ref={(node) => {
+                    if (node) {
+                      triggersRef.current.set(profile.abbr, node);
+                    } else {
+                      triggersRef.current.delete(profile.abbr);
+                    }
+                  }}
+                  className={open ? "party-directory-trigger is-open" : "party-directory-trigger"}
+                  aria-expanded={open}
+                  aria-haspopup="true"
+                  aria-controls={panelId}
+                  onClick={() => setOpenCode(open ? null : profile.abbr)}
+                >
+                  {/* The verified CDN mark, with the party-coloured letter as
+                      the fallback — the same PartyAvatar the old list used. */}
+                  <PartyAvatar party={profile.abbr} color={profile.color} logoUrl={profile.logoUrl} />
+                  <span className="party-directory-name">{profile.name}</span>
+                  {open ? (
+                    <ChevronUp size={15} aria-hidden="true" />
+                  ) : (
+                    <ChevronDown size={15} aria-hidden="true" />
+                  )}
+                </button>
+
+                {open && (
+                  <div
+                    className="party-menu"
+                    id={panelId}
+                    role="menu"
+                    aria-label={profile.name}
+                    ref={menuRef}
+                    onKeyDown={moveMenuFocus}
+                  >
+                    <div className="party-menu-head">
+                      <PartyAvatar
+                        party={profile.abbr}
+                        color={profile.color}
+                        logoUrl={profile.logoUrl}
+                      />
+                      <b>{profile.name}</b>
+                      {summary && <span>{summary}</span>}
+                    </div>
+
+                    <div className="party-menu-actions">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        tabIndex={-1}
+                        data-menu-item=""
+                        className="party-menu-action"
+                        onClick={() => {
+                          setOpenCode(null);
+                          onOpenParty(profile);
+                        }}
+                      >
+                        <Home size={15} aria-hidden="true" />
+                        Öppna partisidan
+                        <ChevronRight className="party-menu-action-end" size={13} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        tabIndex={-1}
+                        data-menu-item=""
+                        className="party-menu-action"
+                        onClick={() => {
+                          setOpenCode(null);
+                          onSetPartyFilter(profile.abbr);
+                        }}
+                      >
+                        <Sliders size={15} aria-hidden="true" />
+                        Visa klipp från {profile.short}
+                        <ChevronRight className="party-menu-action-end" size={13} aria-hidden="true" />
+                      </button>
+                    </div>
+
+                    <div className="party-menu-listhead">
+                      <span>Ledamöter</span>
+                      {list !== undefined && <i>{formatNumber(list.length)}</i>}
+                    </div>
+
+                    <div className="party-menu-scroll">
+                      {list === undefined && !listFailed && (
+                        <div role="status" aria-label="Hämtar ledamöter">
+                          <span className="sr-only">Hämtar ledamöter…</span>
+                          {Array.from({ length: 4 }, (_, index) => (
+                            <span
+                              className="party-menu-skeleton skeleton-shape"
+                              aria-hidden="true"
+                              key={index}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {listFailed && (
+                        <p className="party-menu-message" role="status">
+                          Ledamöterna kunde inte hämtas. Partisidan fungerar ändå.
+                        </p>
+                      )}
+                      {list !== undefined && list.length === 0 && (
+                        <p className="party-menu-message" role="status">
+                          Inga registrerade ledamöter.
+                        </p>
+                      )}
+                      {list?.map((politician) => {
+                        const name = cleanName(politician.name) || politician.name;
+                        const detail = [politician.role, politician.constituency]
+                          .filter(Boolean)
+                          .join(" · ");
+                        return (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            tabIndex={-1}
+                            data-menu-item=""
+                            className="party-menu-person"
+                            key={politician.id}
+                            onClick={() => {
+                              setOpenCode(null);
+                              onOpenPerson(politician);
+                            }}
+                          >
+                            <Avatar
+                              name={name}
+                              party={politician.party}
+                              size="sm"
+                              imageUrl={politician.avatarUrl}
+                            />
+                            <b>{name}</b>
+                            {detail && <small>{detail}</small>}
+                            <ChevronRight size={12} aria-hidden="true" />
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {list !== undefined && list.length >= PARTY_MEMBER_LIMIT && (
+                      <p className="party-menu-foot">
+                        Visar de första {formatNumber(PARTY_MEMBER_LIMIT)}. Hela listan finns på
+                        partisidan.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function SearchScreen({
   presentation = "mobile",
   query,
@@ -4799,27 +5118,36 @@ function SearchScreen({
             Ämnessökningar tolkas med hjälp av OpenAI. Skriv inte privat information.
           </p>
         )}
-        <div className="chips" aria-label="Filtrera på parti">
-          <button
-            type="button"
-            className={partyFilter === null ? "chips-home active" : "chips-home"}
-            onClick={() => setPartyFilter(null)}
-            aria-label="Visa alla partier"
-          >
-            <Home size={17} aria-hidden="true" />
-          </button>
-          {partyCodes.map((party) => (
+        {/* On desktop the eight roll-downs own the landing state, so this
+            compact row appears only once there are results to filter. The two
+            are the same control at two sizes and never share the screen. */}
+        {(presentation !== "desktop" || showResults) && (
+          <div className="chips" aria-label="Filtrera på parti">
             <button
               type="button"
-              key={party}
-              className={partyFilter === party ? "active" : ""}
-              onClick={() => setPartyFilter(party)}
+              className={partyFilter === null ? "chips-home active" : "chips-home"}
+              onClick={() => setPartyFilter(null)}
+              aria-label="Visa alla partier"
             >
-              <i style={{ background: PARTIES[party].color }} />
-              {party}
+              {presentation === "desktop" ? (
+                <span>Alla partier</span>
+              ) : (
+                <Home size={17} aria-hidden="true" />
+              )}
             </button>
-          ))}
-        </div>
+            {partyCodes.map((party) => (
+              <button
+                type="button"
+                key={party}
+                className={partyFilter === party ? "active" : ""}
+                onClick={() => setPartyFilter(party)}
+              >
+                <i style={{ background: PARTIES[party].color }} />
+                {party}
+              </button>
+            ))}
+          </div>
+        )}
         {settledResponse && (
           <SearchInterpretation
             facets={settledResponse.interpretation.facets}
@@ -4959,6 +5287,15 @@ function SearchScreen({
           </div>
         ) : (
           <>
+            {presentation === "desktop" && (
+              <DesktopPartyDirectory
+                profiles={partyProfiles}
+                loading={partyProfilesLoading}
+                onOpenParty={openParty}
+                onOpenPerson={openPerson}
+                onSetPartyFilter={setPartyFilter}
+              />
+            )}
             {recentSearches.length > 0 && (
               <section className="recent-block">
                 <div className="section-label">
@@ -4984,27 +5321,7 @@ function SearchScreen({
                 </div>
               </section>
             )}
-            {presentation === "desktop" ? (
-              <Group title="Riksdagspartier">
-                {partyProfilesLoading && <ListRow title="Hämtar partier…" />}
-                {!partyProfilesLoading && partyProfiles.map((profile) => (
-                  <ListRow
-                    key={profile.abbr}
-                    avatar={
-                      <PartyAvatar
-                        party={profile.abbr}
-                        color={profile.color}
-                        logoUrl={profile.logoUrl}
-                      />
-                    }
-                    title={profile.name}
-                    subtitle={profile.clipCount === null ? undefined : `${formatNumber(profile.clipCount)} klipp`}
-                    onClick={() => openParty(profile)}
-                    chevron
-                  />
-                ))}
-              </Group>
-            ) : (
+            {presentation === "mobile" && (
               <Group title="Populära debatter">
                 <div className="placeholder-note">
                   Exempeldata — populäritet mäts inte ännu.

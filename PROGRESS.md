@@ -6890,3 +6890,82 @@ side column's party card renders only when `partyProfiles` is populated, which
 needs the live Supabase values, so it could not be seen locally. Check it on
 `pleni.se` at 1440 px together with real portraits, which are the masthead's
 visual anchor and were initials-only in local verification.
+
+## UI20.2b — Desktop search: party roll-downs — IN PROGRESS 2026-09-04
+
+**Built:** `web/src/App.tsx` (`DesktopPartyDirectory`, `PARTY_MEMBER_LIMIT`,
+`SearchScreen` wiring), `web/src/styles.css` (`.party-directory-*`,
+`.party-menu-*`), `web/tests/search-party-directory.test.mjs`.
+
+**Why:** the desktop search page asked for the party twice. The header carried
+eight letter chips (`.chips`, a 7 px colour dot plus an abbreviation) that set
+`partyFilter`; the body carried `<Group title="Riksdagspartier">` with the same
+eight parties, ~550 px further down, navigating to the party page instead.
+Nothing in either appearance said which did what, and the one carrying the
+verified party mark and the whole name was the one below the fold. Ledamöter
+were not reachable from search at all — mobile has that list on the party page,
+desktop had no equivalent.
+
+**What it is now:** one row of eight party buttons in the body, carrying the
+same `PartyAvatar` (the content-addressed `party_profiles.logo_url` mark, with
+the party-coloured letter as its fallback) and the full party name that the
+removed list used. Each opens a roll-down with two actions — *Öppna partisidan*
+and *Visa klipp från X* — above the party's politicians, fetched once per party
+with `loadPoliticiansForParty()` and scrolling inside the panel. The compact
+chip row is now the results state only, so the two never share the screen; its
+unlabelled house icon reads "Alla partier" on desktop.
+
+**Tests:** 8 new frontend tests in `web/tests/search-party-directory.test.mjs`;
+one assertion in `desktop-route-outlet.test.mjs` moved from the removed
+`Riksdagspartier` group to the directory. All 160 frontend Node tests pass,
+TypeScript passes, the production build passes and still precaches exactly nine
+app-shell entries. Repository gate green: 514 Python tests, 79 deselected, the
+known `audioop` warning, Ruff clean, strict mypy clean over 83 source files.
+
+**Local verification:** `/sok` checked at 1100, 1280, 1360, 1440 and 375 px
+against a temporary local reader stub (reverted; not committed). No console
+errors and no horizontal overflow at any width. Opening a menu moved focus to
+its first action and set `aria-expanded="true"`; a real pointer click outside
+closed it; `Escape` closed it and returned focus to the trigger. With 68 demo
+politicians the panel's list measured 252 px over 3 338 px of content with a
+10 px scrollbar. *Visa klipp från Moderaterna* switched the page to the results
+state, removed the directory, showed the compact chips with `M` active and the
+home chip reading "Alla partier". Mobile rendered the released chips row and
+*Populära debatter* unchanged at 375 px.
+
+**Contracts touched:** none. No new reader, no migration.
+
+**Decisions made:**
+- The second action is *Visa klipp från X*, not the checkbox the approved mockup
+  showed. A party filter with no query already satisfies `showIdentityResults`,
+  so choosing it leaves the landing state immediately — a checkbox there could
+  never render checked, and the matching `is-filtered` state on the trigger
+  could never appear either. Both were removed rather than shipped dead.
+- Four columns start at 1360 px, not 1280. At 1280 a four-up row leaves 228 px
+  per button and "Sverigedemokraterna" truncates; three columns give 308 px.
+  Verified by measuring `scrollWidth > clientWidth` on every name at both widths.
+- The panel's last column in each row flips to right-aligned
+  (`:nth-child(3n)`, and `:nth-child(4n)` above 1360) so a 360 px menu never
+  hangs off the workspace. No JS measurement.
+- Rows carry `tabIndex={-1}` inside `role="menu"`, so Tab leaves the panel
+  instead of walking 107 politicians; the arrows, Home and End move inside it.
+- A failed politician fetch keeps the two actions and says so. The party page
+  must stay reachable when the members list is not.
+- Mobile is untouched: the chips row keeps its icon-only home button and
+  *Populära debatter*, and every new rule is inside `@media (min-width: 1100px)`.
+
+**Observations (not fixed, out of scope):** the panel opens below its trigger
+with no upward flip. At the current hero height the tallest panel ends around
+740 px, so it fits a 900 px viewport; on a very short window it will clip. A
+flip needs a measured collision check and belongs with a shared popover helper
+rather than this one surface.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** production verification is still outstanding for
+both UI20.1b and this chunk. The real party logos could not be seen locally —
+`party_profiles.logo_url` is null without Supabase, so every mark rendered as
+the party-coloured letter fallback. Check the eight marks on `pleni.se/sok` at
+1440 px; that fallback path is exactly what the `party-logo-policy` module
+exists to manage, and a broken CDN mark degrades to the same letter rather than
+to an empty box.

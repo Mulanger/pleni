@@ -5468,6 +5468,334 @@ a {
     outline-offset: 2px;
   }
 
+  /* --- UI20.2b party roll-downs on the search page --------------------- */
+  /* The letter chips and the `Riksdagspartier` list asked for the same eight
+     parties in two places. This is the list's appearance — the verified mark
+     and the whole name — promoted to where the chips were, with each party
+     opening the members list the mobile party page carries. */
+
+  /* Labelled on desktop; the phone keeps the icon-only square. */
+  .search-screen--desktop .chips button.chips-home {
+    width: auto;
+    padding: 0 13px;
+  }
+
+  .party-directory {
+    width: min(100%, 1120px);
+    margin-bottom: 34px;
+  }
+
+  .party-directory-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    padding-bottom: 11px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid #dfdfd9;
+  }
+
+  .party-directory-head h2 {
+    margin: 0;
+    color: #66665f;
+    font-size: 11.5px;
+    font-weight: 750;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+
+  .party-directory-head span {
+    margin-left: auto;
+    color: #79796f;
+    font-size: 12.5px;
+  }
+
+  .party-directory-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .party-directory-item {
+    position: relative;
+    min-width: 0;
+  }
+
+  .party-directory-skeleton {
+    height: 56px;
+    border-radius: 12px;
+  }
+
+  .party-directory-trigger {
+    position: relative;
+    display: flex;
+    width: 100%;
+    height: 56px;
+    align-items: center;
+    gap: 11px;
+    padding: 0 12px 0 11px;
+    border: 1px solid #dfdfd9;
+    border-radius: 12px;
+    background: #fff;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 140ms ease, box-shadow 140ms ease;
+  }
+
+  .party-directory-trigger .party-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+  }
+
+  .party-directory-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: #17233c;
+    font-size: 14px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .party-directory-trigger > svg {
+    flex: 0 0 auto;
+    color: #a9a9a0;
+  }
+
+  .party-directory-trigger:hover {
+    border-color: #c3c3ba;
+    box-shadow: 0 8px 18px -14px rgba(19, 40, 77, 0.55);
+  }
+
+  .party-directory-trigger.is-open {
+    border-color: #b6c2d6;
+    box-shadow: 0 0 0 3px rgba(38, 79, 139, 0.12);
+  }
+
+  .party-directory-trigger:focus-visible,
+  .party-menu-action:focus-visible,
+  .party-menu-person:focus-visible {
+    outline: 3px solid rgba(38, 79, 139, 0.32);
+    outline-offset: -2px;
+  }
+
+  .party-menu {
+    position: absolute;
+    z-index: 40;
+    top: calc(100% + 8px);
+    left: 0;
+    width: 360px;
+    overflow: hidden;
+    border: 1px solid #d9d9d1;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow:
+      0 30px 60px -30px rgba(16, 30, 56, 0.5),
+      0 2px 6px rgba(16, 30, 56, 0.06);
+    animation: partyMenuIn 120ms ease-out;
+  }
+
+  /* The last column would otherwise hang off the workspace. */
+  .party-directory-item:nth-child(3n) .party-menu {
+    right: 0;
+    left: auto;
+  }
+
+  @keyframes partyMenuIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .party-menu-head {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 2px 12px;
+    padding: 15px 16px 14px;
+    border-bottom: 1px solid #e3e3dd;
+    background: #fbfbf9;
+  }
+
+  .party-menu-head .party-avatar {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+  }
+
+  .party-menu-head b {
+    grid-column: 2;
+    color: #17233c;
+    font-size: 15.5px;
+    font-weight: 750;
+    letter-spacing: -0.015em;
+  }
+
+  .party-menu-head span {
+    grid-column: 2;
+    color: #60605a;
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .party-menu-actions {
+    padding: 6px;
+    border-bottom: 1px solid #e3e3dd;
+  }
+
+  .party-menu-action {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 11px;
+    padding: 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: #17233c;
+    cursor: pointer;
+    font-size: 13.5px;
+    font-weight: 650;
+    text-align: left;
+  }
+
+  .party-menu-action > svg:first-child {
+    flex: 0 0 auto;
+    color: #77776f;
+  }
+
+  .party-menu-action-end {
+    margin-left: auto;
+    color: #a9a9a0;
+  }
+
+  .party-menu-action:hover {
+    background: #eceff4;
+  }
+
+  .party-menu-listhead {
+    display: flex;
+    align-items: baseline;
+    padding: 12px 16px 8px;
+    color: #66665f;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .party-menu-listhead i {
+    margin-left: auto;
+    color: #9a9a92;
+    font-style: normal;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Socialdemokraterna has 107 politicians. The panel scrolls; it does not
+     become a page. */
+  .party-menu-scroll {
+    height: clamp(180px, 28vh, 260px);
+    overflow-y: auto;
+    padding: 0 6px 6px;
+    scrollbar-width: thin;
+    scrollbar-color: #c3c3ba #eeeee9;
+  }
+
+  .party-menu-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .party-menu-scroll::-webkit-scrollbar-track {
+    border-radius: 999px;
+    background: #eeeee9;
+  }
+
+  .party-menu-scroll::-webkit-scrollbar-thumb {
+    border: 2px solid #eeeee9;
+    border-radius: 999px;
+    background: #c3c3ba;
+  }
+
+  .party-menu-person {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 30px minmax(0, 1fr) 12px;
+    gap: 1px 11px;
+    align-items: center;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .party-menu-person .avatar {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    width: 30px;
+    height: 30px;
+    font-size: 10.5px;
+  }
+
+  .party-menu-person b,
+  .party-menu-person small {
+    grid-column: 2;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .party-menu-person b {
+    grid-row: 1;
+    color: #17233c;
+    font-size: 13.4px;
+    font-weight: 650;
+  }
+
+  .party-menu-person small {
+    grid-row: 2;
+    color: #79796f;
+    font-size: 11.4px;
+  }
+
+  .party-menu-person svg {
+    grid-column: 3;
+    grid-row: 1 / 3;
+    color: #bdbdb5;
+  }
+
+  .party-menu-person:hover {
+    background: #eceff4;
+  }
+
+  .party-menu-skeleton {
+    display: block;
+    height: 30px;
+    margin: 8px 10px;
+    border-radius: 9px;
+  }
+
+  .party-menu-message {
+    margin: 0;
+    padding: 14px 10px;
+    color: #79796f;
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+
+  .party-menu-foot {
+    margin: 0;
+    padding: 11px 16px;
+    border-top: 1px solid #e3e3dd;
+    background: #fbfbf9;
+    color: #79796f;
+    font-size: 12px;
+  }
+
   .following-screen--desktop {
     width: 100%;
     height: 100%;
@@ -5738,6 +6066,22 @@ a {
   }
 }
 
+@media (min-width: 1360px) {
+  .party-directory-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .party-directory-item:nth-child(3n) .party-menu {
+    right: auto;
+    left: 0;
+  }
+
+  .party-directory-item:nth-child(4n) .party-menu {
+    right: 0;
+    left: auto;
+  }
+}
+
 @media (min-width: 1100px) and (prefers-reduced-motion: reduce) {
   .desktop-route-frame,
   .desktop-inspector-content,
@@ -5771,8 +6115,13 @@ a {
   .desktop-profile-back,
   .desktop-rail-person,
   .desktop-action-primary,
-  .desktop-action-follow {
+  .desktop-action-follow,
+  .party-directory-trigger {
     transition: none;
+  }
+
+  .party-menu {
+    animation: none;
   }
 }
 
