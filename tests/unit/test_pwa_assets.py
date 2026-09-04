@@ -12,6 +12,7 @@ WEB_ROOT = REPO_ROOT / "web"
 PUBLIC_ROOT = WEB_ROOT / "public"
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 ICON_RELEASE = "20260812b"
+SEARCH_FAVICON = "favicon-pleni-20260904.png"
 
 
 class _HeadParser(HTMLParser):
@@ -165,19 +166,12 @@ def test_html_links_manifest_and_apple_icon_without_disabling_zoom() -> None:
 
     assert manifest_links == [{"rel": "manifest", "href": "/manifest.json"}]
     assert favicon_links == [
-        {"rel": "icon", "href": f"/favicon-{ICON_RELEASE}.ico", "sizes": "any"},
         {
             "rel": "icon",
             "type": "image/png",
-            "sizes": "32x32",
-            "href": f"/favicon-32-{ICON_RELEASE}.png",
-        },
-        {
-            "rel": "icon",
-            "type": "image/png",
-            "sizes": "16x16",
-            "href": f"/favicon-16-{ICON_RELEASE}.png",
-        },
+            "sizes": "96x96",
+            "href": f"/{SEARCH_FAVICON}",
+        }
     ]
     assert apple_links == [
         {
@@ -189,18 +183,15 @@ def test_html_links_manifest_and_apple_icon_without_disabling_zoom() -> None:
     assert _png_dimensions(
         PUBLIC_ROOT / "icons" / f"pleni-apple-touch-icon-{ICON_RELEASE}.png"
     ) == (180, 180)
+    assert _png_dimensions(PUBLIC_ROOT / SEARCH_FAVICON) == (96, 96)
     assert viewports == ["width=device-width, initial-scale=1, viewport-fit=cover"]
     viewport = viewports[0].lower().replace(" ", "")
     assert "user-scalable=no" not in viewport
     assert "maximum-scale" not in viewport
 
-    ico = (PUBLIC_ROOT / f"favicon-{ICON_RELEASE}.ico").read_bytes()
-    assert struct.unpack("<HHH", ico[:6]) == (0, 1, 3)
-
-
 def test_favicon_and_install_icon_have_blue_edges_and_a_white_mark() -> None:
     for path in [
-        PUBLIC_ROOT / f"favicon-32-{ICON_RELEASE}.png",
+        PUBLIC_ROOT / SEARCH_FAVICON,
         PUBLIC_ROOT / "icons" / f"pleni-icon-512-{ICON_RELEASE}.png",
     ]:
         width, channels, rows = _png_rgb_rows(path)

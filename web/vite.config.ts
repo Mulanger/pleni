@@ -19,6 +19,7 @@ export default defineConfig({
           "**/*.m3u8",
           "brand/**",
           "favicon-16-20260812b.png",
+          "favicon-32-20260812b.png",
           "icons/*-source.svg"
         ],
         minify: false,

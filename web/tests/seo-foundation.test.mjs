@@ -16,7 +16,7 @@ import test from "node:test";
  */
 
 const CANONICAL_ORIGIN = "https://pleni.se";
-const HOME_TITLE = "Riksdagsdebatter i kortformat | Pleni";
+const HOME_TITLE = "Riksdagsdebatter i kortformat";
 const HOME_DESCRIPTION =
   "Upptäck aktuella frågor och uttalanden från Sveriges riksdag genom korta, tydliga videoklipp med källhänvisning.";
 
@@ -50,6 +50,10 @@ test("the home document is described for search and social results", () => {
   assert.match(indexHtml, new RegExp(`name="twitter:description"\\s+content="${HOME_DESCRIPTION}"`));
   assert.match(indexHtml, /name="twitter:image:alt"\s+content="Plenis logotyp"/);
   assert.match(indexHtml, /property="og:image:type"\s+content="image\/png"/);
+  assert.match(
+    indexHtml,
+    /<link rel="icon" type="image\/png" sizes="96x96" href="\/favicon-pleni-20260904\.png" \/>/
+  );
   assert.match(
     indexHtml,
     /name="robots"\s+content="max-snippet:-1, max-image-preview:large, max-video-preview:-1"/

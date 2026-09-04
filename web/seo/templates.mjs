@@ -91,8 +91,7 @@ function head({ title, description, canonical, robots, extraHead = "" }) {
     <meta name="description" content="${escapeHtml(description)}" />
     <meta name="robots" content="${escapeHtml(robots ?? PREVIEW_ROBOTS)}" />
     <link rel="canonical" href="${escapeHtml(canonical)}" />
-    <link rel="icon" href="/favicon-20260812b.ico" sizes="any" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32-20260812b.png" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-pleni-20260904.png" />
     <link rel="manifest" href="/manifest.json" />
 ${extraHead}    <style>${STYLES}</style>`;
 }

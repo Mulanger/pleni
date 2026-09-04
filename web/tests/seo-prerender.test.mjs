@@ -275,7 +275,7 @@ test("shells inherit the built document and carry their own identity", () => {
 
   // The home page's own identity must not survive into a shell.
   assert.equal(shell.includes('href="https://pleni.se/"'), false);
-  assert.equal(/<title>Riksdagsdebatter i kortformat \| Pleni<\/title>/.test(shell), false);
+  assert.equal(/<title>Riksdagsdebatter i kortformat<\/title>/.test(shell), false);
   // The SPA entry and mount point must survive, or the shell boots nothing.
   assert.match(shell, /<div id="root">/);
   assert.match(shell, /<script type="module"/);

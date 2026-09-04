@@ -49,11 +49,7 @@ for (const iconUrl of expectedInstallIcons) {
     fail(`manifest is missing versioned install icon: ${iconUrl}`);
   }
 }
-for (const faviconUrl of [
-  "/favicon-20260812b.ico",
-  "/favicon-32-20260812b.png",
-  "/favicon-16-20260812b.png"
-]) {
+for (const faviconUrl of ["/favicon-pleni-20260904.png"]) {
   if (!indexHtml.includes(faviconUrl)) {
     fail(`production index does not link the versioned favicon: ${faviconUrl}`);
   }
