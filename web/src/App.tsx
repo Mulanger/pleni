@@ -102,6 +102,7 @@ import { LEGAL_PAGE_ORDER, LEGAL_PAGES, LEGAL_VERSION } from "./legal";
 import type { LegalPageId } from "./legal";
 import { personPathSlug, useAppNavigation } from "./navigation";
 import { PartyLogo } from "./party-logo";
+import { appendUniqueProfileClips } from "./profile-clip-order";
 import {
   createPortraitDelivery,
   forgetPortraitSuccess,
@@ -297,6 +298,7 @@ type ClipCollection = {
 
 const partyCodes = Object.keys(PARTIES).filter((code) => code !== "NONE") as PartyCode[];
 const MAX_RECENT_SEARCHES = 4;
+const PROFILE_CLIP_PAGE_SIZE = 60;
 
 /**
  * Visible fraction that counts as seeing a clip (prerequisite T-8).
@@ -424,6 +426,9 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
   const [person, setPerson] = useState<Politician | null>(null);
   const [personClips, setPersonClips] = useState<ClipItem[]>([]);
   const [personLoading, setPersonLoading] = useState(false);
+  const [personClipsLoadingMore, setPersonClipsLoadingMore] = useState(false);
+  const [personClipsHasMore, setPersonClipsHasMore] = useState(false);
+  const [personClipsPageError, setPersonClipsPageError] = useState<string | null>(null);
   const [party, setParty] = useState<PartyProfile | null>(null);
   const [personPartyPeers, setPersonPartyPeers] = useState<Politician[]>([]);
   const [partyProfiles, setPartyProfiles] = useState<PartyProfile[]>([]);
@@ -431,6 +436,13 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
   const [partyClips, setPartyClips] = useState<ClipItem[]>([]);
   const [partyPoliticians, setPartyPoliticians] = useState<Politician[]>([]);
   const [partyLoading, setPartyLoading] = useState(false);
+  const [partyClipsLoadingMore, setPartyClipsLoadingMore] = useState(false);
+  const [partyClipsHasMore, setPartyClipsHasMore] = useState(false);
+  const [partyClipsPageError, setPartyClipsPageError] = useState<string | null>(null);
+  const selectedPersonIdRef = useRef(selectedPersonId);
+  const selectedPartyCodeRef = useRef(selectedPartyCode);
+  selectedPersonIdRef.current = selectedPersonId;
+  selectedPartyCodeRef.current = selectedPartyCode;
   const [savedClips, setSavedClips] = useState<ClipItem[]>([]);
   const [savedError, setSavedError] = useState<string | null>(null);
   const [savedLoading, setSavedLoading] = useState(false);
@@ -1035,23 +1047,38 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
     if (selectedPersonId === null) {
       setPerson(null);
       setPersonClips([]);
+      setPersonClipsHasMore(false);
+      setPersonClipsLoadingMore(false);
+      setPersonClipsPageError(null);
       return;
     }
     let active = true;
     setPersonLoading(true);
     setPerson(null);
     setPersonClips([]);
-    Promise.all([loadPolitician(selectedPersonId), loadClipsForPolitician(selectedPersonId)])
+    setPersonClipsHasMore(false);
+    setPersonClipsLoadingMore(false);
+    setPersonClipsPageError(null);
+    Promise.all([
+      loadPolitician(selectedPersonId),
+      loadClipsForPolitician(selectedPersonId, PROFILE_CLIP_PAGE_SIZE)
+    ])
       .then(([politician, personClips]) => {
         if (active) {
           setPerson(politician);
           setPersonClips(personClips);
+          setPersonClipsHasMore(
+            politician?.clipCount === null
+              ? personClips.length === PROFILE_CLIP_PAGE_SIZE
+              : politician !== null && personClips.length < politician.clipCount
+          );
         }
       })
       .catch(() => {
         if (active) {
           setPerson(null);
           setPersonClips([]);
+          setPersonClipsHasMore(false);
         }
       })
       .finally(() => {
@@ -1103,6 +1130,9 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
       setParty(null);
       setPartyClips([]);
       setPartyPoliticians([]);
+      setPartyClipsHasMore(false);
+      setPartyClipsLoadingMore(false);
+      setPartyClipsPageError(null);
       return;
     }
     let active = true;
@@ -1110,9 +1140,12 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
     setParty(null);
     setPartyClips([]);
     setPartyPoliticians([]);
+    setPartyClipsHasMore(false);
+    setPartyClipsLoadingMore(false);
+    setPartyClipsPageError(null);
     Promise.all([
       loadPartyProfile(selectedPartyCode),
-      loadClipsForParty(selectedPartyCode),
+      loadClipsForParty(selectedPartyCode, PROFILE_CLIP_PAGE_SIZE),
       loadPoliticiansForParty(selectedPartyCode)
     ])
       .then(([profile, recentClips, politicians]) => {
@@ -1120,6 +1153,11 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
           setParty(profile);
           setPartyClips(recentClips);
           setPartyPoliticians(politicians);
+          setPartyClipsHasMore(
+            profile?.clipCount === null
+              ? recentClips.length === PROFILE_CLIP_PAGE_SIZE
+              : profile !== null && recentClips.length < profile.clipCount
+          );
         }
       })
       .catch(() => {
@@ -1127,6 +1165,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
           setParty(null);
           setPartyClips([]);
           setPartyPoliticians([]);
+          setPartyClipsHasMore(false);
         }
       })
       .finally(() => {
@@ -1138,6 +1177,88 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
       active = false;
     };
   }, [selectedPartyCode]);
+
+  const loadMorePersonClips = async (): Promise<void> => {
+    const personId = selectedPersonId;
+    const after = personClips.at(-1) ?? null;
+    if (
+      personId === null ||
+      after === null ||
+      personClipsLoadingMore ||
+      !personClipsHasMore
+    ) {
+      return;
+    }
+
+    setPersonClipsLoadingMore(true);
+    setPersonClipsPageError(null);
+    try {
+      const nextPage = await loadClipsForPolitician(
+        personId,
+        PROFILE_CLIP_PAGE_SIZE,
+        after
+      );
+      if (selectedPersonIdRef.current !== personId) {
+        return;
+      }
+      const merged = appendUniqueProfileClips(personClips, nextPage);
+      const total = person?.clipCount ?? null;
+      setPersonClips(merged);
+      setPersonClipsHasMore(
+        nextPage.length === PROFILE_CLIP_PAGE_SIZE &&
+          (total === null || merged.length < total)
+      );
+    } catch {
+      if (selectedPersonIdRef.current === personId) {
+        setPersonClipsPageError("Fler klipp kunde inte hämtas. Försök igen.");
+      }
+    } finally {
+      if (selectedPersonIdRef.current === personId) {
+        setPersonClipsLoadingMore(false);
+      }
+    }
+  };
+
+  const loadMorePartyClips = async (): Promise<void> => {
+    const partyCode = selectedPartyCode;
+    const after = partyClips.at(-1) ?? null;
+    if (
+      partyCode === null ||
+      after === null ||
+      partyClipsLoadingMore ||
+      !partyClipsHasMore
+    ) {
+      return;
+    }
+
+    setPartyClipsLoadingMore(true);
+    setPartyClipsPageError(null);
+    try {
+      const nextPage = await loadClipsForParty(
+        partyCode,
+        PROFILE_CLIP_PAGE_SIZE,
+        after
+      );
+      if (selectedPartyCodeRef.current !== partyCode) {
+        return;
+      }
+      const merged = appendUniqueProfileClips(partyClips, nextPage);
+      const total = party?.clipCount ?? null;
+      setPartyClips(merged);
+      setPartyClipsHasMore(
+        nextPage.length === PROFILE_CLIP_PAGE_SIZE &&
+          (total === null || merged.length < total)
+      );
+    } catch {
+      if (selectedPartyCodeRef.current === partyCode) {
+        setPartyClipsPageError("Fler klipp kunde inte hämtas. Försök igen.");
+      }
+    } finally {
+      if (selectedPartyCodeRef.current === partyCode) {
+        setPartyClipsLoadingMore(false);
+      }
+    }
+  };
 
   /** The party card beside a person, taken from the startup party_profiles read. */
   const personPartyProfile = useMemo(
@@ -1508,6 +1629,10 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
                     following={!!following[route.personId]}
                     onToggleFollow={() => toggleFollowPolitician(route.personId)}
                     onPlayClip={openPersonClips}
+                    clipsHaveMore={personClipsHasMore}
+                    clipsLoadingMore={personClipsLoadingMore}
+                    clipsPageError={personClipsPageError}
+                    onLoadMoreClips={() => void loadMorePersonClips()}
                     partyProfile={personPartyProfile}
                     partyPeers={personPartyPeers}
                     onOpenParty={openParty}
@@ -1526,6 +1651,10 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
                     following={!!followedParties[route.partyCode]}
                     onToggleFollow={() => toggleFollowParty(route.partyCode)}
                     onPlayClip={openPartyClips}
+                    clipsHaveMore={partyClipsHasMore}
+                    clipsLoadingMore={partyClipsLoadingMore}
+                    clipsPageError={partyClipsPageError}
+                    onLoadMoreClips={() => void loadMorePartyClips()}
                     onOpenPerson={openPerson}
                   />
                 ) : null,
@@ -1601,10 +1730,23 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
                     <FollowingScreen
                       presentation="desktop"
                       signedIn={viewer.signedIn}
+                      libraryReady={
+                        viewer.signedIn &&
+                        viewer.userId !== null &&
+                        libraryLoadedUserId === viewer.userId
+                      }
                       onSignIn={viewer.requireSignIn}
                       followedPoliticians={library.followedPoliticians}
                       followedParties={library.followedParties}
                       partyProfiles={partyProfiles}
+                      personalizationAvailable={recommendationsEnabled}
+                      personalizationEnabled={
+                        recommendationsEnabled && recommendationProfile.personalization
+                      }
+                      onOpenForYou={() => changeFeedMode("fordig")}
+                      onOpenLatest={() => changeFeedMode("senaste")}
+                      onOpenSearch={() => navigate({ view: "tab", tab: "sok", feedMode })}
+                      onOpenProfile={() => navigate({ view: "tab", tab: "profil", feedMode })}
                       onOpenPerson={openPerson}
                       onOpenParty={openParty}
                       onTogglePerson={toggleFollowPolitician}
@@ -1815,10 +1957,23 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
             {tab === "foljer" && (
               <FollowingScreen
                 signedIn={viewer.signedIn}
+                libraryReady={
+                  viewer.signedIn &&
+                  viewer.userId !== null &&
+                  libraryLoadedUserId === viewer.userId
+                }
                 onSignIn={viewer.requireSignIn}
                 followedPoliticians={library.followedPoliticians}
                 followedParties={library.followedParties}
                 partyProfiles={partyProfiles}
+                personalizationAvailable={recommendationsEnabled}
+                personalizationEnabled={
+                  recommendationsEnabled && recommendationProfile.personalization
+                }
+                onOpenForYou={() => changeFeedMode("fordig")}
+                onOpenLatest={() => changeFeedMode("senaste")}
+                onOpenSearch={() => navigate({ view: "tab", tab: "sok", feedMode })}
+                onOpenProfile={() => navigate({ view: "tab", tab: "profil", feedMode })}
                 onOpenPerson={openPerson}
                 onOpenParty={openParty}
                 onTogglePerson={toggleFollowPolitician}
@@ -4343,10 +4498,17 @@ function ProgressRow({
 function FollowingScreen({
   presentation = "mobile",
   signedIn,
+  libraryReady,
   onSignIn,
   followedPoliticians,
   followedParties,
   partyProfiles,
+  personalizationAvailable,
+  personalizationEnabled,
+  onOpenForYou,
+  onOpenLatest,
+  onOpenSearch,
+  onOpenProfile,
   onOpenPerson,
   onOpenParty,
   onTogglePerson,
@@ -4354,10 +4516,17 @@ function FollowingScreen({
 }: {
   presentation?: "mobile" | "desktop";
   signedIn: boolean;
+  libraryReady: boolean;
   onSignIn: () => void;
   followedPoliticians: string[];
   followedParties: PartyCode[];
   partyProfiles: PartyProfile[];
+  personalizationAvailable: boolean;
+  personalizationEnabled: boolean;
+  onOpenForYou: () => void;
+  onOpenLatest: () => void;
+  onOpenSearch: () => void;
+  onOpenProfile: () => void;
   onOpenPerson: (personId: string) => void;
   onOpenParty: (party: PartyCode) => void;
   onTogglePerson: (personId: string) => void;
@@ -4365,18 +4534,26 @@ function FollowingScreen({
 }) {
   const [people, setPeople] = useState<Politician[]>([]);
   const [loading, setLoading] = useState(false);
+  const [peopleError, setPeopleError] = useState<string | null>(null);
   const key = followedPoliticians.join(",");
 
   useEffect(() => {
     if (followedPoliticians.length === 0) {
       setPeople([]);
+      setPeopleError(null);
       return;
     }
     let active = true;
     setLoading(true);
+    setPeopleError(null);
     loadPoliticiansByIds(followedPoliticians)
       .then((rows) => active && setPeople(rows))
-      .catch(() => active && setPeople([]))
+      .catch(() => {
+        if (active) {
+          setPeople([]);
+          setPeopleError("Politikerna kunde inte hämtas. Försök igen om en stund.");
+        }
+      })
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
@@ -4388,8 +4565,236 @@ function FollowingScreen({
 
   const empty = followedParties.length === 0 && followedPoliticians.length === 0;
 
+  if (presentation === "desktop") {
+    const facts: DesktopFact[] = libraryReady
+      ? [
+          { label: "Partier", value: formatNumber(followedParties.length) },
+          { label: "Politiker", value: formatNumber(followedPoliticians.length) }
+        ]
+      : [];
+
+    return (
+      <section className="panel-screen following-screen following-screen--desktop">
+        <div className="panel-scroll desktop-following-scroll">
+          <header className="desktop-following-hero">
+            <div className="desktop-following-heading">
+              <span className="desktop-profile-eyebrow">Mina val</span>
+              <h1>Följer</h1>
+              <p>Samla politiker och partier du vill följa på ett ställe.</p>
+              {signedIn && <DesktopProfileFacts items={facts} />}
+            </div>
+            {signedIn && libraryReady && !empty && (
+              <button className="desktop-action-primary" type="button" onClick={onOpenForYou}>
+                <Play size={16} aria-hidden="true" />
+                Öppna För dig
+              </button>
+            )}
+          </header>
+
+          {!signedIn && (
+            <div className="desktop-following-signed-out">
+              <div className="desktop-following-explainer">
+                <span className="desktop-following-kicker">Därför följer du</span>
+                <h2>Dina val kan forma För dig</h2>
+                <ul>
+                  <li>
+                    <CheckCircle2 size={18} aria-hidden="true" />
+                    <span>Politiker och partier du följer vägs in när personalisering är på.</span>
+                  </li>
+                  <li>
+                    <CheckCircle2 size={18} aria-hidden="true" />
+                    <span>Valen hålls isär per konto på den här enheten.</span>
+                  </li>
+                  <li>
+                    <CheckCircle2 size={18} aria-hidden="true" />
+                    <span>Ingenting används av För dig innan du själv aktiverar personalisering.</span>
+                  </li>
+                </ul>
+
+                <div className="desktop-following-meanwhile">
+                  <span>Under tiden</span>
+                  <div>
+                    <button type="button" onClick={onOpenLatest}>
+                      <Play size={15} aria-hidden="true" />
+                      Se senaste klippen
+                    </button>
+                    <button type="button" onClick={onOpenSearch}>
+                      <Search size={15} aria-hidden="true" />
+                      Sök politiker och partier
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <aside className="desktop-following-auth" aria-label="Logga in eller skapa konto">
+                <span className="desktop-following-kicker">Pleni-konto</span>
+                <h2>Behåll dina följningar</h2>
+                <p>Logga in för att följa, spara och bygga ditt personliga flöde.</p>
+                <button
+                  type="button"
+                  className="account-button account-button--primary"
+                  disabled={!clerkEnabled}
+                  onClick={onSignIn}
+                >
+                  Logga in
+                </button>
+                {clerkEnabled ? (
+                  <SignUpButton mode="modal">
+                    <button type="button" className="account-button">Skapa konto</button>
+                  </SignUpButton>
+                ) : (
+                  <button type="button" className="account-button" disabled>
+                    Skapa konto
+                  </button>
+                )}
+                <small>
+                  Konto krävs för följningar. Senaste och sök fungerar utan inloggning.
+                </small>
+              </aside>
+            </div>
+          )}
+
+          {signedIn && !libraryReady && (
+            <div className="desktop-following-loading" role="status">
+              <LoaderCircle className="pwa-spinner" size={18} aria-hidden="true" />
+              Hämtar dina följningar…
+            </div>
+          )}
+
+          {signedIn && libraryReady && empty && (
+            <div className="desktop-following-empty" role="status">
+              <span className="desktop-following-kicker">Din lista är tom</span>
+              <h2>Börja med en politiker eller ett parti</h2>
+              <p>Följ från ett klipp eller hitta någon via sök. Dina val samlas sedan här.</p>
+              <button className="desktop-action-primary" type="button" onClick={onOpenSearch}>
+                <Search size={16} aria-hidden="true" />
+                Öppna sök
+              </button>
+            </div>
+          )}
+
+          {signedIn && libraryReady && !empty && (
+            <>
+              {!personalizationEnabled && (
+                <div className="desktop-following-notice" role="status">
+                  <div>
+                    <strong>Dina följningar påverkar inte För dig ännu</strong>
+                    <span>
+                      {personalizationAvailable
+                        ? "Slå på personalisering i Profil när du vill använda listan i flödet."
+                        : "Personalisering är inte tillgänglig just nu. Dina val ligger kvar på enheten."}
+                    </span>
+                  </div>
+                  {personalizationAvailable && (
+                    <button type="button" onClick={onOpenProfile}>Öppna Profil</button>
+                  )}
+                </div>
+              )}
+
+              <div
+                className={`desktop-following-library${followedParties.length === 0 ? " has-no-parties" : ""}`}
+              >
+                <section className="desktop-following-region desktop-following-people">
+                  <header>
+                    <div>
+                      <span>Personer</span>
+                      <h2>Politiker du följer</h2>
+                    </div>
+                    <b>{formatNumber(followedPoliticians.length)}</b>
+                  </header>
+                  {loading && people.length === 0 && (
+                    <div className="desktop-following-loading" role="status">
+                      <LoaderCircle className="pwa-spinner" size={18} aria-hidden="true" />
+                      Hämtar politiker…
+                    </div>
+                  )}
+                  {peopleError && <p className="desktop-following-error" role="alert">{peopleError}</p>}
+                  {!loading && !peopleError && followedPoliticians.length === 0 && (
+                    <p className="desktop-following-region-empty">Du följer inga politiker ännu.</p>
+                  )}
+                  <div className="desktop-following-list">
+                    {people.map((politician) => (
+                      <ListRow
+                        key={politician.id}
+                        avatar={
+                          <Avatar
+                            name={cleanName(politician.name) || politician.name}
+                            party={politician.party}
+                            size="md"
+                            imageUrl={politician.avatarUrl}
+                          />
+                        }
+                        title={cleanName(politician.name) || politician.name}
+                        subtitle={[PARTIES[politician.party].name, politician.role]
+                          .filter(Boolean)
+                          .join(" · ")}
+                        onClick={() => onOpenPerson(politician.id)}
+                        action={
+                          <button
+                            className="desktop-unfollow"
+                            aria-label={`Avfölj ${cleanName(politician.name) || politician.name}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onTogglePerson(politician.id);
+                            }}
+                          >
+                            Avfölj
+                          </button>
+                        }
+                      />
+                    ))}
+                  </div>
+                </section>
+
+                {followedParties.length > 0 && (
+                  <aside className="desktop-following-region desktop-following-parties">
+                    <header>
+                      <div>
+                        <span>Partier</span>
+                        <h2>Partier du följer</h2>
+                      </div>
+                      <b>{formatNumber(followedParties.length)}</b>
+                    </header>
+                    <div className="desktop-following-list">
+                      {followedParties.map((partyCode) => {
+                        const party = PARTIES[partyCode];
+                        const logoUrl = partyProfiles.find(
+                          (profile) => profile.abbr === partyCode
+                        )?.logoUrl;
+                        return (
+                          <ListRow
+                            key={partyCode}
+                            avatar={<PartyAvatar party={partyCode} logoUrl={logoUrl} />}
+                            title={party.name}
+                            onClick={() => onOpenParty(partyCode)}
+                            action={
+                              <button
+                                className="desktop-unfollow"
+                                aria-label={`Avfölj ${party.name}`}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onToggleParty(partyCode);
+                                }}
+                              >
+                                Avfölj
+                              </button>
+                            }
+                          />
+                        );
+                      })}
+                    </div>
+                  </aside>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <section className={presentation === "desktop" ? "panel-screen following-screen following-screen--desktop" : "panel-screen following-screen"}>
+    <section className="panel-screen following-screen">
       <Header
         title="Följer"
         subtitle={`${followedParties.length} partier · ${followedPoliticians.length} personer`}
@@ -6221,23 +6626,30 @@ function DesktopClipGallery({
   clips,
   loading,
   total,
+  hasMore,
+  loadingMore,
+  pageError,
   emptyTitle,
   emptyDetail,
   captionFor,
   leadMeta,
-  onPlayClip
+  onPlayClip,
+  onLoadMore
 }: {
   clips: ClipItem[];
   loading: boolean;
   total: number | null;
+  hasMore: boolean;
+  loadingMore: boolean;
+  pageError: string | null;
   emptyTitle: string;
   emptyDetail: string;
   captionFor: (clip: ClipItem) => string;
   leadMeta: (clip: ClipItem) => ReactNode;
   onPlayClip: (clipId: string | null) => void;
+  onLoadMore: () => void;
 }) {
   const [lead, ...rest] = clips;
-  const hasMoreThanLoaded = typeof total === "number" && total > clips.length;
   // The frame reserves three rows' worth of height. Below a fourth row there
   // is nothing to scroll to, so a short catalogue renders a plain grid rather
   // than a tall box with empty space under it.
@@ -6316,15 +6728,26 @@ function DesktopClipGallery({
       )}
 
       {clips.length > 0 && (
-        <p className="desktop-gallery-foot" role="status">
+        <div className="desktop-gallery-foot">
           <span>
             {typeof total === "number"
               ? `Visar ${formatNumber(clips.length)} av ${formatNumber(total)} klipp`
               : `Visar ${formatNumber(clips.length)} klipp`}
           </span>
-          {hasMoreThanLoaded && <span>Spela alla för att se hela samlingen</span>}
-        </p>
+          {hasMore && (
+            <button
+              className="desktop-gallery-more"
+              type="button"
+              disabled={loadingMore}
+              onClick={onLoadMore}
+            >
+              {loadingMore && <LoaderCircle className="pwa-spinner" size={15} aria-hidden="true" />}
+              {loadingMore ? "Hämtar fler…" : "Hämta fler klipp"}
+            </button>
+          )}
+        </div>
       )}
+      {pageError && <p className="desktop-gallery-page-error" role="alert">{pageError}</p>}
     </section>
   );
 }
@@ -6340,6 +6763,10 @@ function PartyScreen({
   following,
   onToggleFollow,
   onPlayClip,
+  clipsHaveMore = false,
+  clipsLoadingMore = false,
+  clipsPageError = null,
+  onLoadMoreClips = () => {},
   onOpenPerson
 }: {
   presentation?: "mobile" | "desktop";
@@ -6352,6 +6779,10 @@ function PartyScreen({
   following: boolean;
   onToggleFollow: () => void;
   onPlayClip: (clipId: string | null) => void;
+  clipsHaveMore?: boolean;
+  clipsLoadingMore?: boolean;
+  clipsPageError?: string | null;
+  onLoadMoreClips?: () => void;
   onOpenPerson: (personId: string) => void;
 }) {
   const { scrollRef, rememberScroll } = useProfileScrollPosition(
@@ -6422,7 +6853,7 @@ function PartyScreen({
                       disabled={clips.length === 0}
                     >
                       <Play size={16} aria-hidden="true" />
-                      Spela alla klipp
+                      {clipsHaveMore ? "Spela senaste klippen" : "Spela alla klipp"}
                     </button>
                     <button
                       className={following ? "desktop-action-follow is-following" : "desktop-action-follow"}
@@ -6441,6 +6872,9 @@ function PartyScreen({
                     clips={clips}
                     loading={loading}
                     total={party.clipCount}
+                    hasMore={clipsHaveMore}
+                    loadingMore={clipsLoadingMore}
+                    pageError={clipsPageError}
                     emptyTitle="Inga publicerade klipp"
                     emptyDetail="Partiets politiker har inga klipp i katalogen ännu."
                     captionFor={(clip) =>
@@ -6468,6 +6902,7 @@ function PartyScreen({
                       </>
                     )}
                     onPlayClip={playClip}
+                    onLoadMore={onLoadMoreClips}
                   />
                 </div>
 
@@ -6653,6 +7088,10 @@ function PersonScreen({
   following,
   onToggleFollow,
   onPlayClip,
+  clipsHaveMore = false,
+  clipsLoadingMore = false,
+  clipsPageError = null,
+  onLoadMoreClips = () => {},
   partyProfile = null,
   partyPeers = [],
   onOpenParty,
@@ -6667,6 +7106,10 @@ function PersonScreen({
   following: boolean;
   onToggleFollow: () => void;
   onPlayClip: (clipId: string | null) => void;
+  clipsHaveMore?: boolean;
+  clipsLoadingMore?: boolean;
+  clipsPageError?: string | null;
+  onLoadMoreClips?: () => void;
   partyProfile?: PartyProfile | null;
   partyPeers?: Politician[];
   onOpenParty?: (partyCode: PartyCode) => void;
@@ -6763,7 +7206,7 @@ function PersonScreen({
                       disabled={clips.length === 0}
                     >
                       <Play size={16} aria-hidden="true" />
-                      Spela alla klipp
+                      {clipsHaveMore ? "Spela senaste klippen" : "Spela alla klipp"}
                     </button>
                     <button
                       className={following ? "desktop-action-follow is-following" : "desktop-action-follow"}
@@ -6782,6 +7225,9 @@ function PersonScreen({
                     clips={clips}
                     loading={loading}
                     total={typeof total === "number" ? total : null}
+                    hasMore={clipsHaveMore}
+                    loadingMore={clipsLoadingMore}
+                    pageError={clipsPageError}
                     emptyTitle="Inga publicerade klipp"
                     emptyDetail="Den här talaren har inga klipp i katalogen ännu."
                     captionFor={(clip) =>
@@ -6798,6 +7244,7 @@ function PersonScreen({
                       </>
                     )}
                     onPlayClip={playClip}
+                    onLoadMore={onLoadMoreClips}
                   />
                 </div>
 

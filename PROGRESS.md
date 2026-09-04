@@ -6969,3 +6969,58 @@ the party-coloured letter fallback. Check the eight marks on `pleni.se/sok` at
 1440 px; that fallback path is exactly what the `party-logo-policy` module
 exists to manage, and a broken CDN mark degrades to the same letter rather than
 to an empty box.
+
+## UI20.3 — Profile pagination and desktop Following — IN PROGRESS 2026-09-04
+
+**Built:** cursor pagination in `web/src/supabase.ts`, pagination state and
+desktop gallery controls in `web/src/App.tsx`, duplicate-safe page merging in
+`web/src/profile-clip-order.ts`, a dedicated desktop `FollowingScreen` branch,
+the corresponding rules in `web/src/styles.css`, and coverage in
+`web/tests/desktop-following.test.mjs`, `web/tests/desktop-profile.test.mjs` and
+`web/tests/profile-clip-order.test.mjs`.
+
+**Tests:** all 167 frontend Node tests pass; TypeScript passes; the production
+Vite/PWA build passes and its verification confirms exactly nine app-shell
+entries with video and private data excluded. Repository gate green: 514 Python
+tests, 79 deselected, the known `audioop` warning, Ruff clean and strict mypy
+clean over 83 source files.
+
+**Local verification:** the signed-out Following page was inspected at
+1440×900 in a real browser. The account panel is exactly 380 px, the content
+columns are 654/380 px, the document has no horizontal overflow and the console
+has no errors. The only visible network notice was expected because the local
+release checkout deliberately has no production frontend environment values.
+
+**Contracts touched:** none. No migration, dependency or mobile layout change.
+
+**Decisions made:**
+- Profile pages use a stable `(debate_date DESC, published_at DESC, id ASC)`
+  cursor rather than an offset. A failed older page leaves the existing gallery
+  and its scroll position intact and exposes a retryable error.
+- `Spela alla klipp` appears only once every page is loaded. Before then the
+  action truthfully says `Spela senaste klippen`; `Hämta fler klipp` is the path
+  to the rest of the catalogue.
+- The desktop Following page does not repeat the mobile page's invented zero
+  counts while signed out. It explains how follows affect För dig, gives usable
+  signed-out routes and presents sign-in/create-account as the clear next step.
+- The signed-in layout puts politicians in the main column and parties in a
+  336 px rail. It warns when personalization is off and links to Profile.
+- The proposed `Senast tillagd` fact is absent because the saved library has no
+  per-follow timestamp. Copy also says the library is account-separated on this
+  device; it does not claim server sync that the current implementation cannot
+  guarantee.
+- Unfollow remains immediate, matching current product behavior, but is visually
+  quiet until hover or keyboard focus. No speculative undo state was added.
+- Mobile Following, search and profile branches remain unchanged.
+
+**Observations (not fixed, out of scope):** the local checkout cannot exercise
+the signed-in Following branch with production Clerk/Supabase data. Its state,
+routing, honest-copy and accessibility contracts are covered by the frontend
+tests; final live verification will not sign in as the owner.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** production verification is still outstanding for
+UI20.1b–UI20.3. After deploy, check the signed-out Following page, real party
+marks on Search, a real profile portrait/rail and `Hämta fler klipp` on a
+profile whose catalogue exceeds 60 rows.

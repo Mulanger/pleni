@@ -4,6 +4,7 @@ import test from "node:test";
 
 const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+const supabase = readFileSync(new URL("../src/supabase.ts", import.meta.url), "utf8");
 
 test("a desktop profile leads with a masthead, not a stretched mobile column", () => {
   assert.match(app, /<DesktopProfileBar kind="Politiker"/);
@@ -88,4 +89,26 @@ test("the saved archive keeps its own desktop treatment", () => {
   assert.match(styles, /\.saved-screen--desktop \.person-scroll\s*\{/);
   assert.match(styles, /\.saved-screen--desktop \.clip-grid\s*\{[^}]*repeat\(4, minmax\(0, 1fr\)\)/);
   assert.match(app, /className={presentation === "desktop" \? "desktop-profile-toolbar" : "person-topbar"}/);
+});
+
+test("profile galleries fetch older clips through a stable cursor", () => {
+  assert.match(app, /const PROFILE_CLIP_PAGE_SIZE = 60;/);
+  assert.match(app, /loadClipsForPolitician\([\s\S]*PROFILE_CLIP_PAGE_SIZE,[\s\S]*after/);
+  assert.match(app, /loadClipsForParty\([\s\S]*PROFILE_CLIP_PAGE_SIZE,[\s\S]*after/);
+  assert.match(app, /appendUniqueProfileClips\(personClips, nextPage\)/);
+  assert.match(app, /appendUniqueProfileClips\(partyClips, nextPage\)/);
+  assert.match(app, /Hämta fler klipp/);
+  assert.match(app, /Fler klipp kunde inte hämtas\. Försök igen\./);
+
+  assert.match(supabase, /order: "debate_date\.desc,published_at\.desc,id\.asc"/);
+  assert.match(supabase, /debate_date\.lt\.\$\{after\.debateDate\}/);
+  assert.match(supabase, /published_at\.lt\.\$\{after\.publishedAt\}/);
+  assert.match(supabase, /id\.gt\.\$\{after\.id\}/);
+  assert.doesNotMatch(supabase, /offset: String/);
+});
+
+test("play-all copy is honest until every cursor page is loaded", () => {
+  assert.match(app, /clipsHaveMore \? "Spela senaste klippen" : "Spela alla klipp"/);
+  assert.match(styles, /\.desktop-gallery-more\s*\{/);
+  assert.match(styles, /\.desktop-gallery-page-error\s*\{/);
 });

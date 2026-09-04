@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { newestProfileClipsFirst } from "../src/profile-clip-order.ts";
+import {
+  appendUniqueProfileClips,
+  newestProfileClipsFirst
+} from "../src/profile-clip-order.ts";
 
 test("profile grids show the newest debate first without mutating the source", () => {
   const clips = [
@@ -19,4 +22,15 @@ test("profile grids show the newest debate first without mutating the source", (
     clips.map((clip) => clip.id),
     ["backfill", "newer-upload", "newer-debate", "older-upload"]
   );
+});
+
+test("cursor pages append in place without duplicating an overlapping clip", () => {
+  const current = [{ id: "c1" }, { id: "c2" }];
+  const nextPage = [{ id: "c2" }, { id: "c3" }, { id: "c3" }, { id: "c4" }];
+
+  assert.deepEqual(
+    appendUniqueProfileClips(current, nextPage).map((clip) => clip.id),
+    ["c1", "c2", "c3", "c4"]
+  );
+  assert.deepEqual(current.map((clip) => clip.id), ["c1", "c2"]);
 });

@@ -332,15 +332,43 @@ async function readClips(query: URLSearchParams): Promise<ClipItem[]> {
 }
 
 /** Read profile-grid clips from the flattened catalogue's sortable date columns. */
-async function readProfileClips(query: URLSearchParams): Promise<ClipItem[]> {
+async function readProfileClips(
+  query: URLSearchParams,
+  failOnError = false
+): Promise<ClipItem[]> {
   const response = await supabaseRest(`feed_clip_catalogue?${query.toString()}`);
   if (!response.ok) {
+    if (failOnError) {
+      throw new Error(`Profile clip page request failed (${response.status})`);
+    }
     return [];
   }
   const rows = (await response.json()) as RawFeedCatalogueClip[];
   return newestProfileClipsFirst(
     rows.map(mapFeedCatalogueClip).filter((clip) => clip.videoUrl.length > 0)
   );
+}
+
+/**
+ * Continue the exact newest-first profile order after the last rendered clip.
+ *
+ * The three fields make the order unique: debate date desc, publication time
+ * desc, then clip id asc. Unlike an offset, a newly published clip cannot move
+ * the boundary and make a viewer see a duplicate or silently skip an older row.
+ */
+function applyProfileClipCursor(params: URLSearchParams, after: ClipItem | null): void {
+  if (after === null) {
+    return;
+  }
+  if (after.publishedAt === null) {
+    throw new Error("A published profile clip is missing publishedAt");
+  }
+  const cursorBranches = [
+    `debate_date.lt.${after.debateDate}`,
+    `and(debate_date.eq.${after.debateDate},published_at.lt.${after.publishedAt})`,
+    `and(debate_date.eq.${after.debateDate},published_at.eq.${after.publishedAt},id.gt.${after.id})`
+  ];
+  params.set("or", `(${cursorBranches.join(",")})`);
 }
 
 /**
@@ -686,19 +714,20 @@ export async function countClipsForParty(code: PartyCode): Promise<number | null
  */
 export async function loadClipsForPolitician(
   politicianId: string,
-  limit = 60
+  limit = 60,
+  after: ClipItem | null = null
 ): Promise<ClipItem[]> {
   if (!supabaseConfigured) {
     return [];
   }
-  return readProfileClips(
-    new URLSearchParams({
-      select: "*",
-      politician_id: `eq.${politicianId}`,
-      order: "debate_date.desc,published_at.desc,id.asc",
-      limit: String(limit)
-    })
-  );
+  const params = new URLSearchParams({
+    select: "*",
+    politician_id: `eq.${politicianId}`,
+    order: "debate_date.desc,published_at.desc,id.asc",
+    limit: String(limit)
+  });
+  applyProfileClipCursor(params, after);
+  return readProfileClips(params, after !== null);
 }
 
 /**
@@ -708,19 +737,23 @@ export async function loadClipsForPolitician(
  * an old speech. This matches the rest of the app's definition of a person's
  * current affiliation and gives the party page one stable membership rule.
  */
-export async function loadClipsForParty(code: PartyCode, limit = 60): Promise<ClipItem[]> {
+export async function loadClipsForParty(
+  code: PartyCode,
+  limit = 60,
+  after: ClipItem | null = null
+): Promise<ClipItem[]> {
   if (!supabaseConfigured || code === "NONE") {
     return [];
   }
-  return readProfileClips(
-    new URLSearchParams({
-      select: "*",
-      party: `eq.${code}`,
-      politician_id: "not.is.null",
-      order: "debate_date.desc,published_at.desc,id.asc",
-      limit: String(limit)
-    })
-  );
+  const params = new URLSearchParams({
+    select: "*",
+    party: `eq.${code}`,
+    politician_id: "not.is.null",
+    order: "debate_date.desc,published_at.desc,id.asc",
+    limit: String(limit)
+  });
+  applyProfileClipCursor(params, after);
+  return readProfileClips(params, after !== null);
 }
 
 /**
