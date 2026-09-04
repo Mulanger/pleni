@@ -35,6 +35,7 @@ const CANONICAL_PATHS = [
   "/legal/privacy/",
   "/legal/storage/",
   "/legal/about/",
+  "/klipp/andreas-carlson-stod-till-kollektivtrafiken/HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079_c01/",
   "/politiker/490b6787-c178-42e1-9ab8-e9d233939643/",
   "/politiker/490b6787-c178-42e1-9ab8-e9d233939643/klipp/",
   "/politiker/490b6787-c178-42e1-9ab8-e9d233939643/?from=hem",
@@ -81,6 +82,7 @@ test("every legacy hash route lands on the route it always did", () => {
     "#/profil/saved/clips?feed=fordig&clip=HD1_a-b_c01",
     "#/legal/terms?feed=fordig",
     "#/legal/about?feed=senaste",
+    "#/clip/andreas-carlson/HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079_c01",
     "#/person/490b6787-c178-42e1-9ab8-e9d233939643?from=hem&feed=fordig",
     "#/person/abc/clips?from=sok&feed=fordig&clip=HD1_a-b_c01",
     "#/party/M?from=foljer&feed=fordig",
@@ -162,12 +164,31 @@ test("politician ids survive encoding in both directions", () => {
   assert.equal(routeFromPath(...splitPath(path)).personId, id);
 });
 
+test("a clip slug is decorative and the final id is authoritative", () => {
+  const id = "HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079_c01";
+  const canonical = routeFromPath(`/klipp/andreas-carlson/${id}`);
+  const staleSlug = routeFromPath(`/klipp/ett-gammalt-namn/${id}`);
+
+  assert.equal(canonical.view, "clip");
+  assert.equal(canonical.clipId, id);
+  assert.equal(staleSlug.clipId, id);
+  assert.equal(pathForRoute(canonical), `/klipp/andreas-carlson/${id}/`);
+  assert.deepEqual(routeFromPath(`/klipp/${id}`), {
+    view: "tab",
+    tab: "hem",
+    feedMode: "fordig"
+  });
+});
+
 test("the shell route list covers every path the app can push without an id", () => {
   // The InstaPods pod 404s any path without a file, so a pushed path with no
   // generated shell breaks reload and sharing. Identity-bearing routes are
   // generated per entity by the prerenderer instead.
   const pushable = CANONICAL_PATHS.map((path) => splitPath(path)[0]).filter(
-    (pathname) => !pathname.startsWith("/politiker/") && !pathname.startsWith("/parti/")
+    (pathname) =>
+      !pathname.startsWith("/politiker/") &&
+      !pathname.startsWith("/parti/") &&
+      !pathname.startsWith("/klipp/")
   );
   for (const pathname of new Set(pushable)) {
     assert.ok(
@@ -179,6 +200,10 @@ test("the shell route list covers every path the app can push without an id", ()
 
 test("hashForRoute stays available for legacy support", () => {
   assert.equal(hashForRoute({ view: "tab", tab: "hem", feedMode: "fordig" }), "#/hem/fordig");
+  assert.equal(
+    hashForRoute({ view: "clip", clipSlug: "andreas-carlson", clipId: "HD1_a-b_c01" }),
+    "#/clip/andreas-carlson/HD1_a-b_c01"
+  );
 });
 
 

@@ -13,6 +13,7 @@ import type { FeedMode, PartyCode, Tab } from "./types";
  */
 export type AppRoute =
   | { view: "tab"; tab: Tab; feedMode: FeedMode }
+  | { view: "clip"; clipId: string; clipSlug: string }
   | { view: "person"; tab: Tab; feedMode: FeedMode; personId: string; personSlug?: string }
   | {
       view: "person-clips";
@@ -81,6 +82,13 @@ export function routeFromHash(hash: string): AppRoute {
 
   if (segments[0] === "hem") {
     return { view: "tab", tab: "hem", feedMode: mode };
+  }
+  if (segments[0] === "clip") {
+    const clipSlug = decodeSegment(segments[1]);
+    const clipId = decodeSegment(segments[2]);
+    return clipSlug && clipId
+      ? { view: "clip", clipId, clipSlug: clipSlug.toLowerCase() }
+      : DEFAULT_ROUTE;
   }
   if (segments[0] === "legal") {
     const page = legalPage(segments[1] ?? null);
@@ -299,6 +307,14 @@ export function routeFromPath(pathname: string, search = ""): AppRoute {
   const fromValue = params.get("from");
   const from: Tab = isTab(fromValue) ? fromValue : "sok";
 
+  if (segments[0] === "klipp") {
+    const clipSlug = decodeSegment(rawSegments[1]);
+    const clipId = decodeSegment(rawSegments[2]);
+    return rawSegments.length === 3 && clipSlug && clipId
+      ? { view: "clip", clipId, clipSlug: clipSlug.toLowerCase() }
+      : DEFAULT_ROUTE;
+  }
+
   if (segments[0] === "politiker") {
     // Four shapes, all decidable because a politician id is a uuid and can
     // never be the literal segment `klipp`:
@@ -354,6 +370,10 @@ export function routeFromPath(pathname: string, search = ""): AppRoute {
  * is stable.
  */
 export function pathForRoute(route: AppRoute): string {
+  if (route.view === "clip") {
+    return `/klipp/${encodeURIComponent(route.clipSlug)}/${encodeURIComponent(route.clipId)}/`;
+  }
+
   const params = new URLSearchParams();
   if (route.feedMode === "senaste" && !(route.view === "tab" && route.tab === "hem")) {
     params.set("feed", "senaste");
@@ -377,7 +397,6 @@ export function pathForRoute(route: AppRoute): string {
   if (route.view === "legal") {
     return withQuery(`/legal/${route.page}/`, params);
   }
-
   if (route.tab !== "sok") {
     params.set("from", route.tab);
   }
@@ -427,6 +446,9 @@ export function hashForRoute(route: AppRoute): string {
   }
   if (route.view === "legal") {
     return `#/legal/${route.page}?feed=${route.feedMode}`;
+  }
+  if (route.view === "clip") {
+    return `#/clip/${encodeURIComponent(route.clipSlug)}/${encodeURIComponent(route.clipId)}`;
   }
 
   const params = new URLSearchParams({ from: route.tab, feed: route.feedMode });

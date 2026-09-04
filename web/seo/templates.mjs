@@ -7,8 +7,9 @@
  * when the watch page is rendered and not to depend on user interaction such
  * as swiping, which is exactly what a feed cannot promise.
  *
- * Watch pages deliberately do not boot the SPA. They are standalone documents
- * that link into the app. See ADR 014's amendment.
+ * Watch pages progressively enhance into the SPA. Their complete video,
+ * transcript and source markup is the first response; React then replaces the
+ * same clip with Pleni's existing bounded feed player and keeps it first.
  */
 
 import {
@@ -79,9 +80,37 @@ const SEO_CONTENT_STYLES = `
 .seo-hub .seo-inline{display:flex;flex-wrap:wrap;gap:8px}
 .seo-hub .seo-inline li{padding:7px 12px;border-radius:999px}
 .seo-hub .seo-inline li a{font-weight:500;font-size:14px}
+.seo-watch{max-width:720px;margin:0 auto;padding:20px 20px 64px;color:#f4f5f7;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.seo-watch a{color:#7fb2ff}
+.seo-watch .brand{display:inline-flex;align-items:center;font-weight:700;text-decoration:none;color:#f4f5f7;padding:8px 0}
+.seo-watch .brand span{font-size:18px}
+.seo-watch .crumbs{font-size:13px;color:#9aa1ad;margin:8px 0 20px}
+.seo-watch .crumbs a{color:#9aa1ad}
+.seo-watch h1{font-size:clamp(22px,5vw,30px);line-height:1.25;margin:0 0 12px;letter-spacing:-.01em}
+.seo-watch .byline{color:#9aa1ad;font-size:14px;margin:0 0 20px}
+.seo-watch .player{background:#000;border:1px solid #232833;border-radius:14px;overflow:hidden;margin:0 0 20px}
+.seo-watch .player video{display:block;width:100%;max-height:80vh;background:#000}
+.seo-watch .facts{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0 0 24px;font-size:14px}
+.seo-watch .facts dt{color:#9aa1ad}
+.seo-watch .facts dd{margin:0}
+.seo-watch h2{font-size:17px;margin:28px 0 10px}
+.seo-watch .transcript{background:#101319;border:1px solid #232833;border-radius:12px;padding:16px 18px;margin:0}
+.seo-watch .transcript p{margin:0 0 12px}
+.seo-watch .transcript p:last-child{margin:0}
+.seo-watch .source{font-size:14px;color:#9aa1ad;margin:20px 0 0}
+.seo-watch ul{list-style:none;padding:0}
+.seo-watch .links{margin:14px 0 0;display:flex;flex-wrap:wrap;gap:10px}
+.seo-watch .links a{display:inline-block;border:1px solid #232833;background:#101319;border-radius:999px;padding:8px 14px;font-size:14px;text-decoration:none}
+.seo-watch .related{margin:14px 0 0;display:grid;gap:10px}
+.seo-watch .related li{border:1px solid #232833;background:#101319;border-radius:12px;padding:12px 14px}
+.seo-watch .related a{display:block;text-decoration:none;font-weight:600}
+.seo-watch .related span{display:block;color:#9aa1ad;font-size:13px;margin-top:3px}
+.seo-watch .cta{display:inline-block;margin:22px 0 0;background:#7fb2ff;color:#08131f;font-weight:600;border-radius:999px;padding:11px 20px;text-decoration:none}
+.seo-watch footer{margin-top:44px;padding-top:18px;border-top:1px solid #232833;color:#9aa1ad;font-size:13px}
 `.trim();
 
 const PREVIEW_ROBOTS = "max-snippet:-1, max-image-preview:large, max-video-preview:-1";
+const APP_PARTY_CODES = new Set(["S", "M", "SD", "C", "V", "KD", "MP", "L", "NONE"]);
 
 function head({ title, description, canonical, robots, extraHead = "" }) {
   return `    <meta charset="UTF-8" />
@@ -130,9 +159,8 @@ function footer() {
 /**
  * A fully static page: brand header, the caller's body, footer.
  *
- * Used for pages the app has no route for — watch pages and debate pages — so
- * nothing hydrates and there is no second version of the content to keep in
- * agreement.
+ * Used for pages the app has no route for, such as debate pages, so nothing
+ * hydrates and there is no second version of the content to keep in agreement.
  */
 export function renderStaticPage({ title, description, canonical, robots, extraHead, body }) {
   return document_({
@@ -164,7 +192,7 @@ function paragraphs(text) {
  * `related` is a short list of other clips from the same debate, so a crawler
  * arriving here has somewhere to go and a reader has context.
  */
-export function renderClipPage(clip, related = []) {
+export function renderClipPage(builtHtml, clip, related = []) {
   const canonical = `${ORIGIN}${clipPath(clip)}`;
   const title = clipTitle(clip);
   const description = clipDescription(clip);
@@ -216,30 +244,6 @@ export function renderClipPage(clip, related = []) {
     ]
   };
 
-  const extraHead = `    <meta property="og:type" content="video.other" />
-    <meta property="og:site_name" content="Pleni" />
-    <meta property="og:locale" content="sv_SE" />
-    <meta property="og:url" content="${escapeHtml(canonical)}" />
-    <meta property="og:title" content="${escapeHtml(heading)}" />
-    <meta property="og:description" content="${escapeHtml(description)}" />
-    <meta property="og:image" content="${escapeHtml(clip.thumbUrl)}" />
-    <meta property="og:image:type" content="image/webp" />
-    <meta property="og:image:alt" content="${escapeHtml(heading)}" />
-    <meta property="og:video" content="${escapeHtml(clip.videoUrl)}" />
-    <meta property="og:video:type" content="video/mp4" />
-    <meta property="og:video:width" content="540" />
-    <meta property="og:video:height" content="960" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${escapeHtml(heading)}" />
-    <meta name="twitter:description" content="${escapeHtml(description)}" />
-    <meta name="twitter:image" content="${escapeHtml(clip.thumbUrl)}" />
-    <meta name="twitter:image:alt" content="${escapeHtml(heading)}" />
-    <link rel="preload" as="image" href="${escapeHtml(clip.thumbUrl)}" />
-    <script type="application/ld+json">
-${jsonLd({ "@context": "https://schema.org", "@graph": [video, crumbs] })}
-    </script>
-`;
-
   const facts = [
     ["Talare", clip.displayName || clip.name],
     ["Parti", clip.party],
@@ -287,7 +291,7 @@ ${related
     .filter(Boolean)
     .join("\n");
 
-  const body = `    <div class="wrap">
+  const body = `<article class="seo-watch">
 ${brandHeader()}
       <nav class="crumbs">
         <a href="/">Pleni</a> ›${
@@ -337,9 +341,108 @@ ${navLinks}
       </ul>
 ${relatedList}
 ${footer()}
-    </div>`;
+    </article>`;
 
-  return document_({ title, description, canonical, extraHead, body });
+  let html = renderShellPage(builtHtml, {
+    title,
+    description,
+    canonical,
+    prerender: body
+  });
+
+  html = replaceOnce(
+    html,
+    /<script\s+type="application\/ld\+json">[\s\S]*?<\/script>/,
+    `<script type="application/ld+json">\n${jsonLd({
+      "@context": "https://schema.org",
+      "@graph": [video, crumbs]
+    })}\n    </script>`
+  );
+  html = replaceOnce(
+    html,
+    /<meta\s+property="og:type"\s+content="[^"]*"\s*\/>/,
+    '<meta property="og:type" content="video.other" />'
+  );
+  html = replaceOnce(
+    html,
+    /<meta\s+property="og:image"\s+content="[^"]*"\s*\/>/,
+    `<meta property="og:image" content="${escapeHtml(clip.thumbUrl)}" />`
+  );
+  html = replaceOnce(
+    html,
+    /<meta\s+property="og:image:type"\s+content="[^"]*"\s*\/>/,
+    '<meta property="og:image:type" content="image/webp" />'
+  );
+  html = replaceOnce(
+    html,
+    /<meta\s+property="og:image:width"\s+content="[^"]*"\s*\/>/,
+    '<meta property="og:image:width" content="540" />'
+  );
+  html = replaceOnce(
+    html,
+    /<meta\s+property="og:image:height"\s+content="[^"]*"\s*\/>/,
+    '<meta property="og:image:height" content="960" />'
+  );
+  html = replaceOnce(
+    html,
+    /<meta\s+property="og:image:alt"\s+content="[^"]*"\s*\/>/,
+    `<meta property="og:image:alt" content="${escapeHtml(heading)}" />`
+  );
+  html = replaceOnce(
+    html,
+    /<meta\s+name="twitter:card"\s+content="[^"]*"\s*\/>/,
+    '<meta name="twitter:card" content="summary_large_image" />'
+  );
+  html = replaceOnce(
+    html,
+    /<meta\s+name="twitter:image"\s+content="[^"]*"\s*\/>/,
+    `<meta name="twitter:image" content="${escapeHtml(clip.thumbUrl)}" />`
+  );
+  html = replaceOnce(
+    html,
+    /<meta\s+name="twitter:image:alt"\s+content="[^"]*"\s*\/>/,
+    `<meta name="twitter:image:alt" content="${escapeHtml(heading)}" />`
+  );
+
+  const mediaHead = `    <meta property="og:video" content="${escapeHtml(clip.videoUrl)}" />
+    <meta property="og:video:type" content="video/mp4" />
+    <meta property="og:video:width" content="540" />
+    <meta property="og:video:height" content="960" />
+    <link rel="preload" as="image" href="${escapeHtml(clip.thumbUrl)}" />\n`;
+  html = html.replace("</head>", `${mediaHead}  </head>`);
+
+  const bootstrap = {
+    id: clip.id,
+    speechId: clip.speechId ?? "",
+    sourceId: clip.sourceId ?? null,
+    politicianId: clip.politicianId ?? null,
+    politicianName: clip.politicianName ?? null,
+    politicianRole: clip.politicianRole ?? null,
+    politicianAvatarUrl: clip.politicianAvatarUrl ?? null,
+    speakerName: clip.speakerName || clip.displayName || clip.name,
+    party: APP_PARTY_CODES.has(clip.party) ? clip.party : "NONE",
+    anforandetyp: clip.anforandetyp ?? "",
+    archetype: clip.archetype ?? "",
+    title: clip.title || metaDescription(clip.transcript, 88) || "Riksdagsklipp",
+    transcript: clip.transcript ?? "",
+    topic: clip.topic ?? null,
+    durationS: Number(clip.durationS) || 0,
+    videoUrl: clip.videoUrl,
+    thumbUrl: clip.thumbUrl,
+    sourceTitle: clip.debateTitle || "Riksdagsdebatt",
+    sourceUrl: clip.sourceUrl || "https://www.riksdagen.se",
+    debateDate: clip.debateDate ?? "",
+    publishedAt: clip.publishedAt ?? null,
+    rank: Number.isInteger(clip.rank) && clip.rank > 0 ? clip.rank : 1,
+    isSample: false
+  };
+  html = replaceOnce(
+    html,
+    /<body>/,
+    `<body>\n    <script id="pleni-clip-bootstrap" type="application/json">\n${jsonLd(bootstrap)}\n    </script>`
+  );
+
+  return html;
 }
 
 /**

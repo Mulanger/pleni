@@ -6752,3 +6752,46 @@ recrawled and may continue to show its cached favicon/title for days or weeks.
 **Next agent should know:** the current search favicon URL is deliberately
 versioned. Do not reuse that URL for different artwork; publish another stable
 versioned URL and request homepage reindexing instead.
+
+## SEO2b — Watch-page entry into För dig — IN PROGRESS 2026-09-04
+
+**Built:** `/klipp/<slug>/<clip_id>/` is now a first-class public app route.
+The prerender still sends the complete video, transcript, facts, primary-source
+link, social metadata and `VideoObject` before JavaScript, then boots the same
+bounded `FeedScreen` used by Pleni. The selected clip is first and the normal
+För dig slate continues underneath it without duplicating that clip. A safe
+embedded clip payload removes the initial data round trip; an anonymous exact-id
+read in `web/src/supabase.ts` is the fallback for missing or stale payloads.
+
+**Tests:** all 144 frontend Node tests passed; TypeScript passed; the Vite
+production build passed; `verify-pwa-build.mjs` confirmed exactly nine precache
+entries and no video/private data. The full repository gate passed: 514 Python
+tests, 79 deselected, the known `audioop` warning, Ruff clean and strict mypy
+clean over 83 source files.
+
+**Contracts touched:** none.
+
+**Decisions made:**
+- The watch page upgrades directly into the normal For You surface, including
+  bottom navigation, instead of a one-video collection that would still be a
+  product dead end.
+- The final clip-id path segment is authoritative. The title slug is decorative,
+  and the prerendered payload is accepted only when its id matches the route.
+- The original static article remains fully functional without JavaScript. Its
+  structured data and social metadata are retained while the built app module
+  provides progressive enhancement.
+- No feed gesture, snap or media-policy file changed; the four-source scheduling
+  limit remains owned by the existing player.
+
+**Observations (not fixed, out of scope):** the checked-in local frontend env has
+only the Clerk development key, so a local full-catalogue prerender cannot query
+Supabase. The generator's real-row shape and no-environment fallback are covered
+by tests; the production deploy supplies the public Supabase values.
+
+**Blocked / needs a decision:** none. Production deployment and three live
+clip-parity checks remain before this row becomes DONE.
+
+**Next agent should know:** `web/src/clip-entry.ts` is the trust boundary for the
+embedded payload. Keep route identity authoritative and never let a slug or
+unvalidated JSON choose the clip. Generated clip HTML must continue to be
+written only after the Vite build so it stays outside the service-worker cache.

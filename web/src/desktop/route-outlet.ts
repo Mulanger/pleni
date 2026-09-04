@@ -2,6 +2,7 @@ import type { AppRoute } from "../navigation";
 
 export type DesktopRouteId =
   | "home"
+  | "clip"
   | "following"
   | "search"
   | "profile"
@@ -59,6 +60,16 @@ function unreachable(route: never): never {
  */
 export function describeDesktopRoute(route: AppRoute): DesktopRouteDescriptor {
   switch (route.view) {
+    case "clip":
+      return {
+        id: "clip",
+        focusKey: `clip:${route.clipId}`,
+        available: true,
+        eyebrow: "Pleni",
+        title: "Videoklipp",
+        description: "Klippet du öppnade, följt av fler aktuella riksdagsklipp.",
+        backAction: "history"
+      };
     case "tab": {
       if (route.tab === "hem") {
         return {

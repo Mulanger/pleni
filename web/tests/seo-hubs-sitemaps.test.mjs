@@ -21,6 +21,10 @@ const BUILT = readFileSync(fileURLToPath(new URL("../index.html", import.meta.ur
 function row(overrides = {}, speech = {}, source = {}) {
   return {
     id: "HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079_c01",
+    speech_id: "HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079",
+    rank_in_speech: 1,
+    archetype: "explain",
+    topic: "kollektivtrafik",
     title: "Kriget i Iran och stängningen av Hormuzsundet har inneburit",
     transcript: "Kriget i Iran har inneburit en betydande störning på energimarknaderna.",
     duration_s: 44.97,
@@ -36,10 +40,12 @@ function row(overrides = {}, speech = {}, source = {}) {
       politicians: {
         id: "490b6787-c178-42e1-9ab8-e9d233939643",
         name: "Infrastruktur- och bostadsministern Andreas Carlson (KD)",
-        role: "minister"
+        role: "minister",
+        avatar_url: "https://riketnlooigm.b-cdn.net/portraits/andreas.webp"
       },
       ...speech,
       sources: {
+        id: "source-HD10533",
         dokid: "HD10533",
         title: "Stöd till kollektivtrafiken",
         debate_type: "ip",
@@ -282,7 +288,7 @@ test("the readable name is canonical and the bare code is only an alias", () => 
 });
 
 test("a watch page links onward to canonical hub URLs", () => {
-  const html = renderClipPage(CLIP, []);
+  const html = renderClipPage(BUILT, CLIP, []);
   assert.ok(html.includes(politicianPath({ id: CLIP.politicianId, name: CLIP.name })));
   assert.ok(html.includes("/parti/kristdemokraterna"));
   assert.equal(html.includes('href="/parti/kd"'), false);

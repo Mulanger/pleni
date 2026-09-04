@@ -8,6 +8,7 @@ import { routeFromHash } from "../src/navigation.ts";
 
 const routes = [
   { hash: "#/hem/fordig", id: "home", available: true, action: "home" },
+  { hash: "#/clip/andreas/HD1_a-b_c01", id: "clip", available: true, action: "history" },
   { hash: "#/foljer", id: "following", available: true, action: "home" },
   { hash: "#/sok", id: "search", available: true, action: "home" },
   { hash: "#/profil", id: "profile", available: true, action: "home" },
@@ -85,6 +86,7 @@ test("every desktop route has a real surface and the waiting page is gone", () =
   );
   const surfaceIds = [
     "home",
+    "clip",
     "following",
     "search",
     "profile",
@@ -114,6 +116,7 @@ test("desktop route focus and Escape follow focused feed and route identity", ()
   assert.match(app, /surfaceFocusKey=/);
   assert.match(app, /showingSearchFeed \? searchFeedCollection\?\.historyId/);
   assert.match(app, /onEscape=\{closeDesktopRoute\}/);
+  assert.match(app, /case "clip":/);
   assert.match(app, /case "person-clips":/);
   assert.match(app, /case "saved-clips":/);
   assert.match(primitives, /event\.key !== "Escape"/);
@@ -145,6 +148,15 @@ test("desktop profiles reuse mobile data components and the bounded collection p
   assert.match(styles, /@media \(min-width: 1280px\)/);
   assert.match(styles, /\.person-screen--desktop \.person-scroll/);
   assert.match(styles, /\.party-screen--desktop \.person-scroll/);
+});
+
+test("desktop clip entry reuses the bounded feed player with the requested clip first", () => {
+  const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+
+  assert.match(app, /clip: route\.view === "clip"/);
+  assert.match(app, /clips=\{entryFeedClips\}/);
+  assert.match(app, /initialClipId=\{route\.clipId\}/);
+  assert.match(app, /presentation="desktop"/);
 });
 
 test("desktop search reuses the public search state and bounded result player", () => {

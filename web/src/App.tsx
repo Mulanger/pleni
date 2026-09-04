@@ -132,6 +132,7 @@ import {
   withSearchFeedHistoryState
 } from "./search/route";
 import type { SearchFeedCollection } from "./search/route";
+import { clipEntryFeed } from "./clip-entry";
 import type {
   DisabledSearchFacet,
   SearchAmbiguityOption,
@@ -148,6 +149,7 @@ import {
   loadPolitician,
   loadPoliticiansByIds,
   loadPoliticiansForParty,
+  loadPublishedClipById,
   loadPublishedClips,
   searchPublishedTopics,
   searchPoliticians
@@ -349,11 +351,11 @@ function useViewportSurface(): ViewportSurface {
   return surface;
 }
 
-function App() {
+function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
   const { route, navigate, backTo } = useAppNavigation();
   const viewport = useViewportSurface();
-  const tab = route.tab;
-  const feedMode = route.feedMode;
+  const tab = route.view === "clip" ? "hem" : route.tab;
+  const feedMode = route.view === "clip" ? "fordig" : route.feedMode;
   const [searchFeedCollection, setSearchFeedCollection] =
     useState<SearchFeedCollection | null>(null);
   const [searchFeedOpen, setSearchFeedOpen] = useState(false);
@@ -369,6 +371,7 @@ function App() {
     viewport === "mobile" &&
     (showingSearchFeed ||
       (route.view === "tab" && tab === "hem") ||
+      route.view === "clip" ||
       route.view === "person-clips" ||
       route.view === "party-clips" ||
       route.view === "saved-clips");
@@ -388,6 +391,7 @@ function App() {
     route.view === "person" || route.view === "person-clips" ? route.personId : null;
   const selectedPartyCode =
     route.view === "party" || route.view === "party-clips" ? route.partyCode : null;
+  const selectedEntryClipId = route.view === "clip" ? route.clipId : null;
   const [query, setQuery] = useState("");
   const [partyFilter, setPartyFilter] = useState<PartyCode | null>(null);
   const [topicSearchState, setTopicSearchState] = useState<TopicSearchState>(
@@ -402,6 +406,14 @@ function App() {
   // through the same `FeedScreen` reuses the player, the FE-4 dwell activation
   // and the FE-3 loop instrumentation rather than growing a second one.
   const [collection, setCollection] = useState<ClipCollection | null>(null);
+  const [entryClip, setEntryClip] = useState<ClipItem | null>(() =>
+    route.view === "clip" && initialClip?.id === route.clipId ? initialClip : null
+  );
+  const [entryClipLoading, setEntryClipLoading] = useState(
+    route.view === "clip" && initialClip?.id !== route.clipId
+  );
+  const [entryClipError, setEntryClipError] = useState<string | null>(null);
+  const entryFeedClips = useMemo(() => clipEntryFeed(entryClip, clips), [clips, entryClip]);
   const [person, setPerson] = useState<Politician | null>(null);
   const [personClips, setPersonClips] = useState<ClipItem[]>([]);
   const [personLoading, setPersonLoading] = useState(false);
@@ -960,6 +972,50 @@ function App() {
   ]);
 
   /**
+   * A public watch URL is identified by the final clip id, never by its
+   * decorative title slug. The prerendered bootstrap usually makes this
+   * synchronous; this fetch is the direct-navigation and stale-page fallback.
+   */
+  useEffect(() => {
+    if (selectedEntryClipId === null) {
+      setEntryClip(null);
+      setEntryClipLoading(false);
+      setEntryClipError(null);
+      return;
+    }
+    if (initialClip?.id === selectedEntryClipId) {
+      setEntryClip(initialClip);
+      setEntryClipLoading(false);
+      setEntryClipError(null);
+      return;
+    }
+
+    let active = true;
+    setEntryClip(null);
+    setEntryClipLoading(true);
+    setEntryClipError(null);
+    void loadPublishedClipById(selectedEntryClipId)
+      .then((clip) => {
+        if (!active) return;
+        setEntryClip(clip);
+        if (clip === null) {
+          setEntryClipError("Klippet är inte längre tillgängligt.");
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        setEntryClip(null);
+        setEntryClipError("Klippet kunde inte hämtas. Försök igen om en stund.");
+      })
+      .finally(() => {
+        if (active) setEntryClipLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [initialClip, selectedEntryClipId]);
+
+  /**
    * The open person page, loaded from `public.politicians` rather than derived
    * from the feed.
    *
@@ -1170,6 +1226,9 @@ function App() {
       return;
     }
     switch (route.view) {
+      case "clip":
+        backTo({ view: "tab", tab: "hem", feedMode: "fordig" });
+        return;
       case "person":
       case "party":
         backTo({ view: "tab", tab: route.tab, feedMode });
@@ -1367,6 +1426,29 @@ function App() {
                     onOpenPerson={openPerson}
                   />
                 ),
+                clip: route.view === "clip" ? (
+                  <FeedScreen
+                    presentation="desktop"
+                    clips={entryFeedClips}
+                    feedMode="fordig"
+                    setFeedMode={changeFeedMode}
+                    playbackSuspended={showOnboarding}
+                    muted={muted}
+                    setMuted={setMuted}
+                    liked={liked}
+                    saved={saved}
+                    following={following}
+                    loading={entryClipLoading}
+                    clipSource={clipSource}
+                    feedError={entryClipError}
+                    onLike={toggleLikeClip}
+                    onSave={toggleSaveClip}
+                    onToggleFollow={toggleFollowPolitician}
+                    onOpenPerson={openPerson}
+                    initialClipId={route.clipId}
+                    emptyMessage="Klippet är inte längre tillgängligt."
+                  />
+                ) : null,
                 person: route.view === "person" ? (
                   <PersonScreen
                     presentation="desktop"
@@ -1654,7 +1736,7 @@ function App() {
           <>
             {tab === "hem" && (
               <FeedScreen
-                clips={clips}
+                clips={route.view === "clip" ? entryFeedClips : clips}
                 feedMode={feedMode}
                 setFeedMode={changeFeedMode}
                 playbackSuspended={showOnboarding}
@@ -1663,15 +1745,19 @@ function App() {
                 liked={liked}
                 saved={saved}
                 following={following}
-                loading={loading}
+                loading={route.view === "clip" ? entryClipLoading : loading}
                 clipSource={clipSource}
-                feedError={feedError}
+                feedError={route.view === "clip" ? entryClipError : feedError}
                 onRefresh={refreshFeed}
                 refreshing={manualRefreshing}
                 onLike={toggleLikeClip}
                 onSave={toggleSaveClip}
                 onToggleFollow={toggleFollowPolitician}
                 onOpenPerson={openPerson}
+                initialClipId={route.view === "clip" ? route.clipId : null}
+                emptyMessage={
+                  route.view === "clip" ? "Klippet är inte längre tillgängligt." : undefined
+                }
               />
             )}
             {tab === "foljer" && (

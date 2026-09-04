@@ -89,13 +89,13 @@ This is not a compromise. It gives crawlers a fully-formed document with zero
 render budget spent, it survives a Supabase outage (the pages are already on
 disk), and it adds no runtime cost.
 
-**Amended during SEO2:** a clip watch page is a standalone document and does
-not boot the SPA. It carries inlined CSS, a real `<video controls poster src>`,
-the transcript, the facts, the Riksdagen link and links into the app — no
-`<div id="root">`, no module script. That removes the cloaking risk entirely
-and makes the poster the LCP element. Shell pages for app routes do boot the
-SPA, because that is all they are for. See ADR 014's amendment; closing the
-swipe-feed gap for a Google visitor is SEO2b, below.
+**Amended during SEO2 and SEO2b:** a clip watch page sends a complete static
+document first: a real `<video controls poster src>`, the transcript, facts,
+Riksdagen link and crawlable onward links. The same document now also boots the
+SPA and replaces that first view with the same clip at the head of Plenis normal
+För dig-flöde. The route id is authoritative and the build-time clip row is
+embedded as an inert bootstrap payload, so no second request or blank player is
+needed before the transition. See ADR 014's first and fourth amendments.
 
 ### 3.2 URL scheme
 
@@ -197,8 +197,8 @@ Allowed states: `NOT STARTED`, `IN PROGRESS`, `DONE`, `BLOCKED`. A row becomes
 |---|---|---|---|
 | SEO0 | Crawl foundation, host facts, baseline | DONE | `pleni.se` domain-property access confirmed in Google Search Console 2026-09-03. `https://pleni.se/` reports “URL is on Google” and “Page is indexed”; baseline is 1 indexed URL. Live title is “Riksdagsdebatter i kortformat”, the description and social metadata agree, and the current 96 px Pleni favicon is live at `https://pleni.se/favicon-pleni-20260904.png`. Google accepted a fresh omindexing request after deploy `e1e1ddc` on 2026-09-04 |
 | SEO1 | Path routing alongside hash | DONE | Fresh load of `https://pleni.se/#/party/M` rewrote to `https://pleni.se/parti/moderaterna/` on production 2026-09-03; the party route loaded and the mobile feed remained playable |
-| SEO2 | Prerendered clip watch pages | DONE | `https://pleni.se/klipp/andreas-carlson-stod-till-kollektivtrafiken/HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079_c01/` returned direct 200 with video, 772-character transcript and Riksdagen link, with no module script, on 2026-09-03 |
-| SEO2b | In-app clip route so a watch page can open the feed | NOT STARTED | — |
+| SEO2 | Prerendered clip watch pages | DONE | `https://pleni.se/klipp/andreas-carlson-stod-till-kollektivtrafiken/HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079_c01/` returned direct 200 with video, 772-character transcript and Riksdagen link on 2026-09-03; SEO2b retains that complete pre-JavaScript document while adding the app transition |
+| SEO2b | In-app clip route so a watch page can open the feed | IN PROGRESS | Local implementation and all acceptance gates are green; production deployment and three real-clip parity checks remain |
 | SEO3 | Politician, party and debate hubs | DONE | Direct 200 verified 2026-09-03 for `https://pleni.se/parti/moderaterna/`, `https://pleni.se/politiker/andreas-carlson/490b6787-c178-42e1-9ab8-e9d233939643/` and `https://pleni.se/debatt/stod-till-kollektivtrafiken/HD10533/` |
 | SEO4 | Topic pages | DEFERRED | `clips.topic` is null for all 5 514 clips; needs a pipeline taxonomy first. Nothing depends on it |
 | SEO5 | Sitemaps and search-engine submission | IN PROGRESS | Google accepted `https://pleni.se/sitemap.xml` as a successful sitemap index on 2026-09-03. A representative watch URL was added to Google's priority crawl queue and its live test passed. Bing submission was explicitly deferred by the owner |
@@ -210,8 +210,8 @@ Allowed states: `NOT STARTED`, `IN PROGRESS`, `DONE`, `BLOCKED`. A row becomes
 Search Console is active. SEO5 awaits the owner-deferred Bing submission, SEO6
 awaits an owner decision because InstaPods exposes no deploy-hook URL, SEO7
 awaits three PageSpeed measurements, and SEO8 includes the four-week result
-measurement. SEO4 is deferred on missing data and SEO2b remains a separate
-product chunk.
+measurement. SEO4 is deferred on missing data; SEO2b awaits its production
+deployment and real-clip parity evidence.
 
 Update this table in the same commit as the chunk's `PROGRESS.md` handoff.
 Production evidence must name the live URL checked and what was observed. A local
@@ -407,7 +407,7 @@ product.**
 **Objective:** let a visitor who lands on a watch page from Google continue into
 the swipe feed, instead of following a link back to `/senaste`.
 
-**Why it is its own chunk.** SEO2's watch pages are deliberately standalone: no
+**Why it is its own chunk.** SEO2's watch pages were deliberately standalone: no
 `<div id="root">`, no module script, so there is no hydration and no way for the
 static and dynamic views to disagree. Giving the app a `clip` route means a new
 `AppRoute` member, a single-clip collection loader, a branch in `App.tsx`'s
@@ -416,12 +416,13 @@ guarantee between the prerendered markup and the hydrated view. That is real
 product work and it must not be squeezed into the chunk that makes the catalogue
 indexable.
 
-**Build.** Add `{ view: "clip"; clipId: string }` to `AppRoute` with
+**Build.** Add a `clip` member to `AppRoute` with
 `/klipp/<slug>/<clip_id>` as its path — the slug is already decorative and
-ignored by the parser. Load the clip by id through `web/src/supabase.ts` and
-mount it in the existing bounded `CollectionScreen`, the same way the search
-feed hands off a scoped collection today. Then make the watch page boot the SPA,
-and keep the static markup as the pre-hydration view.
+ignored for identity by the parser. Load the clip by id through
+`web/src/supabase.ts` when no valid build-time payload exists, and mount it first
+in the existing bounded `FeedScreen`; the normal För dig slate follows it with
+duplicates removed. Then make the watch page boot the SPA, while keeping the
+complete static markup as the pre-JavaScript view.
 
 **Acceptance:** the hydrated view shows the same clip the static markup shows,
 verified on three real production clips. A clip whose `politicianId` is null
@@ -586,13 +587,13 @@ if the prerender writes zero pages, it must not replace a good deploy.
 
 **Objective:** a visitor arriving cold from Google gets a fast, stable page.
 
-**Build.** The poster image is the LCP element: `preload` it, give it explicit
-dimensions, and never let the SPA's hydration shift it (`CLS`). Keep the watch
-page's video at `preload="metadata"` so a cold visit does not pull megabytes
-before intent — this is a *watch page*, not the feed, and the feed's four-source
-directional scheduler in `media-policy.ts` is not involved and must not be
-changed. Defer non-critical work: Clerk, the recommendation layer and the service
-worker registration should not block first paint on a watch page.
+**Build.** The static poster is the first LCP candidate: `preload` it, give the
+video explicit dimensions, and avoid a visible shift when the SPA takes over.
+Keep the pre-JavaScript watch video at `preload="metadata"` so the initial
+document does not pull megabytes before intent. After the app boots, the existing
+four-source directional scheduler in `media-policy.ts` owns playback unchanged.
+Defer non-critical work: Clerk, the recommendation layer and service-worker
+registration should not block first paint on a watch page.
 
 **Acceptance:** PageSpeed Insights mobile scores are recorded for three watch
 pages, with LCP under 2.5 s and CLS under 0.1 on a throttled mobile profile. The

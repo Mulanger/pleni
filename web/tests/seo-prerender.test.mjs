@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { APP_SHELL_ROUTES } from "../src/navigation.ts";
+import { parseClipBootstrap } from "../src/clip-entry.ts";
 import {
   clipDescription,
   clipHeading,
@@ -30,6 +31,10 @@ import { renderClipPage, renderShellPage } from "../seo/templates.mjs";
 
 const ROW = {
   id: "HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079_c01",
+  speech_id: "HD10533_47a16b6f-7d66-f111-8b6f-6805cafea079",
+  rank_in_speech: 1,
+  archetype: "explain",
+  topic: "kollektivtrafik",
   title: "Kriget i Iran och stängningen av Hormuzsundet har inneburit",
   transcript:
     "Kriget i Iran och stängningen av Hormuzsundet har inneburit en betydande störning på de globala energimarknaderna. Högre energipriser medför att hushållen förlorar köpkraft.",
@@ -45,9 +50,11 @@ const ROW = {
     politicians: {
       id: "490b6787-c178-42e1-9ab8-e9d233939643",
       name: "Infrastruktur- och bostadsministern Andreas Carlson (KD)",
-      role: "minister"
+      role: "minister",
+      avatar_url: "https://riketnlooigm.b-cdn.net/portraits/andreas.webp"
     },
     sources: {
+      id: "source-HD10533",
       dokid: "HD10533",
       title: "Stöd till kollektivtrafiken",
       debate_type: "ip",
@@ -58,6 +65,7 @@ const ROW = {
 };
 
 const CLIP = normalizeClip(ROW);
+const BUILT = readFileSync(fileURLToPath(new URL("../index.html", import.meta.url)), "utf8");
 
 function ldGraph(html) {
   const block = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
@@ -151,7 +159,7 @@ test("durations serialize as ISO 8601", () => {
 });
 
 test("the watch page shows video, transcript and source without any script", () => {
-  const html = renderClipPage(CLIP, []);
+  const html = renderClipPage(BUILT, CLIP, []);
   const withoutScripts = html.replace(/<script[\s\S]*?<\/script>/g, "");
 
   assert.match(withoutScripts, /<video[^>]*controls/);
@@ -166,16 +174,19 @@ test("the watch page shows video, transcript and source without any script", () 
   assert.match(html, /<meta name="twitter:image:alt" content="Andreas Carlson \(KD\) om Stöd till kollektivtrafiken" \/>/);
   assert.match(
     html,
-    /<meta name="robots" content="max-snippet:-1, max-image-preview:large, max-video-preview:-1" \/>/
+    /content="max-snippet:-1, max-image-preview:large, max-video-preview:-1"/
   );
 
-  // Nothing on a watch page may depend on the SPA bundle.
-  assert.equal(/<script type="module"/.test(html), false);
-  assert.equal(html.includes('id="root"'), false);
+  // The complete page is the pre-hydration fallback; the same URL also boots
+  // the feed so the selected clip can lead into normal Pleni discovery.
+  assert.match(html, /<div id="root"><article class="seo-watch">/);
+  assert.match(html, /<script type="module"/);
+  assert.match(html, /id="pleni-clip-bootstrap" type="application\/json"/);
+  assert.match(html, /<link rel="preload" as="image" href="https:\/\/riketnlooigm/);
 });
 
 test("the watch page publishes a complete VideoObject and BreadcrumbList", () => {
-  const [video, crumbs] = ldGraph(renderClipPage(CLIP, []));
+  const [video, crumbs] = ldGraph(renderClipPage(BUILT, CLIP, []));
 
   assert.equal(video["@type"], "VideoObject");
   for (const required of ["name", "thumbnailUrl", "uploadDate"]) {
@@ -203,7 +214,7 @@ test("a clip with no linked politician still renders and drops the person crumb"
   });
   assert.equal(orphan.politicianId, null);
 
-  const html = renderClipPage(orphan, []);
+  const html = renderClipPage(BUILT, orphan, []);
   const [, crumbs] = ldGraph(html);
   assert.deepEqual(
     crumbs.itemListElement.map((item) => item.position),
@@ -211,6 +222,14 @@ test("a clip with no linked politician still renders and drops the person crumb"
   );
   assert.equal(html.includes("/politiker/null"), false);
   assert.equal(html.includes("Alla klipp med"), false);
+
+  const bootstrapBlock = html.match(
+    /<script id="pleni-clip-bootstrap" type="application\/json">([\s\S]*?)<\/script>/
+  );
+  assert.ok(bootstrapBlock);
+  const bootstrapped = parseClipBootstrap(bootstrapBlock[1], orphan.id);
+  assert.equal(bootstrapped?.politicianId, null);
+  assert.equal(bootstrapped?.id, orphan.id);
 });
 
 test("hostile text cannot break out of markup or the JSON-LD block", () => {
@@ -222,7 +241,7 @@ test("hostile text cannot break out of markup or the JSON-LD block", () => {
       sources: { ...ROW.speeches.sources, title: '"><img src=x onerror=alert(1)>' }
     }
   });
-  const html = renderClipPage(nasty, []);
+  const html = renderClipPage(BUILT, nasty, []);
 
   // What matters is that no attacker-supplied tag can ever open. Inside the
   // JSON-LD block `<` is escaped to `<`, so the words `onerror=alert`
@@ -232,9 +251,14 @@ test("hostile text cannot break out of markup or the JSON-LD block", () => {
   assert.equal(/<b>fetstil<\/b>/.test(html), false);
   assert.equal(html.includes("</script><script>"), false);
 
-  // Exactly one script element, and it is the JSON-LD block.
+  // Only the intentional JSON-LD, inert clip payload and built SPA module may
+  // exist; hostile source text cannot create another script element.
   const scripts = [...html.matchAll(/<script\b[^>]*>/g)].map((match) => match[0]);
-  assert.deepEqual(scripts, ['<script type="application/ld+json">']);
+  assert.deepEqual(scripts, [
+    '<script type="application/ld+json">',
+    '<script id="pleni-clip-bootstrap" type="application/json">',
+    '<script type="module" src="/src/main.tsx">'
+  ]);
 
   // The JSON-LD must still parse, with the transcript intact inside it.
   const [video] = ldGraph(html);
@@ -246,17 +270,13 @@ test("hostile text cannot break out of markup or the JSON-LD block", () => {
 
 test("related clips link to real neighbouring pages", () => {
   const other = normalizeClip({ ...ROW, id: "HD10533_other_c02" });
-  const html = renderClipPage(CLIP, [other]);
+  const html = renderClipPage(BUILT, CLIP, [other]);
   assert.ok(html.includes(clipPath(other)));
   assert.match(html, /Fler klipp från samma debatt/);
 });
 
 test("shells inherit the built document and carry their own identity", () => {
-  const builtHtml = readFileSync(
-    fileURLToPath(new URL("../index.html", import.meta.url)),
-    "utf8"
-  );
-  const shell = renderShellPage(builtHtml, {
+  const shell = renderShellPage(BUILT, {
     title: "Sök i riksdagsdebatter | Pleni",
     description: "Sök bland klipp från svenska riksdagsdebatter.",
     canonical: "https://pleni.se/sok/",

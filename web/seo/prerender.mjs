@@ -46,15 +46,19 @@ const RELATED_PER_CLIP = 6;
 
 const CLIP_SELECT = [
   "id",
+  "speech_id",
+  "rank_in_speech",
   "title",
   "transcript",
+  "topic",
+  "archetype",
   "duration_s",
   "url_540x960",
   "thumb_url",
   "published_at",
   "speeches(speaker_name,party,anforandetyp,politician_id," +
-    "politicians(id,name,role)," +
-    "sources(dokid,title,debate_type,debate_date,source_url))"
+    "politicians(id,name,role,avatar_url)," +
+    "sources(id,dokid,title,debate_type,debate_date,source_url))"
 ].join(",");
 
 /**
@@ -295,7 +299,7 @@ async function main() {
     const neighbours = (byDebate.get(clip.dokid) ?? [])
       .filter((other) => other.id !== clip.id)
       .slice(0, RELATED_PER_CLIP);
-    await writePage(clipPath(clip), renderClipPage(clip, neighbours));
+    await writePage(clipPath(clip), renderClipPage(builtHtml, clip, neighbours));
     written += 1;
   }
   log("clip watch pages written", { pages: written, skipped, debates: byDebate.size });

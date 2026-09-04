@@ -748,6 +748,15 @@ export async function loadClipsByIds(ids: string[]): Promise<ClipItem[]> {
   return ids.map((id) => byId.get(id)).filter((clip): clip is ClipItem => clip !== undefined);
 }
 
+/** One exact public clip for a prerendered watch-page entry route. */
+export async function loadPublishedClipById(id: string): Promise<ClipItem | null> {
+  const normalized = id.trim();
+  if (!normalized) {
+    return null;
+  }
+  return (await loadClipsByIds([normalized]))[0] ?? null;
+}
+
 /**
  * Every public clip in one debate, ordered by its position in the master video.
  *

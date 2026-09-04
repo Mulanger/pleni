@@ -278,3 +278,35 @@ and two-hop redirect. The route parser remains tolerant of slashless inbound
 URLs for compatibility; identity continues to live in the final non-empty path
 segment. Tests assert the slash form in both the browser router and the
 prerendered surface.
+
+---
+
+## Fourth amendment — watch pages progressively enhance into the feed — 2026-09-04
+
+The first amendment's standalone-watch-page decision is reversed for clip URLs.
+Its indexing safeguards remain: the first HTML response still contains the
+prominent `<video controls poster src>`, full transcript, factual metadata,
+Riksdagen source and crawlable internal links. JavaScript is not required to
+discover, understand or play the selected video.
+
+The document now also retains the built app shell's module and `#root`. The
+exact normalized clip row is serialized into a non-executable
+`application/json` bootstrap block; on mount, the app accepts it only when its
+id equals the authoritative final path segment. Missing, stale or malformed
+payloads fall back to an anonymous public single-clip read. The decorative slug
+never selects content.
+
+React replaces the static watch article with Pleni's existing `FeedScreen`. The
+requested clip is first, followed by the normal För dig slate with that id
+deduplicated. This deliberately reuses the same playback ownership, autoplay
+fallback, snap behaviour and four-source media window as every other feed; no
+second video-player implementation or SEO-only scheduler exists. The normal
+bottom navigation remains available, so a Google visitor has landed in the
+product rather than at a dead-end document.
+
+This is not cloaking: the indexed and enhanced views use the same clip id,
+video, poster, transcript and source row. Tests strip every script and assert
+that the complete static page remains, parse the bootstrap through the browser
+boundary, cover a null `politicianId`, and keep the desktop route switch
+exhaustive. The production build still precaches exactly nine app-shell entries
+and no generated clip HTML.

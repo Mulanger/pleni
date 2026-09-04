@@ -170,18 +170,28 @@ export function normalizeClip(row) {
 
   return {
     id: row.id,
+    speechId: row.speech_id ?? "",
+    sourceId: source.id ?? null,
     party: speech.party ?? null,
     anforandetyp: speech.anforandetyp ?? null,
+    archetype: row.archetype ?? "",
+    topic: row.topic ?? null,
     name,
     displayName,
+    speakerName: speech.speaker_name ?? displayName,
     politicianId: politician?.id ?? null,
+    politicianName: politician?.name ?? null,
     politicianRole: politician?.role ?? null,
+    politicianAvatarUrl: politician?.avatar_url ?? null,
     title: row.title ?? null,
     transcript: (row.transcript ?? "").trim(),
     durationS: Number(row.duration_s) || 0,
     videoUrl: row.url_540x960,
     thumbUrl: row.thumb_url,
     publishedAt: row.published_at ?? null,
+    rank: Number.isInteger(row.rank_in_speech) && row.rank_in_speech > 0
+      ? row.rank_in_speech
+      : 1,
     debateTitle: source.title ?? "",
     debateType: source.debate_type ?? null,
     debateDate: source.debate_date ?? null,
