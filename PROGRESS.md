@@ -6710,3 +6710,45 @@ displayed title and snippet and may take several days to recrawl the page.
 **Next agent should know:** the homepage metadata strings are guarded by
 `web/tests/seo-foundation.test.mjs`; shell identity replacement and watch-card
 metadata are guarded by `web/tests/seo-prerender.test.mjs`.
+
+## SEO0 — Search favicon and concise homepage title — DONE 2026-09-04
+
+**Built:** `web/index.html` now uses the exact homepage title
+“Riksdagsdebatter i kortformat” across the document, Open Graph and Twitter/X
+metadata. `web/public/favicon-pleni-20260904.png` is a 96×96, 7 KB browser and
+Google Search favicon derived from the latest approved white Pleni mark on its
+blue edge-to-edge field. `web/seo/templates.mjs` gives every prerendered page
+the same stable favicon URL. The PWA verifier and favicon/SEO tests guard the
+new asset, dimensions and links. The superseded 32 px favicon remains available
+to existing clients but is excluded from the service-worker precache.
+
+**Tests:** 514 Python tests passed with 79 deselected and the known `audioop`
+warning; Ruff and strict mypy passed. All 140 frontend Node tests, TypeScript
+and Vite passed. The production-data prerender wrote 7 130 HTML and eight XML
+files; the service worker still precaches exactly nine entries.
+
+**Contracts touched:** none.
+
+**Production evidence:** InstaPods deployed `e1e1ddc` successfully in 4m 9s.
+`https://pleni.se/` returned 200 with the exact title and the versioned 96 px
+favicon link. `https://pleni.se/favicon-pleni-20260904.png` returned 200 as
+`image/png` with 7 238 bytes, and the representative Andreas Carlson watch page
+also referenced it. Google Search Console reported the homepage as indexed and
+accepted it into the priority crawl queue after this release.
+
+**Decisions made:** kept the latest approved Pleni artwork unchanged, resized
+it to Google's recommended 48 px multiple and used a new stable URL so browser
+and crawler caches do not keep selecting the older favicon. The WebSite and
+Organization identity still name Pleni; only the visible homepage result title
+was shortened per the owner's wording.
+
+**Observations (not fixed, out of scope):** the full SEO deployment now takes
+4m 9s because it publishes 7 130 HTML files. It completed without timeout or a
+file-limit error.
+
+**Blocked / needs a decision:** none. Google controls when search results are
+recrawled and may continue to show its cached favicon/title for days or weeks.
+
+**Next agent should know:** the current search favicon URL is deliberately
+versioned. Do not reuse that URL for different artwork; publish another stable
+versioned URL and request homepage reindexing instead.
