@@ -7281,3 +7281,58 @@ link configuration only. The linked report was verified directly in GA4.
 **Next agent should know:** the GA4 Reports navigation now contains a published
 Search Console section. Do not enable Advanced Consent Mode to increase totals;
 the released no-tag-before-consent boundary remains intentional.
+
+## UI20.4b — Desktop account page — DONE 2026-09-05
+
+**Built:** integrated `4602b2a` on top of the later profile-pagination, search
+and UI21 analytics releases. `web/src/App.tsx` now uses the desktop account
+masthead, Pleni-owned Clerk identity and sidebar row, real saved/followed facts,
+quiet account actions, a primary/secondary settings layout and a signed-out
+account panel. `web/src/styles.css` supplies the 380 px rail and account-specific
+desktop treatment. `web/tests/desktop-account.test.mjs` covers the new surface.
+
+**Tests:** all 189 frontend Node tests pass; TypeScript passes; the production
+Vite/PWA build passes and still precaches exactly nine app-shell entries. Full
+repository gate green: 514 Python tests, 79 deselected, the known `audioop`
+warning, Ruff clean and strict mypy clean over 83 source files.
+
+**Local verification:** desktop Chrome rendered the new masthead and split
+account surface with the non-Clerk fallback, analytics controls and all legal
+rows in the intended columns. A narrow in-app browser rendered the released
+mobile structure, including its existing analytics entry. No browser-console
+error was introduced; the expected network notice remained because this clean
+release checkout has no production frontend environment values.
+
+**Contracts touched:** none. No migration or dependency change.
+
+**Decisions made:**
+- Commits `651afbf` and `e8a05d5` were already ancestors of `main`; only the
+  account commit needed integration.
+- The newer *Analys och cookies* group was retained once and composed in both
+  layouts. On desktop it is the first settings group in the right rail, before
+  account-bound data actions.
+- The destructive colour treatment is desktop-only. The source commit applied
+  `tone="danger"` through a shared row and would therefore have changed the
+  released mobile design; the merged version conditions that tone on the
+  desktop presentation.
+- Desktop export, reset and delete remain hidden while signed out because they
+  require a Clerk-bound recommendation profile. The released mobile behavior
+  is otherwise unchanged.
+
+**Observations (not fixed, out of scope):** Clerk's own sign-in and account
+modals retain their default theme. They can be themed separately without
+changing this page architecture.
+
+**Blocked / needs a decision:** none.
+
+**Production verification:** InstaPods completed commit `aec098d` successfully
+in 49 seconds. A cache-bypassing production read returned
+`index-CGO6AbXG.js` and `index-CNr0THSH.css`; the stylesheet hash matches the
+locally accepted build. Desktop Chrome at `pleni.se/profil/` rendered the new
+signed-out masthead, the account panel, the analytics group before legal
+information and no invented account totals.
+
+**Next agent should know:** the production Chrome session was signed out, so a
+real Clerk name, email and `user.imageUrl` were not visually exercised. Their
+render paths are covered by the account and reactive-viewer tests; perform the
+final visual smoke the next time the owner is already signed in.
