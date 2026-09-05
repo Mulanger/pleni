@@ -1847,6 +1847,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
                       onOpenLatest={() => changeFeedMode("senaste")}
                       onOpenSearch={() => navigate({ view: "tab", tab: "sok", feedMode })}
                       onOpenProfile={() => navigate({ view: "tab", tab: "profil", feedMode })}
+                      onOpenLegal={openLegal}
                       onOpenPerson={openPerson}
                       onOpenParty={openParty}
                       onTogglePerson={toggleFollowPolitician}
@@ -2088,6 +2089,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
                 onOpenLatest={() => changeFeedMode("senaste")}
                 onOpenSearch={() => navigate({ view: "tab", tab: "sok", feedMode })}
                 onOpenProfile={() => navigate({ view: "tab", tab: "profil", feedMode })}
+                onOpenLegal={openLegal}
                 onOpenPerson={openPerson}
                 onOpenParty={openParty}
                 onTogglePerson={toggleFollowPolitician}
@@ -4809,6 +4811,7 @@ function FollowingScreen({
   onOpenLatest,
   onOpenSearch,
   onOpenProfile,
+  onOpenLegal,
   onOpenPerson,
   onOpenParty,
   onTogglePerson,
@@ -4827,6 +4830,7 @@ function FollowingScreen({
   onOpenLatest: () => void;
   onOpenSearch: () => void;
   onOpenProfile: () => void;
+  onOpenLegal: (page: LegalPageId) => void;
   onOpenPerson: (personId: string) => void;
   onOpenParty: (party: PartyCode) => void;
   onTogglePerson: (personId: string) => void;
@@ -4927,29 +4931,7 @@ function FollowingScreen({
               </div>
 
               <aside className="desktop-following-auth" aria-label="Logga in eller skapa konto">
-                <span className="desktop-following-kicker">Pleni-konto</span>
-                <h2>Behåll dina följningar</h2>
-                <p>Logga in för att följa, spara och bygga ditt personliga flöde.</p>
-                <button
-                  type="button"
-                  className="account-button account-button--primary"
-                  disabled={!clerkEnabled}
-                  onClick={onSignIn}
-                >
-                  Logga in
-                </button>
-                {clerkEnabled ? (
-                  <SignUpButton mode="modal">
-                    <button type="button" className="account-button">Skapa konto</button>
-                  </SignUpButton>
-                ) : (
-                  <button type="button" className="account-button" disabled>
-                    Skapa konto
-                  </button>
-                )}
-                <small>
-                  Konto krävs för följningar. Senaste och sök fungerar utan inloggning.
-                </small>
+                <DesktopSignInPanel onOpenLegal={onOpenLegal} onSignIn={onSignIn} />
               </aside>
             </div>
           )}
@@ -6857,7 +6839,13 @@ function DesktopAccountActions() {
  * The same sign-in module the desktop Följer page uses. One component, two
  * pages, so "you need an account" reads the same wherever it appears.
  */
-function DesktopSignInPanel({ onOpenLegal }: { onOpenLegal: (page: LegalPageId) => void }) {
+function DesktopSignInPanel({
+  onOpenLegal,
+  onSignIn
+}: {
+  onOpenLegal: (page: LegalPageId) => void;
+  onSignIn?: () => void;
+}) {
   return (
     <div className="desktop-signin-panel">
       <span className="desktop-signin-mark" aria-hidden="true">
@@ -6868,16 +6856,33 @@ function DesktopSignInPanel({ onOpenLegal }: { onOpenLegal: (page: LegalPageId) 
         Sparade klipp, följningar och gillningar hör till kontot. Utan konto fungerar
         flödet, sök och uppspelning precis som vanligt.
       </p>
-      <SignInButton mode="modal">
-        <button type="button" className="desktop-account-button is-primary">
+      {onSignIn ? (
+        <button
+          type="button"
+          className="desktop-account-button is-primary"
+          disabled={!clerkEnabled}
+          onClick={onSignIn}
+        >
           Logga in
         </button>
-      </SignInButton>
-      <SignUpButton mode="modal">
-        <button type="button" className="desktop-account-button">
+      ) : (
+        <SignInButton mode="modal">
+          <button type="button" className="desktop-account-button is-primary">
+            Logga in
+          </button>
+        </SignInButton>
+      )}
+      {clerkEnabled ? (
+        <SignUpButton mode="modal">
+          <button type="button" className="desktop-account-button">
+            Skapa konto
+          </button>
+        </SignUpButton>
+      ) : (
+        <button type="button" className="desktop-account-button" disabled>
           Skapa konto
         </button>
-      </SignUpButton>
+      )}
       <p className="desktop-signin-foot">
         Genom att skapa konto godkänner du{" "}
         <button type="button" onClick={() => onOpenLegal("terms")}>

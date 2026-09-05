@@ -175,3 +175,20 @@ test("förstagångsfrågan väntar tills sidan laddat och håller texten kort", 
   );
   assert.doesNotMatch(bannerSource, /fungerar lika bra om du tackar nej/i);
 });
+
+test("cookiepanelen använder en enkel staplad Pleni-design", async () => {
+  const bannerSource = await readFile(
+    new URL("../src/AnalyticsConsentBanner.tsx", import.meta.url),
+    "utf8"
+  );
+  const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+
+  assert.match(bannerSource, /Cookies och analys/);
+  assert.match(bannerSource, /cookiepolicy/);
+  assert.match(bannerSource, /Endast nödvändiga cookies/);
+  assert.match(bannerSource, /Tillåt analyscookies/);
+  assert.doesNotMatch(bannerSource, /BarChart3|ChevronDown|Vad mäts/);
+  assert.match(styles, /\.analytics-consent\s*\{[\s\S]*?max-width:\s*412px/);
+  assert.match(styles, /\.analytics-consent-actions\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/);
+  assert.match(styles, /\.analytics-consent-actions button:last-child\s*\{[^}]*background:\s*#13284d/);
+});

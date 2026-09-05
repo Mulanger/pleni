@@ -82,6 +82,7 @@ test("data controls need the account they act on", () => {
 
 test("the sign-in module is the one the Följer page uses", () => {
   assert.match(app, /function DesktopSignInPanel\(/);
+  assert.match(app, /<DesktopSignInPanel onOpenLegal=\{onOpenLegal\} onSignIn=\{onSignIn\} \/>/);
   assert.match(app, /<SignInButton mode="modal">/);
   assert.match(app, /<SignUpButton mode="modal">/);
   assert.match(app, /Är du under 13 år behöver du din vårdnadshavares tillstånd/);

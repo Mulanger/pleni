@@ -20,6 +20,8 @@ test("signed-out desktop Following explains value without inventing zero counts"
   assert.match(desktopBranch, /Ingenting används av För dig innan du själv aktiverar personalisering/);
   assert.match(desktopBranch, /Se senaste klippen/);
   assert.match(desktopBranch, /Sök politiker och partier/);
+  assert.match(desktopBranch, /<DesktopSignInPanel onOpenLegal=\{onOpenLegal\} onSignIn=\{onSignIn\} \/>/);
+  assert.doesNotMatch(desktopBranch, /Behåll dina följningar/);
   assert.doesNotMatch(desktopBranch, /0 partier · 0 personer/);
 });
 

@@ -6026,7 +6026,6 @@ a {
   }
 
   .desktop-following-explainer h2,
-  .desktop-following-auth h2,
   .desktop-following-empty h2 {
     margin: 9px 0 12px;
     color: #17233c;
@@ -6105,32 +6104,15 @@ a {
   }
 
   .desktop-following-auth {
-    display: grid;
-    padding: 30px;
-    border: 1px solid #d8d8d1;
-    border-radius: 18px;
-    background: #fff;
-    box-shadow: 0 18px 48px rgba(23, 35, 60, 0.08);
+    min-width: 0;
+    align-self: start;
   }
 
-  .desktop-following-auth > p,
   .desktop-following-empty > p {
     margin: 0 0 24px;
     color: #6f6f67;
     font-size: 13.5px;
     line-height: 1.55;
-  }
-
-  .desktop-following-auth .account-button {
-    width: 100%;
-    margin-top: 10px;
-  }
-
-  .desktop-following-auth small {
-    margin-top: 18px;
-    color: #8a8a81;
-    font-size: 11.5px;
-    line-height: 1.5;
   }
 
   .desktop-following-loading,
@@ -6857,9 +6839,9 @@ a {
   bottom: max(14px, env(safe-area-inset-bottom));
   left: max(14px, env(safe-area-inset-left));
   width: auto;
-  max-width: 440px;
+  max-width: 412px;
   margin-inline: auto;
-  padding: 15px;
+  padding: 20px;
   border: 1px solid rgba(20, 24, 33, 0.14);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.98);
@@ -6872,35 +6854,28 @@ a {
 
 .analytics-consent-heading {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
-  gap: 9px;
-  align-items: start;
-}
-
-.analytics-consent-icon {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border: 1px solid #dbe4f2;
-  border-radius: 12px;
-  background: #eef4fc;
-  color: #274f86;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
 }
 
 .analytics-consent h2 {
-  margin: 1px 0 4px;
-  font-size: 15px;
+  margin: 0;
+  font-size: 18px;
   font-weight: 810;
   letter-spacing: -0.015em;
-  line-height: 1.2;
+  line-height: 1.25;
 }
 
 .analytics-consent p {
   margin: 0;
   color: #62625c;
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: 1.42;
+}
+
+.analytics-consent .analytics-consent-summary {
+  margin-top: 10px;
 }
 
 .analytics-consent-close {
@@ -6916,28 +6891,23 @@ a {
   cursor: pointer;
 }
 
-.analytics-consent-details-toggle,
 .analytics-consent-info-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin: 8px 0 0 43px;
+  display: inline;
+  margin: 0;
   padding: 0;
   border: 0;
   background: transparent;
   color: #454b54;
   cursor: pointer;
   font: inherit;
-  font-size: 11.5px;
-  font-weight: 720;
   text-decoration: underline;
-  text-decoration-color: #b7bbc1;
-  text-underline-offset: 3px;
+  text-decoration-color: #8e9299;
+  text-underline-offset: 2px;
 }
 
 .analytics-consent-details {
-  margin: 8px 0 0 43px;
-  padding-top: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
   border-top: 1px solid var(--line);
 }
 
@@ -6950,33 +6920,40 @@ a {
   font-weight: 680;
 }
 
-.analytics-consent-details .analytics-consent-info-link {
-  margin: 8px 0 0;
-}
-
 .analytics-consent-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 20px;
 }
 
 .analytics-consent-actions button {
-  min-height: 40px;
-  padding: 8px 12px;
-  border: 1px solid var(--ink);
-  border-radius: 999px;
+  min-height: 44px;
+  padding: 9px 14px;
+  border: 1px solid #d7d9dd;
+  border-radius: 10px;
   background: #fff;
   color: var(--ink);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 760;
 }
 
 .analytics-consent-actions button:last-child {
-  background: var(--ink);
+  border-color: #13284d;
+  background: #13284d;
   color: #fff;
+}
+
+.analytics-consent-actions button:first-child:hover {
+  border-color: #afb4bc;
+  background: #f8f8f7;
+}
+
+.analytics-consent-actions button:last-child:hover {
+  border-color: #1d3b6a;
+  background: #1d3b6a;
 }
 
 .analytics-consent button:focus-visible,
@@ -6995,21 +6972,21 @@ a {
     right: 24px;
     bottom: 24px;
     left: auto;
-    width: min(440px, calc(100vw - 48px));
+    width: min(412px, calc(100vw - 48px));
     margin: 0;
-    padding: 16px;
+    padding: 20px;
   }
 }
 
 @media (max-width: 430px) {
   .analytics-consent {
-    padding: 15px;
+    padding: 18px;
   }
 
   .analytics-consent-actions button {
-    min-height: 39px;
-    padding-inline: 9px;
-    font-size: 11.5px;
+    min-height: 44px;
+    padding-inline: 10px;
+    font-size: 13.5px;
   }
 }
 

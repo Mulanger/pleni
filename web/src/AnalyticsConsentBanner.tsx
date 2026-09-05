@@ -1,5 +1,4 @@
-import { BarChart3, ChevronDown, ChevronUp, X } from "lucide-react";
-import { useState } from "react";
+import { X } from "lucide-react";
 import type { AnalyticsConsentChoice } from "./analytics-consent";
 
 export function AnalyticsConsentBanner({
@@ -15,27 +14,18 @@ export function AnalyticsConsentBanner({
   onClose: () => void;
   onOpenCookieInfo: () => void;
 }) {
-  const [detailsOpen, setDetailsOpen] = useState(settingsOpen);
   return (
     <section
       className="analytics-consent"
       role="dialog"
       aria-modal="false"
       aria-labelledby="analytics-consent-title"
+      aria-describedby="analytics-consent-description"
     >
       <div className="analytics-consent-heading">
-        <span className="analytics-consent-icon" aria-hidden="true">
-          <BarChart3 size={18} />
-        </span>
-        <div>
-          <h2 id="analytics-consent-title">
-            {settingsOpen ? "Analysinställningar" : "Hjälp oss förstå vad som fungerar"}
-          </h2>
-          <p>
-            Med ditt val mäter vi sammanställd besöksstatistik och hur offentliga klipp används
-            med Google Analytics.
-          </p>
-        </div>
+        <h2 id="analytics-consent-title">
+          {settingsOpen ? "Cookie-inställningar" : "Cookies och analys"}
+        </h2>
         {settingsOpen && (
           <button type="button" className="analytics-consent-close" onClick={onClose} aria-label="Stäng analysinställningar">
             <X size={18} />
@@ -43,16 +33,16 @@ export function AnalyticsConsentBanner({
         )}
       </div>
 
-      <button
-        type="button"
-        className="analytics-consent-details-toggle"
-        aria-expanded={detailsOpen}
-        onClick={() => setDetailsOpen((open) => !open)}
-      >
-        Vad mäts?
-        {detailsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-      </button>
-      {detailsOpen && (
+      <p id="analytics-consent-description" className="analytics-consent-summary">
+        Vi använder nödvändig lagring för att Pleni ska fungera. Med ditt godkännande
+        använder vi Google Analytics för att förstå besök och videouppspelning. Läs vår{" "}
+        <button type="button" className="analytics-consent-info-link" onClick={onOpenCookieInfo}>
+          cookiepolicy
+        </button>
+        .
+      </p>
+
+      {settingsOpen && (
         <div className="analytics-consent-details">
           <p>
             Vi mäter sidbesök, kvalificerade klippvisningar och uppspelningstid. Vi
@@ -64,15 +54,12 @@ export function AnalyticsConsentBanner({
               Nuvarande val: {currentChoice === "granted" ? "analys tillåten" : "endast nödvändiga"}.
             </p>
           )}
-          <button type="button" className="analytics-consent-info-link" onClick={onOpenCookieInfo}>
-            Läs om cookies och lagring
-          </button>
         </div>
       )}
 
       <div className="analytics-consent-actions">
-        <button type="button" onClick={() => onChoose("denied")}>Endast nödvändiga</button>
-        <button type="button" onClick={() => onChoose("granted")}>Acceptera analys</button>
+        <button type="button" onClick={() => onChoose("denied")}>Endast nödvändiga cookies</button>
+        <button type="button" onClick={() => onChoose("granted")}>Tillåt analyscookies</button>
       </div>
     </section>
   );

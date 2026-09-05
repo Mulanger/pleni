@@ -7336,3 +7336,45 @@ information and no invented account totals.
 real Clerk name, email and `user.imageUrl` were not visually exercised. Their
 render paths are covered by the account and reactive-viewer tests; perform the
 final visual smoke the next time the owner is already signed in.
+
+## UI21.3 — Cookie panel and shared desktop sign-in card — DONE 2026-09-05
+
+**Built:** `web/src/AnalyticsConsentBanner.tsx` and `web/src/styles.css` now use
+a compact reference-led cookie panel with a direct policy link, two stacked
+choices and Pleni navy (`#13284d`) for the analytics action. `web/src/App.tsx`
+now composes the same `DesktopSignInPanel` on signed-out Profile and Following,
+including the same action hierarchy and legal footer.
+
+**Tests:** all 190 frontend Node tests pass; TypeScript passes; the production
+Vite/PWA build passes and still precaches exactly nine app-shell entries. Full
+repository gate green: 514 Python tests, 79 deselected, the known `audioop`
+warning, Ruff clean and strict mypy clean over 83 source files.
+
+**Visual verification:** a fresh-origin desktop Chrome visit showed the consent
+panel only after the existing page-load delay, at the lower right with a 412 px
+maximum width, stacked full-width buttons and the navy primary action. The same
+panel fit a narrow in-app mobile viewport without horizontal clipping. Desktop
+Following rendered the shared Profile sign-in card beside the existing value
+explanation with aligned width, spacing and controls.
+
+**Contracts touched:** none. No migration or dependency change.
+
+**Decisions made:**
+- The primary action says *Tillåt analyscookies*, not *Acceptera alla cookies*;
+  Pleni requests analytics consent only and must not imply unrelated cookie
+  categories.
+- The full measurement disclosure remains visible when settings are opened
+  from Profile. The first-visit panel keeps the necessary/analytics distinction
+  and links directly to the cookie policy without an extra details accordion.
+- Following passes its existing sign-in gate into the shared card; its mobile
+  branch and its signed-in library remain unchanged.
+
+**Observations (not fixed, out of scope):** local visual verification ran
+without the production Clerk key, so the shared card's controls were disabled
+there by design. Their enabled Clerk paths are unchanged and covered by the
+existing account tests.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** production verification should confirm the new
+cookie asset and the shared card at `pleni.se/foljer/` after release.
