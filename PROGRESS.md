@@ -7376,5 +7376,12 @@ existing account tests.
 
 **Blocked / needs a decision:** none.
 
-**Next agent should know:** production verification should confirm the new
-cookie asset and the shared card at `pleni.se/foljer/` after release.
+**Production verification:** commit `c654d4f` was pushed to `main`. A
+cache-bypassing read changed from the prior stylesheet to
+`index-DbxOIczf.css`, matching the accepted local production build. The live
+signed-out `pleni.se/foljer/` route rendered the shared Profile sign-in card
+with enabled Clerk actions and the terms/privacy footer.
+
+**Next agent should know:** the production cookie prompt was accepted through
+the fresh-origin local visual run and its exact stylesheet is live. Re-test the
+first-visit delay only if the consent bootstrap or storage version changes.
