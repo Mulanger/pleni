@@ -33,7 +33,7 @@ export function AnalyticsConsentBanner({
           </h2>
           <p>
             Med ditt val mäter vi sammanställd besöksstatistik och hur offentliga klipp används
-            med Google Analytics. Pleni fungerar lika bra om du tackar nej.
+            med Google Analytics.
           </p>
         </div>
         {settingsOpen && (

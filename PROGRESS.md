@@ -7205,3 +7205,44 @@ subtitle. No account or sign-in was needed for any privacy control.
 `video_start`, `video_progress`, `video_complete` and `watch_time` in GA4 after
 consenting on production. Do not create GA audiences or join these events to
 Clerk/recommendation data.
+
+## UI21.1 — Compact delayed analytics prompt — DONE 2026-09-05
+
+**Built:** `web/src/App.tsx` now waits for the browser's complete page-load event
+and a short 900 ms settling period before showing the first-visit analytics
+choice. `web/src/AnalyticsConsentBanner.tsx` removes the unnecessary reassurance
+sentence, while `web/src/styles.css` reduces the desktop panel from 520 px to
+440 px and tightens spacing, type and actions across desktop and mobile.
+
+**Tests:** all 178 frontend Node tests pass; TypeScript passes; the production
+Vite/PWA build passes and still precaches exactly nine app-shell entries. Full
+repository gate green: 514 Python tests, 79 deselected, the known `audioop`
+warning, Ruff clean and strict mypy clean over 83 source files.
+
+**Visual verification:** in a fresh local browser origin the first captured
+page state contained no consent panel. After the load-bound delay, the panel
+appeared at 440 × 168 px in a 1280 × 720 viewport, with the complete shorter
+copy and both consent choices visible without overflow.
+
+**Contracts touched:** none. No analytics event, legal notice version, stored
+choice, tag-loading rule or mobile navigation changed.
+
+**Decisions made:**
+- The delay begins only after `document.readyState` reaches `complete`; an
+  already-loaded document takes the same 900 ms path, so neither timing branch
+  flashes the prompt during the initial render.
+- Opening analytics settings remains immediate. The delay applies only when no
+  choice has ever been stored.
+- Both choices retain equal size and prominence. The removed sentence does not
+  change the ability to refuse analytics or the strict no-tag behavior after a
+  refusal.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none.
+
+**Production verification:** pending deployment from this entry's code commit.
+
+**Next agent should know:** the first-visit prompt intentionally appears about
+one second after full page load; analytics settings opened from Profile should
+continue to appear immediately.

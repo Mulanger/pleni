@@ -323,6 +323,7 @@ type ClipCollection = {
 const partyCodes = Object.keys(PARTIES).filter((code) => code !== "NONE") as PartyCode[];
 const MAX_RECENT_SEARCHES = 4;
 const PROFILE_CLIP_PAGE_SIZE = 60;
+const ANALYTICS_PROMPT_DELAY_MS = 900;
 
 /**
  * Visible fraction that counts as seeing a clip (prerequisite T-8).
@@ -421,6 +422,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
   const [feedReloadKey, setFeedReloadKey] = useState(0);
   const pwa = usePwaExperience(feedNetworkFailed);
   const [analyticsConsent, setAnalyticsConsent] = useState(readAnalyticsConsent);
+  const [analyticsPromptReady, setAnalyticsPromptReady] = useState(false);
   const [analyticsSettingsOpen, setAnalyticsSettingsOpen] = useState(false);
   const selectedPersonId =
     route.view === "person" || route.view === "person-clips" ? route.personId : null;
@@ -514,6 +516,34 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
       disableAnalytics();
     }
   }, [analyticsConsent?.analytics]);
+
+  useEffect(() => {
+    if (analyticsConsent !== null) {
+      setAnalyticsPromptReady(false);
+      return;
+    }
+
+    let revealTimer: number | null = null;
+    const revealAfterPageLoad = () => {
+      revealTimer = window.setTimeout(
+        () => setAnalyticsPromptReady(true),
+        ANALYTICS_PROMPT_DELAY_MS
+      );
+    };
+
+    if (document.readyState === "complete") {
+      revealAfterPageLoad();
+    } else {
+      window.addEventListener("load", revealAfterPageLoad, { once: true });
+    }
+
+    return () => {
+      window.removeEventListener("load", revealAfterPageLoad);
+      if (revealTimer !== null) {
+        window.clearTimeout(revealTimer);
+      }
+    };
+  }, [analyticsConsent]);
 
   useEffect(() => {
     let active = true;
@@ -1559,7 +1589,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
     <>
       {viewport === "tablet-gate" && <WideScreenMessage />}
       <PwaStatusStack pwa={pwa} />
-      {(analyticsConsent === null || analyticsSettingsOpen) && (
+      {(analyticsSettingsOpen || (analyticsConsent === null && analyticsPromptReady)) && (
         <AnalyticsConsentBanner
           currentChoice={analyticsConsent?.analytics ?? null}
           settingsOpen={analyticsSettingsOpen}

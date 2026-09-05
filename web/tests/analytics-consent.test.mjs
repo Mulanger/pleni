@@ -158,3 +158,20 @@ test("spelarintegrationen kräver synlighet, verklig uppspelning och wall clock"
   assert.match(source, /clipSource === "supabase"/);
   assert.match(source, /trackVideoComplete/);
 });
+
+test("förstagångsfrågan väntar tills sidan laddat och håller texten kort", async () => {
+  const appSource = await readFile(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const bannerSource = await readFile(
+    new URL("../src/AnalyticsConsentBanner.tsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(appSource, /document\.readyState === "complete"/);
+  assert.match(appSource, /window\.addEventListener\("load", revealAfterPageLoad/);
+  assert.match(appSource, /ANALYTICS_PROMPT_DELAY_MS = 900/);
+  assert.match(
+    appSource,
+    /analyticsConsent === null && analyticsPromptReady/
+  );
+  assert.doesNotMatch(bannerSource, /fungerar lika bra om du tackar nej/i);
+});
