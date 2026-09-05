@@ -7241,7 +7241,12 @@ choice, tag-loading rule or mobile navigation changed.
 
 **Blocked / needs a decision:** none.
 
-**Production verification:** pending deployment from this entry's code commit.
+**Production verification:** live at `pleni.se` from commit `8393649`. A direct
+cache-bypassing read returned the new production assets `index-DnlSo_M_.js` and
+`index-CNC7jF60.css`; they contain the shortened consent copy, the complete-page
+load branch and both 440 px width rules, while the removed reassurance sentence
+is absent. The earlier local browser check covers the fresh-origin reveal timing
+because the production browser already holds the owner's prior refusal choice.
 
 **Next agent should know:** the first-visit prompt intentionally appears about
 one second after full page load; analytics settings opened from Profile should
