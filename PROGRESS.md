@@ -7251,3 +7251,33 @@ because the production browser already holds the owner's prior refusal choice.
 **Next agent should know:** the first-visit prompt intentionally appears about
 one second after full page load; analytics settings opened from Profile should
 continue to appear immediately.
+
+## UI21.2 — Search Console linked to GA4 — DONE 2026-09-05
+
+**Built:** Google Analytics property `Pleni` now links the verified Search
+Console domain property `pleni.se` to the existing production web stream
+`Pleni` (`https://www.pleni.se`). This is an external Google configuration;
+no application code, tag behavior or consent rule changed.
+
+**Verification:** GA4 reported `LINK CREATED` and its Search Console links table
+showed `pleni.se`, property type `Domain`, web stream `Pleni` and stream id
+`15719973648`. The Search Console collection appeared automatically under
+Reports with both `Queries` and `Google organic search traffic`. Opening
+`Queries` returned historical organic-search clicks, impressions, CTR and
+average position for the Pleni stream, confirming that the data flow is live.
+
+**Consent boundary:** Search Console continues to measure Google Search
+impressions and outbound clicks independently. Pleni's GA4 tag remains in
+strict Basic Consent Mode and still sends no onsite page or playback data until
+the visitor grants analytics consent.
+
+**Tests:** no repository tests required; this release changed Google product
+link configuration only. The linked report was verified directly in GA4.
+
+**Contracts touched:** none.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** the GA4 Reports navigation now contains a published
+Search Console section. Do not enable Advanced Consent Mode to increase totals;
+the released no-tag-before-consent boundary remains intentional.
