@@ -192,8 +192,9 @@ test("desktop Profile reuses account, preferences, recommendation and PWA action
   assert.match(app, /onExportRecommendationData=\{\(\) => void exportMyRecommendationData\(\)\}/);
   assert.match(app, /onResetRecommendationData=\{\(\) => void resetMyRecommendationData\(\)\}/);
   assert.match(app, /onDeleteRecommendationData=\{\(\) => void deleteMyRecommendationData\(\)\}/);
-  assert.match(app, /className="profile-primary-column"/);
-  assert.match(app, /className="profile-secondary-column"/);
+  // UI20.4b: the arbitrary 1fr 1fr split became main + rail with named groups.
+  assert.match(app, /className="desktop-account-main"/);
+  assert.match(app, /className="desktop-account-rail"/);
 });
 
 test("desktop Saved and legal routes reuse archive playback and canonical documents", () => {

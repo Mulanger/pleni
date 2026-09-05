@@ -2234,10 +2234,7 @@ function DesktopSidebar({
       </nav>
       <div className="desktop-account">
         {clerkEnabled && signedIn ? (
-          <>
-            <UserButton appearance={{ elements: { userButtonAvatarBox: { width: 38, height: 38 } } }} />
-            <span>Mitt konto</span>
-          </>
+          <DesktopSidebarAccount onOpen={() => onChange("profil")} />
         ) : (
           <button type="button" onClick={onSignIn} disabled={!clerkEnabled}>
             <UserRound size={18} />
@@ -2246,6 +2243,29 @@ function DesktopSidebar({
         )}
       </div>
     </aside>
+  );
+}
+
+/**
+ * The sidebar's account row.
+ *
+ * Pleni's own avatar and name rather than a second `<UserButton>`: the widget
+ * appeared here and on the Profil tab, drawing Clerk's typography twice in a
+ * shell that is otherwise this product's. Opening the tab is what the row was
+ * for anyway.
+ */
+function DesktopSidebarAccount({ onOpen }: { onOpen: () => void }) {
+  const { user } = useClerk();
+  const displayName = user?.fullName ?? user?.username ?? "Mitt konto";
+  const imageUrl = user?.imageUrl ?? null;
+
+  return (
+    <button type="button" className="desktop-account-me" onClick={onOpen}>
+      <span className="desktop-account-avatar" aria-hidden="true">
+        {imageUrl ? <img src={imageUrl} alt="" /> : <span>{initials(displayName)}</span>}
+      </span>
+      <span>{displayName}</span>
+    </button>
   );
 }
 
@@ -6456,217 +6476,420 @@ function ProfileScreen({
         : "Sparar dina val på enheten. Tittarhistorik skickas inte till Pleni."
     }
   ];
-  return (
-    <section className={presentation === "desktop" ? "panel-screen profile-screen profile-screen--desktop" : "panel-screen profile-screen"}>
-      <Header title="Profil" />
-      <div className="panel-scroll">
-        <div className="profile-desktop-grid">
-        <div className="profile-primary-column">
-        <AccountCard signedIn={signedIn} onOpenLegal={onOpenLegal} />
-        {/* These counts used to be invented ("Sparade klipp 24"). They are now
-            the real length of the device-local library — see
-            `library-store.ts`. Still not server-side: that is `C-9`, gated on
-            F1. */}
-        <Group title="Konto">
-          <ListRow
-            title="Sparade klipp"
-            subtitle={
-              savedCount === 0
-                ? "Inga sparade klipp ännu"
-                : `${savedCount} ${savedCount === 1 ? "klipp" : "klipp"} · sparas på den här enheten`
-            }
-            icon={<Bookmark size={18} />}
-            onClick={savedCount > 0 && !savedLoading ? onOpenSaved : undefined}
-            chevron={savedCount > 0}
-          />
-          <ListRow
-            title="Följer"
-            subtitle={
-              totalFollowed === 0
-                ? "Du följer ingen ännu"
-                : `${followedSummary} · används i För dig när personalisering är på`
-            }
-            icon={<UserPlus size={18} />}
-            onClick={onOpenFollowing}
-            chevron
-          />
-        </Group>
-        {pwa.installKind && (
-          <Group title="App">
-            <ListRow
-              title={pwa.installBusy ? "Väntar på ditt val…" : "Installera Pleni"}
-              subtitle={
-                pwa.installKind === "ios"
-                  ? "Lägg till på hemskärmen från Dela-menyn."
-                  : pwa.installKind === "manual"
-                    ? "Installera via webbläsarens meny."
-                    : "Öppna Pleni utan webbläsarens adressfält."
-              }
-              icon={
-                pwa.installBusy ? (
-                  <LoaderCircle className="pwa-spinner" size={18} aria-hidden="true" />
-                ) : (
-                  <Download size={18} aria-hidden="true" />
-                )
-              }
-              onClick={pwa.installBusy ? undefined : () => void pwa.requestInstall()}
-              chevron={!pwa.installBusy}
-            />
-            {pwa.showInstallInstructions && (
-              <div className="pwa-install-guide">
-                <button
-                  type="button"
-                  className="pwa-install-guide-close"
-                  aria-label="Stäng installationsguiden"
-                  onClick={pwa.dismissInstallInstructions}
-                >
-                  <X size={16} aria-hidden="true" />
-                </button>
-                {pwa.installKind === "ios" ? (
-                  <div role="status" aria-atomic="true">
-                    <div className="pwa-install-guide-heading">
-                      <Share2 size={18} aria-hidden="true" />
-                      <strong>Lägg till på hemskärmen</strong>
-                    </div>
-                    <ol>
-                      <li>Tryck på Dela-symbolen i Safari.</li>
-                      <li>
-                        Välj <b>Lägg till på hemskärmen</b>.
-                      </li>
-                      <li>
-                        Bekräfta med <b>Lägg till</b>.
-                      </li>
-                    </ol>
-                  </div>
-                ) : (
-                  <div role="status" aria-atomic="true">
-                    <div className="pwa-install-guide-heading">
-                      <Download size={18} aria-hidden="true" />
-                      <strong>Installera via webbläsaren</strong>
-                    </div>
-                    <ol>
-                      <li>Öppna webbläsarens meny.</li>
-                      <li>
-                        Välj <b>Installera app</b> eller <b>Lägg till på startskärmen</b>.
-                      </li>
-                      <li>Bekräfta installationen.</li>
-                    </ol>
-                  </div>
-                )}
+  // Every group is built once and composed twice. The phone stacks them in the
+  // released order; desktop splits them into what you use and what is yours.
+  const accountRows = (
+    <>
+      {/* These counts used to be invented ("Sparade klipp 24"). They are now
+          the real length of the device-local library — see
+          `library-store.ts`. Still not server-side: that is `C-9`, gated on
+          F1. */}
+      <ListRow
+        title="Sparade klipp"
+        subtitle={
+          savedCount === 0
+            ? "Inga sparade klipp ännu"
+            : `${savedCount} ${savedCount === 1 ? "klipp" : "klipp"} · sparas på den här enheten`
+        }
+        icon={<Bookmark size={18} />}
+        onClick={savedCount > 0 && !savedLoading ? onOpenSaved : undefined}
+        chevron={savedCount > 0}
+      />
+      <ListRow
+        title="Följer"
+        subtitle={
+          totalFollowed === 0
+            ? "Du följer ingen ännu"
+            : `${followedSummary} · används i För dig när personalisering är på`
+        }
+        icon={<UserPlus size={18} />}
+        onClick={onOpenFollowing}
+        chevron
+      />
+    </>
+  );
+
+  const installGroup = pwa.installKind ? (
+    <Group title="App">
+      <ListRow
+        title={pwa.installBusy ? "Väntar på ditt val…" : "Installera Pleni"}
+        subtitle={
+          pwa.installKind === "ios"
+            ? "Lägg till på hemskärmen från Dela-menyn."
+            : pwa.installKind === "manual"
+              ? "Installera via webbläsarens meny."
+              : "Öppna Pleni utan webbläsarens adressfält."
+        }
+        icon={
+          pwa.installBusy ? (
+            <LoaderCircle className="pwa-spinner" size={18} aria-hidden="true" />
+          ) : (
+            <Download size={18} aria-hidden="true" />
+          )
+        }
+        onClick={pwa.installBusy ? undefined : () => void pwa.requestInstall()}
+        chevron={!pwa.installBusy}
+      />
+      {pwa.showInstallInstructions && (
+        <div className="pwa-install-guide">
+          <button
+            type="button"
+            className="pwa-install-guide-close"
+            aria-label="Stäng installationsguiden"
+            onClick={pwa.dismissInstallInstructions}
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+          {pwa.installKind === "ios" ? (
+            <div role="status" aria-atomic="true">
+              <div className="pwa-install-guide-heading">
+                <Share2 size={18} aria-hidden="true" />
+                <strong>Lägg till på hemskärmen</strong>
               </div>
-            )}
-          </Group>
-        )}
-        </div>
-        <div className="profile-secondary-column">
-        <Group title="Mina intressen">
-          <ListRow
-            title="Redigera mina intressen"
-            subtitle={
-              selectedParties > 0
-                ? `${selectedParties} partier valda${consent.personal ? " · kopplade till För dig" : " · sparas på enheten"}`
-                : "Inga partier valda ännu"
-            }
-            icon={<Sliders size={18} />}
-            onClick={onEditInterests}
-            chevron
-          />
-        </Group>
-        <Group title="Personalisering">
-          {consentRows.map((row) => (
-            <ListRow
-              key={row.key}
-              title={row.title}
-              subtitle={row.help}
-              action={
-                <Switch
-                  checked={consent[row.key]}
-                  onChange={() => onToggleConsent(row.key)}
-                />
-              }
-            />
-          ))}
-          {recommendationError && (
-            <div className="recommendation-error" role="alert">
-              {recommendationError}
+              <ol>
+                <li>Tryck på Dela-symbolen i Safari.</li>
+                <li>
+                  Välj <b>Lägg till på hemskärmen</b>.
+                </li>
+                <li>
+                  Bekräfta med <b>Lägg till</b>.
+                </li>
+              </ol>
+            </div>
+          ) : (
+            <div role="status" aria-atomic="true">
+              <div className="pwa-install-guide-heading">
+                <Download size={18} aria-hidden="true" />
+                <strong>Installera via webbläsaren</strong>
+              </div>
+              <ol>
+                <li>Öppna webbläsarens meny.</li>
+                <li>
+                  Välj <b>Installera app</b> eller <b>Lägg till på startskärmen</b>.
+                </li>
+                <li>Bekräfta installationen.</li>
+              </ol>
             </div>
           )}
-        </Group>
-        <Group title="Integritet">
-          <ListRow
-            title="Analys och cookies"
-            subtitle={
-              analyticsChoice === "granted"
-                ? "Analys är tillåten · ändra eller återkalla när du vill"
-                : analyticsChoice === "denied"
-                  ? "Endast nödvändiga · ändra ditt val när du vill"
-                  : "Inget val gjort · Google Analytics är inte laddat"
-            }
-            icon={<BarChart3 size={18} />}
-            onClick={onOpenAnalyticsSettings}
-            chevron
-          />
-        </Group>
-        {recommendationsConnected && (
-          <Group title="Mina rekommendationsdata">
-            <ListRow
-              title={recommendationAction === "export" ? "Skapar export…" : "Hämta mina data"}
-              subtitle="Ladda ner samtycke, val och rekommendationslistor som JSON."
-              icon={
-                recommendationAction === "export" ? (
-                  <LoaderCircle className="pwa-spinner" size={18} aria-hidden="true" />
+        </div>
+      )}
+    </Group>
+  ) : null;
+
+  const interestsRow = (
+    <ListRow
+      title="Redigera mina intressen"
+      subtitle={
+        selectedParties > 0
+          ? `${selectedParties} partier valda${consent.personal ? " · kopplade till För dig" : " · sparas på enheten"}`
+          : "Inga partier valda ännu"
+      }
+      icon={<Sliders size={18} />}
+      onClick={onEditInterests}
+      chevron
+    />
+  );
+
+  const consentGroupRows = (
+    <>
+      {consentRows.map((row) => (
+        <ListRow
+          key={row.key}
+          title={row.title}
+          subtitle={row.help}
+          action={<Switch checked={consent[row.key]} onChange={() => onToggleConsent(row.key)} />}
+        />
+      ))}
+      {recommendationError && (
+        <div className="recommendation-error" role="alert">
+          {recommendationError}
+        </div>
+      )}
+    </>
+  );
+
+  const analyticsGroup = (
+    <Group title="Integritet">
+      <ListRow
+        title="Analys och cookies"
+        subtitle={
+          analyticsChoice === "granted"
+            ? "Analys är tillåten · ändra eller återkalla när du vill"
+            : analyticsChoice === "denied"
+              ? "Endast nödvändiga · ändra ditt val när du vill"
+              : "Inget val gjort · Google Analytics är inte laddat"
+        }
+        icon={<BarChart3 size={18} />}
+        onClick={onOpenAnalyticsSettings}
+        chevron
+      />
+    </Group>
+  );
+
+  const recommendationRows = recommendationsConnected ? (
+    <>
+      <ListRow
+        title={recommendationAction === "export" ? "Skapar export…" : "Hämta mina data"}
+        subtitle="Ladda ner samtycke, val och rekommendationslistor som JSON."
+        icon={
+          recommendationAction === "export" ? (
+            <LoaderCircle className="pwa-spinner" size={18} aria-hidden="true" />
+          ) : (
+            <Download size={18} />
+          )
+        }
+        onClick={recommendationAction ? undefined : onExportRecommendationData}
+        chevron={!recommendationAction}
+      />
+      <ListRow
+        title={recommendationAction === "reset" ? "Återställer…" : "Återställ rekommendationer"}
+        subtitle="Stänger av personalisering och raderar serverns val och tidigare listor."
+        icon={
+          recommendationAction === "reset" ? (
+            <LoaderCircle className="pwa-spinner" size={18} aria-hidden="true" />
+          ) : (
+            <RefreshCw size={18} />
+          )
+        }
+        onClick={recommendationAction ? undefined : onResetRecommendationData}
+        chevron={!recommendationAction}
+      />
+      {/* The only thing on this page that cannot be undone. It must not look
+          like the export row above it. */}
+      <ListRow
+        title={recommendationAction === "delete" ? "Raderar…" : "Radera rekommendationsdata"}
+        subtitle="Raderar rekommendationsprofilen utan att radera ditt Clerk-konto."
+        icon={
+          recommendationAction === "delete" ? (
+            <LoaderCircle className="pwa-spinner" size={18} aria-hidden="true" />
+          ) : (
+            <Trash2 size={18} />
+          )
+        }
+        tone={presentation === "desktop" ? "danger" : undefined}
+        onClick={recommendationAction ? undefined : onDeleteRecommendationData}
+        chevron={!recommendationAction}
+      />
+      {recommendationActionMessage && (
+        <div className="recommendation-success" role="status">
+          {recommendationActionMessage}
+        </div>
+      )}
+    </>
+  ) : null;
+
+  const legalLinks = (
+    <nav className="profile-legal-links" aria-label="Juridisk information">
+      {LEGAL_PAGE_ORDER.map((page) => (
+        <button key={page} type="button" onClick={() => onOpenLegal(page)}>
+          {LEGAL_PAGES[page].shortTitle}
+        </button>
+      ))}
+    </nav>
+  );
+
+  const versionLine = <div className="version">Pleni 1.0 · data från riksdagen.se</div>;
+
+  if (presentation === "desktop") {
+    return (
+      <section className="panel-screen profile-screen profile-screen--desktop">
+        <div className="panel-scroll desktop-account-scroll">
+          <header className="desktop-account-band">
+            <div className="desktop-account-band-inner">
+              <div className="desktop-account-identity">
+                {clerkEnabled && signedIn ? (
+                  <DesktopAccountIdentity />
                 ) : (
-                  <Download size={18} />
-                )
-              }
-              onClick={recommendationAction ? undefined : onExportRecommendationData}
-              chevron={!recommendationAction}
-            />
-            <ListRow
-              title={recommendationAction === "reset" ? "Återställer…" : "Återställ rekommendationer"}
-              subtitle="Stänger av personalisering och raderar serverns val och tidigare listor."
-              icon={
-                recommendationAction === "reset" ? (
-                  <LoaderCircle className="pwa-spinner" size={18} aria-hidden="true" />
-                ) : (
-                  <RefreshCw size={18} />
-                )
-              }
-              onClick={recommendationAction ? undefined : onResetRecommendationData}
-              chevron={!recommendationAction}
-            />
-            <ListRow
-              title={recommendationAction === "delete" ? "Raderar…" : "Radera rekommendationsdata"}
-              subtitle="Raderar rekommendationsprofilen utan att radera ditt Clerk-konto."
-              icon={
-                recommendationAction === "delete" ? (
-                  <LoaderCircle className="pwa-spinner" size={18} aria-hidden="true" />
-                ) : (
-                  <Trash2 size={18} />
-                )
-              }
-              onClick={recommendationAction ? undefined : onDeleteRecommendationData}
-              chevron={!recommendationAction}
-            />
-            {recommendationActionMessage && (
-              <div className="recommendation-success" role="status">
-                {recommendationActionMessage}
+                  <>
+                    <h1>Profil</h1>
+                    <p className="desktop-account-lede">
+                      Konto, personalisering och integritet. Flödet, sök och uppspelning
+                      fungerar utan konto — kontot behövs för att följa, spara och gilla.
+                    </p>
+                  </>
+                )}
+                {/* Counts only when there is an account they belong to. Signed
+                    out we have not read a library, and zero would be a claim. */}
+                {signedIn && (
+                  <dl className="desktop-account-facts">
+                    <div>
+                      <dt>Sparade klipp</dt>
+                      <dd>{formatNumber(savedCount)}</dd>
+                    </div>
+                    <div>
+                      <dt>Följer</dt>
+                      <dd>{formatNumber(totalFollowed)}</dd>
+                    </div>
+                  </dl>
+                )}
               </div>
-            )}
-          </Group>
+              {clerkEnabled && signedIn && <DesktopAccountActions />}
+            </div>
+          </header>
+
+          <div className="desktop-account-body">
+            <div className="desktop-account-main">
+              {signedIn && <Group title="Ditt innehåll">{accountRows}</Group>}
+              <Group title={signedIn ? "Personalisering" : "Fungerar utan konto"}>
+                {interestsRow}
+                {consentGroupRows}
+              </Group>
+              {installGroup}
+              {!signedIn && !clerkEnabled && (
+                <AccountCard signedIn={signedIn} onOpenLegal={onOpenLegal} />
+              )}
+            </div>
+
+            <aside className="desktop-account-rail">
+              {!signedIn && clerkEnabled && (
+                <DesktopSignInPanel onOpenLegal={onOpenLegal} />
+              )}
+              {analyticsGroup}
+              {/* Export, reset and delete act on a recommendation profile keyed
+                  to a Clerk account. Signed out there is nothing to act on, so
+                  the group is not offered — `recommendationsConnected` is a
+                  build flag, not a session. */}
+              {signedIn && recommendationRows && (
+                <Group title="Dina data">
+                  {recommendationRows}
+                  <p className="profile-danger-note">
+                    Radering går inte att ångra. Ditt konto, dina sparade klipp och dina
+                    följningar rörs inte.
+                  </p>
+                </Group>
+              )}
+              <div className="profile-legal-group">
+                <Group title="Villkor och information">
+                  {LEGAL_PAGE_ORDER.map((page) => (
+                    <ListRow
+                      key={page}
+                      title={LEGAL_PAGES[page].shortTitle}
+                      onClick={() => onOpenLegal(page)}
+                      chevron
+                    />
+                  ))}
+                </Group>
+              </div>
+            </aside>
+          </div>
+
+          {versionLine}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="panel-screen profile-screen">
+      <Header title="Profil" />
+      <div className="panel-scroll">
+        <AccountCard signedIn={signedIn} onOpenLegal={onOpenLegal} />
+        <Group title="Konto">{accountRows}</Group>
+        {installGroup}
+        <Group title="Mina intressen">{interestsRow}</Group>
+        <Group title="Personalisering">{consentGroupRows}</Group>
+        {analyticsGroup}
+        {recommendationRows && (
+          <Group title="Mina rekommendationsdata">{recommendationRows}</Group>
         )}
-        </div>
-        </div>
-        <nav className="profile-legal-links" aria-label="Juridisk information">
-          {LEGAL_PAGE_ORDER.map((page) => (
-            <button key={page} type="button" onClick={() => onOpenLegal(page)}>
-              {LEGAL_PAGES[page].shortTitle}
-            </button>
-          ))}
-        </nav>
-        <div className="version">Pleni 1.0 · data från riksdagen.se</div>
+        {legalLinks}
+        {versionLine}
       </div>
     </section>
+  );
+}
+
+/**
+ * Who is signed in, in Pleni's own type rather than Clerk's widget.
+ *
+ * The portrait still comes from Clerk (`user.imageUrl`); only the frame around
+ * it is ours. `<UserButton>` drew its own avatar, its own menu and its own
+ * typography in the middle of a page that is otherwise this product's.
+ */
+function DesktopAccountIdentity() {
+  const { user } = useClerk();
+  const displayName = user?.fullName ?? user?.username ?? "Ditt konto";
+  const email = user?.primaryEmailAddress?.emailAddress ?? "";
+  const imageUrl = user?.imageUrl ?? null;
+
+  return (
+    <div className="desktop-account-who">
+      <span className="desktop-account-avatar" aria-hidden="true">
+        {imageUrl ? <img src={imageUrl} alt="" /> : <span>{initials(displayName)}</span>}
+      </span>
+      <h1>{displayName}</h1>
+      {email && <p className="desktop-account-email">{email}</p>}
+    </div>
+  );
+}
+
+/**
+ * Manage and sign out. Neither is a primary action: this page's job is not to
+ * send the viewer somewhere, and the only candidate would have been sign-out.
+ *
+ * Account management itself stays Clerk's — email, password and MFA are its
+ * responsibility — but it opens from our own control rather than from a Clerk
+ * avatar embedded in the layout.
+ */
+function DesktopAccountActions() {
+  const clerk = useClerk();
+
+  return (
+    <div className="desktop-account-actions">
+      <button
+        type="button"
+        className="desktop-account-button"
+        onClick={() => clerk.openUserProfile()}
+      >
+        <Sliders size={15} aria-hidden="true" />
+        Hantera konto
+      </button>
+      <SignOutButton>
+        <button type="button" className="desktop-account-button is-quiet">
+          Logga ut
+        </button>
+      </SignOutButton>
+    </div>
+  );
+}
+
+/**
+ * The same sign-in module the desktop Följer page uses. One component, two
+ * pages, so "you need an account" reads the same wherever it appears.
+ */
+function DesktopSignInPanel({ onOpenLegal }: { onOpenLegal: (page: LegalPageId) => void }) {
+  return (
+    <div className="desktop-signin-panel">
+      <span className="desktop-signin-mark" aria-hidden="true">
+        <UserRound size={22} />
+      </span>
+      <h2>Logga in för att spara och följa</h2>
+      <p>
+        Sparade klipp, följningar och gillningar hör till kontot. Utan konto fungerar
+        flödet, sök och uppspelning precis som vanligt.
+      </p>
+      <SignInButton mode="modal">
+        <button type="button" className="desktop-account-button is-primary">
+          Logga in
+        </button>
+      </SignInButton>
+      <SignUpButton mode="modal">
+        <button type="button" className="desktop-account-button">
+          Skapa konto
+        </button>
+      </SignUpButton>
+      <p className="desktop-signin-foot">
+        Genom att skapa konto godkänner du{" "}
+        <button type="button" onClick={() => onOpenLegal("terms")}>
+          användarvillkoren
+        </button>
+        . Läs hur vi hanterar personuppgifter under{" "}
+        <button type="button" onClick={() => onOpenLegal("privacy")}>
+          integritet
+        </button>
+        . Är du under 13 år behöver du din vårdnadshavares tillstånd.
+      </p>
+    </div>
   );
 }
 

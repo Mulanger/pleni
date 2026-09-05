@@ -6271,27 +6271,9 @@ a {
     background: #f7f7f4;
   }
 
-  .profile-screen--desktop .panel-header {
-    padding: 42px clamp(38px, 5vw, 76px) 24px;
-    border-bottom-color: #dfdfd9;
-    background: transparent;
-  }
-
-  .profile-screen--desktop .panel-header h1 {
-    color: #17233c;
-    font-size: 38px;
-    letter-spacing: -0.035em;
-  }
-
   .profile-screen--desktop .panel-scroll {
-    padding: 30px clamp(38px, 5vw, 76px) 56px;
+    padding: 0;
     scrollbar-width: thin;
-  }
-
-  .profile-screen--desktop .profile-desktop-grid,
-  .profile-screen--desktop .profile-legal-links,
-  .profile-screen--desktop .version {
-    width: min(100%, 1040px);
   }
 
   .profile-screen--desktop .group-body {
@@ -6319,11 +6301,342 @@ a {
     box-shadow: none;
   }
 
-  .profile-screen--desktop .profile-legal-links {
-    justify-content: flex-start;
-    gap: 18px;
-    padding-top: 22px;
+  /* --- UI20.4b desktop account page ------------------------------------ */
+  /* Profil was the one desktop route that did not look like the rest: a 3px
+     left rule with 13.5px type for the identity, Clerk's own widget once
+     signed in, and two equal columns with no rule behind the split. It gets
+     the same masthead band as the politician, party and Följer pages, its own
+     identity block, and a body divided into what you use and what is yours. */
+
+  .desktop-account-band {
+    flex: 0 0 auto;
+    padding: 42px clamp(38px, 5vw, 76px) 30px;
+    border-bottom: 1px solid #dfdfd9;
+    background: #fbfbf9;
+  }
+
+  .desktop-account-band-inner {
+    display: grid;
+    max-width: 1360px;
+    margin: 0 auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0 32px;
+    align-items: start;
+  }
+
+  .desktop-account-identity {
+    min-width: 0;
+  }
+
+  .desktop-account-identity > h1 {
+    margin: 0;
+    color: #17233c;
+    font-size: 44px;
+    font-weight: 900;
+    line-height: 1.02;
+    letter-spacing: -0.035em;
+  }
+
+  .desktop-account-lede {
+    margin: 12px 0 0;
+    max-width: 58ch;
+    color: #60605a;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  /* Signed in, the name is the heading. */
+  .desktop-account-who {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 2px 18px;
+  }
+
+  .desktop-account-who h1 {
+    grid-column: 2;
+    align-self: end;
+    margin: 0;
+    color: #17233c;
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+  }
+
+  .desktop-account-email {
+    grid-column: 2;
+    margin: 0;
+    color: #60605a;
+    font-size: 14px;
+  }
+
+  /* The portrait is still Clerk's `user.imageUrl`; the frame is ours. */
+  .desktop-account-avatar {
+    position: relative;
+    display: grid;
+    overflow: hidden;
+    width: 64px;
+    height: 64px;
+    grid-column: 1;
+    grid-row: 1 / 3;
+    place-items: center;
+    border-radius: 999px;
+    background: linear-gradient(150deg, #d7dde5, #a4aebc);
+    color: #35404f;
+    font-size: 22px;
+    font-weight: 800;
+    box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgba(23, 35, 60, 0.1);
+  }
+
+  .desktop-account-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* Both figures are the length of the device-local library. Signed out the
+     page shows none of them rather than showing zero. */
+  .desktop-account-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 46px;
+    margin: 20px 0 0;
+    padding-top: 16px;
     border-top: 1px solid #dfdfd9;
+  }
+
+  .desktop-account-facts > div {
+    display: grid;
+    gap: 2px;
+  }
+
+  .desktop-account-facts dt {
+    color: #79796f;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+
+  .desktop-account-facts dd {
+    margin: 0;
+    color: #17233c;
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .desktop-account-actions {
+    display: grid;
+    width: 200px;
+    gap: 10px;
+    padding-top: 4px;
+  }
+
+  .desktop-account-button {
+    display: flex;
+    width: 100%;
+    height: 42px;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    border: 1px solid #cfcfc7;
+    border-radius: 999px;
+    background: #fff;
+    color: #17233c;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+    transition: border-color 140ms ease, background 140ms ease;
+  }
+
+  .desktop-account-button:hover {
+    border-color: #b4b4ab;
+  }
+
+  .desktop-account-button.is-primary {
+    border-color: #17233c;
+    background: #17233c;
+    color: #fff;
+  }
+
+  .desktop-account-button.is-primary:hover {
+    border-color: #223357;
+    background: #223357;
+  }
+
+  .desktop-account-button.is-quiet {
+    border-color: #e2e2db;
+    background: transparent;
+    color: #60605a;
+  }
+
+  .desktop-account-button:focus-visible,
+  .desktop-account-me:focus-visible {
+    outline: 3px solid rgba(38, 79, 139, 0.32);
+    outline-offset: 3px;
+  }
+
+  .desktop-account-body {
+    display: grid;
+    max-width: 1360px;
+    margin: 0 auto;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    gap: 40px;
+    padding: 30px clamp(38px, 5vw, 76px) 24px;
+  }
+
+  .desktop-account-main,
+  .desktop-account-rail {
+    min-width: 0;
+  }
+
+  .desktop-account-main > *,
+  .desktop-account-rail > * {
+    margin: 0 0 30px;
+  }
+
+  .desktop-account-main > :last-child,
+  .desktop-account-rail > :last-child {
+    margin-bottom: 0;
+  }
+
+  .desktop-account-main .section-label,
+  .desktop-account-rail .section-label {
+    padding: 0 0 10px;
+    margin-bottom: 2px;
+    border-bottom: 1px solid #dfdfd9;
+    color: #66665f;
+    font-size: 11.5px;
+    font-weight: 750;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+
+  /* These rows carry no icon; indent them so their titles line up with the
+     rows above that do. 42px is the icon column plus its gap. */
+  .profile-legal-group .list-row {
+    padding-left: 46px;
+  }
+
+  .profile-danger-note {
+    margin: 10px 0 0;
+    padding: 10px 12px;
+    border-radius: 9px;
+    background: #fbf1f2;
+    color: #7d3b44;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .profile-screen--desktop .version {
+    width: 100%;
+    max-width: 1360px;
+    margin: 0 auto;
+    padding: 0 clamp(38px, 5vw, 76px) 40px;
+    text-align: left;
+  }
+
+  /* The sign-in module, shared with the desktop Följer page. */
+  .desktop-signin-panel {
+    padding: 26px 24px 24px;
+    border: 1px solid #dfdfd9;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 22px 44px -34px rgba(19, 40, 77, 0.5);
+  }
+
+  .desktop-signin-mark {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    margin-bottom: 16px;
+    place-items: center;
+    border-radius: 12px;
+    background: #e9edf5;
+    color: #13284d;
+  }
+
+  .desktop-signin-panel h2 {
+    margin: 0;
+    color: #17233c;
+    font-size: 20px;
+    font-weight: 750;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+  }
+
+  .desktop-signin-panel > p {
+    margin: 10px 0 20px;
+    color: #60605a;
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+
+  .desktop-signin-panel .desktop-account-button + .desktop-account-button {
+    margin-top: 10px;
+  }
+
+  .desktop-signin-foot {
+    margin: 18px 0 0;
+    padding-top: 14px;
+    border-top: 1px solid #e3e3dd;
+    color: #79796f;
+    font-size: 11.5px;
+    line-height: 1.55;
+  }
+
+  .desktop-signin-foot button {
+    padding: 0;
+    border: 0;
+    border-bottom: 1px solid #c6c6be;
+    background: transparent;
+    color: #60605a;
+    cursor: pointer;
+    font: inherit;
+  }
+
+  .desktop-signin-foot button:hover {
+    color: #17233c;
+    border-bottom-color: #17233c;
+  }
+
+  /* Sidebar: our own avatar and name instead of a second Clerk widget. */
+  .desktop-account-me {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    align-items: center;
+    gap: 11px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #55554f;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 650;
+    text-align: left;
+  }
+
+  .desktop-account-me .desktop-account-avatar {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    grid-row: auto;
+    grid-column: auto;
+    font-size: 12px;
+    box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgba(23, 35, 60, 0.08);
+  }
+
+  .desktop-account-me > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .desktop-account-me:hover > span:last-child {
+    color: #17233c;
   }
 
   .saved-screen--desktop .clip-grid-block {
@@ -6413,6 +6726,11 @@ a {
 }
 
 @media (min-width: 1100px) and (max-width: 1279px) {
+  /* Below 1280 the 380px side column would squeeze the settings rows. */
+  .desktop-account-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .feed-screen--desktop {
     grid-template-columns: minmax(400px, 470px) minmax(260px, 300px);
     gap: 20px;
@@ -6436,13 +6754,6 @@ a {
 }
 
 @media (min-width: 1280px) {
-  .profile-screen--desktop .profile-desktop-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: clamp(42px, 5vw, 76px);
-    align-items: start;
-  }
-
   .desktop-following-library:not(.has-no-parties) {
     grid-template-columns: minmax(0, 1fr) 336px;
     gap: clamp(38px, 4vw, 64px);
