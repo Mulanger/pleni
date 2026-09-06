@@ -7429,6 +7429,16 @@ No browser error was recorded.
 
 **Blocked / needs a decision:** none.
 
-**Next agent should know:** verify the signed-in Following action visually on
-production when a Clerk session is available; the isolated checkout used a
-development session and the alignment itself is covered by the desktop test.
+**Production verification:** commit `fc9817d` was pushed to `main`. A
+cache-bypassing production read returned `index-DgfmjLUG.css`, matching the
+accepted local build. On the live app, *Senaste* selected `HD10556_32_c01` at
+scroll position 0; a manual *För dig* refresh changed the first clip from
+`HD10537_160_c02` to
+`HD10544_e4f5f5b0-066b-f111-bf27-6805cafeabf9_c02` and returned to position 0.
+Starting another refresh and immediately selecting *Senaste* again completed on
+`/senaste/` with `HD10556_32_c01`, no loading/refresh state and no browser error.
+
+**Next agent should know:** the production browser session was signed out, so
+the signed-in Following action could not be visually exercised against Clerk.
+Its exact release stylesheet is live and its alignment is covered by the
+desktop regression test.
