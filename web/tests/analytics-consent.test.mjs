@@ -58,9 +58,11 @@ test("Google-taggen laddas först efter ett uttryckligt ja", async () => {
   analytics.enableAnalytics();
   assert.equal(analytics.isAnalyticsEnabled(), true);
   assert.match(browser.getScript().src, /googletagmanager\.com\/gtag\/js\?id=G-STDL8RHDCX/);
-  assert.deepEqual(window.dataLayer[0].slice(0, 2), ["consent", "default"]);
-  assert.equal(window.dataLayer[0][2].analytics_storage, "denied");
-  assert.equal(window.dataLayer[2][2].analytics_storage, "granted");
+  assert.equal(Array.isArray(window.dataLayer[0]), false);
+  assert.equal(Object.prototype.toString.call(window.dataLayer[0]), "[object Arguments]");
+  assert.deepEqual(Array.from(window.dataLayer[0]).slice(0, 2), ["consent", "default"]);
+  assert.equal(Array.from(window.dataLayer[0])[2].analytics_storage, "denied");
+  assert.equal(Array.from(window.dataLayer[2])[2].analytics_storage, "granted");
 });
 
 test("klippmått dedupliceras och använder den kanoniska SEO-adressen", async () => {
@@ -83,7 +85,10 @@ test("klippmått dedupliceras och använder den kanoniska SEO-adressen", async (
   analytics.trackWatchTime(clip, "home_latest", 4_250);
   analytics.trackWatchTime(clip, "home_latest", 5_000);
 
-  const commands = window.dataLayer.slice(baseline).filter(([kind]) => kind === "event");
+  const commands = window.dataLayer
+    .slice(baseline)
+    .map((command) => Array.from(command))
+    .filter(([kind]) => kind === "event");
   const names = commands.map(([, name]) => name);
   assert.equal(names.filter((name) => name === "clip_impression").length, 1);
   assert.equal(names.filter((name) => name === "page_view").length, 1);

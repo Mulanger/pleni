@@ -33,9 +33,9 @@ let enabled = false;
 let configured = false;
 const emitted = new Set<string>();
 
-function gtag(...args: GtagCommand): void {
+function gtag(..._args: GtagCommand): void {
   window.dataLayer = window.dataLayer ?? [];
-  window.dataLayer.push(args);
+  window.dataLayer.push(arguments);
 }
 
 function announceState(): void {
