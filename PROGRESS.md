@@ -7442,3 +7442,62 @@ Starting another refresh and immediately selecting *Senaste* again completed on
 the signed-in Following action could not be visually exercised against Clerk.
 Its exact release stylesheet is live and its alignment is covered by the
 desktop regression test.
+
+## UI21.5 — Profile and party catalogue scale hardening — DONE 2026-09-06
+
+**Built:** `web/src/App.tsx` now loads the main For You catalogue only while the
+Home feed is actually mounted and reuses a completed load when a viewer returns
+without refreshing. Direct politician, party, search and legal entries no
+longer pay for the separate 240-row background catalogue. Politician/party
+profile reads, roster reads and cursor pages now share abort signals so a quick
+route change releases obsolete Supabase work instead of merely ignoring its
+result. `web/src/supabase.ts` replaces profile `select=*` reads with an explicit
+playback-safe projection. `migrations/032_profile_page_scale_indexes.*.sql`
+adds four partial/join indexes for the catalogue paths, with Python migration
+coverage and focused frontend regression coverage in
+`web/tests/profile-scale.test.mjs`.
+
+**Measured before/after:** the removed anonymous background catalogue was 240
+rows / 437.2 KiB on a direct profile visit. The retained 60-row party payload
+fell from 108.0 KiB to 102.9 KiB (4.7%). The remaining size is primarily the
+clip transcript, intentionally retained because the desktop lead card and
+collection inspector display it. Production profile galleries still mount zero
+video elements; native lazy images decoded only the near-viewport subset.
+
+**Tests:** all 195 frontend Node tests pass; TypeScript passes; the production
+Vite/PWA build passes and still precaches exactly nine app-shell entries. Full
+repository gate green: 516 Python tests, 79 deselected, the known `audioop`
+warning, Ruff clean and strict mypy clean over 83 source files.
+
+**Contracts touched:** none. No dependency change. Migration 032 was applied
+to the production Supabase project after all prior migration checksums matched.
+
+**Decisions made:**
+- Kept the existing first-page size and stable cursor pagination. The measured
+  profile response is modest and its thumbnails already use native lazy loading;
+  reducing it would add more user-visible round trips without addressing the
+  actual duplicate 240-row request.
+- Kept transcript and source metadata in profile rows so opening the existing
+  bounded collection player does not require a second detail request or lose
+  desktop copy.
+- Did not add DOM virtualization. No MP4 is mounted in a profile gallery, and
+  the collection player still enforces its existing four-source maximum.
+- The completed Home request cache is keyed by mode, refresh generation,
+  personalization state and viewer identity; an explicit refresh still fetches
+  fresh data and navigation never crosses account or mode boundaries.
+
+**Production verification:** release commit `126637e` was pushed to `main` and
+InstaPods changed the live script to `index-LrKKbcZH.js`. The live
+Socialdemokraterna page rendered all 60 gallery cards with zero video elements;
+a politician profile also rendered 60 cards with zero video elements. Starting
+its normal collection route mounted three video sources and played exactly one
+clip, preserving the bounded scheduler.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** true DOM virtualization is deliberately deferred
+until a measured long-session profile problem appears. The current scale guard
+is data-request elimination, cancellation, index support and bounded media — do
+not reintroduce unconditional video sources into gallery cards.
