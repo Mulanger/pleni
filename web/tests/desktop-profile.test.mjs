@@ -44,7 +44,7 @@ test("the gallery is three across and scrolls inside its own frame", () => {
 });
 
 test("the side column only asks for readers that already exist", () => {
-  assert.match(app, /loadPoliticiansForParty\(code\)/);
+  assert.match(app, /loadPoliticiansForParty\(code, 200, controller\.signal\)/);
   assert.match(app, /partyProfiles\.find\(\(profile\) => profile\.abbr === person\.party\)/);
   assert.match(app, /const RAIL_PERSON_LIMIT = 6;/);
   assert.match(app, /partyPeers\.filter\(\(peer\) => peer\.id !== person\.id\)/);

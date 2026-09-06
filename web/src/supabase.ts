@@ -78,10 +78,10 @@ interface RawFeedCatalogueClip {
   speaker_name: string;
   party: string | null;
   anforandetyp: string | null;
-  archetype: string | null;
+  archetype?: string | null;
   title: string | null;
   transcript: string | null;
-  topic: string | null;
+  topic?: string | null;
   duration_s: number | string;
   url_540x960: string;
   thumb_url: string;
@@ -336,9 +336,10 @@ async function readClips(query: URLSearchParams): Promise<ClipItem[]> {
 /** Read profile-grid clips from the flattened catalogue's sortable date columns. */
 async function readProfileClips(
   query: URLSearchParams,
-  failOnError = false
+  failOnError = false,
+  signal?: AbortSignal
 ): Promise<ClipItem[]> {
-  const response = await supabaseRest(`feed_clip_catalogue?${query.toString()}`);
+  const response = await supabaseRest(`feed_clip_catalogue?${query.toString()}`, { signal });
   if (!response.ok) {
     if (failOnError) {
       throw new Error(`Profile clip page request failed (${response.status})`);
@@ -481,6 +482,31 @@ function mapFeedCatalogueClip(row: RawFeedCatalogueClip): ClipItem {
 
 const POLITICIAN_SELECT = "id,name,party,role,constituency,avatar_url";
 const PARTY_PROFILE_SELECT = "code,name,short_name,color,logo_url,display_order";
+// Profile galleries do not use recommendation/search-only fields or master
+// timing columns. Keeping this explicit prevents a future catalogue expansion
+// from silently increasing every profile response.
+const PROFILE_CLIP_SELECT = [
+  "id",
+  "speech_id",
+  "source_id",
+  "politician_id",
+  "politician_name",
+  "politician_role",
+  "politician_avatar_url",
+  "speaker_name",
+  "party",
+  "anforandetyp",
+  "title",
+  "transcript",
+  "duration_s",
+  "url_540x960",
+  "thumb_url",
+  "source_title",
+  "source_url",
+  "debate_date",
+  "published_at",
+  "rank_in_speech"
+].join(",");
 
 function isPublicPartyCode(value: string): value is Exclude<PartyCode, "NONE"> {
   return value === "S" || value === "M" || value === "SD" || value === "C" ||
@@ -584,7 +610,10 @@ export async function loadPartyProfiles(signal?: AbortSignal): Promise<PartyProf
 }
 
 /** One canonical party row with live politician and published-clip totals. */
-export async function loadPartyProfile(code: PartyCode): Promise<PartyProfile | null> {
+export async function loadPartyProfile(
+  code: PartyCode,
+  signal?: AbortSignal
+): Promise<PartyProfile | null> {
   if (!supabaseConfigured || code === "NONE") {
     return null;
   }
@@ -594,9 +623,9 @@ export async function loadPartyProfile(code: PartyCode): Promise<PartyProfile | 
     limit: "1"
   });
   const [response, clipCount, politicianCount] = await Promise.all([
-    supabaseRest(`party_profiles?${params.toString()}`),
-    countClipsForParty(code),
-    countPoliticiansForParty(code)
+    supabaseRest(`party_profiles?${params.toString()}`, { signal }),
+    countClipsForParty(code, signal),
+    countPoliticiansForParty(code, signal)
   ]);
   if (!response.ok) {
     return null;
@@ -608,9 +637,10 @@ export async function loadPartyProfile(code: PartyCode): Promise<PartyProfile | 
 /** Current politician records for a party, ordered by display name. */
 export async function loadPoliticiansForParty(
   code: PartyCode,
-  limit = 200
+  limit = 200,
+  signal?: AbortSignal
 ): Promise<Politician[]> {
-  return searchPoliticians("", { party: code, limit });
+  return searchPoliticians("", { party: code, limit, signal });
 }
 
 /**
@@ -620,7 +650,10 @@ export async function loadPoliticiansForParty(
  * not appear anywhere in the current feed, so Följer cannot be rendered from
  * loaded clips.
  */
-export async function loadPoliticiansByIds(ids: string[]): Promise<Politician[]> {
+export async function loadPoliticiansByIds(
+  ids: string[],
+  signal?: AbortSignal
+): Promise<Politician[]> {
   if (!supabaseConfigured || ids.length === 0) {
     return [];
   }
@@ -629,7 +662,7 @@ export async function loadPoliticiansByIds(ids: string[]): Promise<Politician[]>
     id: `in.(${ids.join(",")})`,
     order: "name.asc"
   });
-  const response = await supabaseRest(`politicians?${params.toString()}`);
+  const response = await supabaseRest(`politicians?${params.toString()}`, { signal });
   if (!response.ok) {
     return [];
   }
@@ -637,10 +670,13 @@ export async function loadPoliticiansByIds(ids: string[]): Promise<Politician[]>
 }
 
 /** One politician plus their exact published clip total. */
-export async function loadPolitician(id: string): Promise<Politician | null> {
+export async function loadPolitician(
+  id: string,
+  signal?: AbortSignal
+): Promise<Politician | null> {
   const [rows, clipCount] = await Promise.all([
-    loadPoliticiansByIds([id]),
-    countClipsForPolitician(id)
+    loadPoliticiansByIds([id], signal),
+    countClipsForPolitician(id, signal)
   ]);
   const row = rows[0];
   return row ? { ...row, clipCount } : null;
@@ -654,7 +690,10 @@ export async function loadPolitician(id: string): Promise<Politician | null> {
  * the page are independent. Returns `null` if the header is missing, because
  * "unknown" must not render as `0`.
  */
-export async function countClipsForPolitician(politicianId: string): Promise<number | null> {
+export async function countClipsForPolitician(
+  politicianId: string,
+  signal?: AbortSignal
+): Promise<number | null> {
   if (!supabaseConfigured) {
     return null;
   }
@@ -665,6 +704,7 @@ export async function countClipsForPolitician(politicianId: string): Promise<num
     moderation: "neq.rejected"
   });
   const response = await supabaseRest(`clips?${params.toString()}`, {
+    signal,
     headers: { Prefer: "count=exact", Range: "0-0" }
   });
   if (!response.ok) {
@@ -675,8 +715,9 @@ export async function countClipsForPolitician(politicianId: string): Promise<num
   return total && Number.isFinite(parsed) ? parsed : null;
 }
 
-async function exactCount(path: string): Promise<number | null> {
+async function exactCount(path: string, signal?: AbortSignal): Promise<number | null> {
   const response = await supabaseRest(path, {
+    signal,
     headers: { Prefer: "count=exact", Range: "0-0" }
   });
   if (!response.ok) {
@@ -688,16 +729,22 @@ async function exactCount(path: string): Promise<number | null> {
 }
 
 /** Exact number of current politician rows assigned to a party. */
-export async function countPoliticiansForParty(code: PartyCode): Promise<number | null> {
+export async function countPoliticiansForParty(
+  code: PartyCode,
+  signal?: AbortSignal
+): Promise<number | null> {
   if (!supabaseConfigured || code === "NONE") {
     return null;
   }
   const params = new URLSearchParams({ select: "id", party: `eq.${code}` });
-  return exactCount(`politicians?${params.toString()}`);
+  return exactCount(`politicians?${params.toString()}`, signal);
 }
 
 /** Exact number of published clips whose canonical politician belongs to a party. */
-export async function countClipsForParty(code: PartyCode): Promise<number | null> {
+export async function countClipsForParty(
+  code: PartyCode,
+  signal?: AbortSignal
+): Promise<number | null> {
   if (!supabaseConfigured || code === "NONE") {
     return null;
   }
@@ -707,7 +754,7 @@ export async function countClipsForParty(code: PartyCode): Promise<number | null
     published_at: "not.is.null",
     moderation: "neq.rejected"
   });
-  return exactCount(`clips?${params.toString()}`);
+  return exactCount(`clips?${params.toString()}`, signal);
 }
 
 /**
@@ -720,19 +767,20 @@ export async function countClipsForParty(code: PartyCode): Promise<number | null
 export async function loadClipsForPolitician(
   politicianId: string,
   limit = 60,
-  after: ClipItem | null = null
+  after: ClipItem | null = null,
+  signal?: AbortSignal
 ): Promise<ClipItem[]> {
   if (!supabaseConfigured) {
     return [];
   }
   const params = new URLSearchParams({
-    select: "*",
+    select: PROFILE_CLIP_SELECT,
     politician_id: `eq.${politicianId}`,
     order: "debate_date.desc,published_at.desc,id.asc",
     limit: String(limit)
   });
   applyProfileClipCursor(params, after);
-  return readProfileClips(params, after !== null);
+  return readProfileClips(params, after !== null, signal);
 }
 
 /**
@@ -745,20 +793,21 @@ export async function loadClipsForPolitician(
 export async function loadClipsForParty(
   code: PartyCode,
   limit = 60,
-  after: ClipItem | null = null
+  after: ClipItem | null = null,
+  signal?: AbortSignal
 ): Promise<ClipItem[]> {
   if (!supabaseConfigured || code === "NONE") {
     return [];
   }
   const params = new URLSearchParams({
-    select: "*",
+    select: PROFILE_CLIP_SELECT,
     party: `eq.${code}`,
     politician_id: "not.is.null",
     order: "debate_date.desc,published_at.desc,id.asc",
     limit: String(limit)
   });
   applyProfileClipCursor(params, after);
-  return readProfileClips(params, after !== null);
+  return readProfileClips(params, after !== null, signal);
 }
 
 /**

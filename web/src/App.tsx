@@ -424,6 +424,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
   const preferenceSyncQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [feedReloadKey, setFeedReloadKey] = useState(0);
   const [loadedFeedMode, setLoadedFeedMode] = useState<FeedMode | null>(null);
+  const completedMainFeedRequestRef = useRef<string | null>(null);
   const pwa = usePwaExperience(feedNetworkFailed);
   const [analyticsConsent, setAnalyticsConsent] = useState(readAnalyticsConsent);
   const [analyticsPromptReady, setAnalyticsPromptReady] = useState(false);
@@ -433,6 +434,10 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
   const selectedPartyCode =
     route.view === "party" || route.view === "party-clips" ? route.partyCode : null;
   const selectedEntryClipId = route.view === "clip" ? route.clipId : null;
+  // A direct profile, party, search or legal entry has its own data source.
+  // Loading the 240-row For You catalogue behind those screens spent bandwidth
+  // and database work without mounting the feed that consumes it.
+  const mainFeedRequested = route.view === "tab" && route.tab === "hem";
   const [query, setQuery] = useState("");
   const [partyFilter, setPartyFilter] = useState<PartyCode | null>(null);
   const [topicSearchState, setTopicSearchState] = useState<TopicSearchState>(
@@ -471,6 +476,8 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
   const [partyClipsLoadingMore, setPartyClipsLoadingMore] = useState(false);
   const [partyClipsHasMore, setPartyClipsHasMore] = useState(false);
   const [partyClipsPageError, setPartyClipsPageError] = useState<string | null>(null);
+  const personClipsPageControllerRef = useRef<AbortController | null>(null);
+  const partyClipsPageControllerRef = useRef<AbortController | null>(null);
   const selectedPersonIdRef = useRef(selectedPersonId);
   const selectedPartyCodeRef = useRef(selectedPartyCode);
   selectedPersonIdRef.current = selectedPersonId;
@@ -977,6 +984,14 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
   ]);
 
   useEffect(() => {
+    if (!mainFeedRequested) {
+      if (manualRefreshModeRef.current !== null) {
+        manualRefreshModeRef.current = null;
+        setManualRefreshing(false);
+      }
+      setLoading(false);
+      return;
+    }
     if (recommendationsEnabled && feedMode === "fordig" && !recommendationProfileLoaded) {
       setLoading(true);
       return;
@@ -988,6 +1003,16 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
       feedMode === "fordig" &&
       viewer.signedIn &&
       recommendationProfile.personalization;
+    const requestKey = [
+      feedMode,
+      feedReloadKey,
+      personalized ? "personalized" : "public",
+      viewer.userId ?? "anonymous"
+    ].join(":");
+    if (completedMainFeedRequestRef.current === requestKey) {
+      setLoading(false);
+      return;
+    }
     const preservingManualRefresh = manualRefreshModeRef.current === feedMode;
     if (manualRefreshModeRef.current !== null && !preservingManualRefresh) {
       // A mode change cancels the visual refresh owned by the previous mode.
@@ -1039,6 +1064,9 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
     })()
       .then((feed) => {
         if (!mounted) return;
+        if (!feed.error || feed.clips.length > 0) {
+          completedMainFeedRequestRef.current = requestKey;
+        }
         setLoadedFeedMode(feedMode);
         setClips(feed.clips);
         setClipSource(feed.source);
@@ -1071,6 +1099,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
   }, [
     feedMode,
     feedReloadKey,
+    mainFeedRequested,
     recommendationProfile.personalization,
     recommendationProfileLoaded,
     viewer.signedIn,
@@ -1135,6 +1164,8 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
    * to — meant most people simply could not be opened.
    */
   useEffect(() => {
+    personClipsPageControllerRef.current?.abort();
+    personClipsPageControllerRef.current = null;
     if (selectedPersonId === null) {
       setPerson(null);
       setPersonClips([]);
@@ -1144,6 +1175,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
       return;
     }
     let active = true;
+    const controller = new AbortController();
     setPersonLoading(true);
     setPerson(null);
     setPersonClips([]);
@@ -1151,8 +1183,8 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
     setPersonClipsLoadingMore(false);
     setPersonClipsPageError(null);
     Promise.all([
-      loadPolitician(selectedPersonId),
-      loadClipsForPolitician(selectedPersonId, PROFILE_CLIP_PAGE_SIZE)
+      loadPolitician(selectedPersonId, controller.signal),
+      loadClipsForPolitician(selectedPersonId, PROFILE_CLIP_PAGE_SIZE, null, controller.signal)
     ])
       .then(([politician, personClips]) => {
         if (active) {
@@ -1181,6 +1213,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
       // A fast tap through several people must not let a slow first response
       // overwrite a newer one.
       active = false;
+      controller.abort();
     };
   }, [selectedPersonId]);
 
@@ -1199,7 +1232,8 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
       return;
     }
     let active = true;
-    loadPoliticiansForParty(code)
+    const controller = new AbortController();
+    loadPoliticiansForParty(code, 200, controller.signal)
       .then((peers) => {
         if (active) {
           setPersonPartyPeers(peers);
@@ -1212,11 +1246,14 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [person?.party]);
 
   /** Load a party's canonical metadata, current people and recent catalogue. */
   useEffect(() => {
+    partyClipsPageControllerRef.current?.abort();
+    partyClipsPageControllerRef.current = null;
     if (selectedPartyCode === null) {
       setParty(null);
       setPartyClips([]);
@@ -1227,6 +1264,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
       return;
     }
     let active = true;
+    const controller = new AbortController();
     setPartyLoading(true);
     setParty(null);
     setPartyClips([]);
@@ -1235,9 +1273,9 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
     setPartyClipsLoadingMore(false);
     setPartyClipsPageError(null);
     Promise.all([
-      loadPartyProfile(selectedPartyCode),
-      loadClipsForParty(selectedPartyCode, PROFILE_CLIP_PAGE_SIZE),
-      loadPoliticiansForParty(selectedPartyCode)
+      loadPartyProfile(selectedPartyCode, controller.signal),
+      loadClipsForParty(selectedPartyCode, PROFILE_CLIP_PAGE_SIZE, null, controller.signal),
+      loadPoliticiansForParty(selectedPartyCode, 200, controller.signal)
     ])
       .then(([profile, recentClips, politicians]) => {
         if (active) {
@@ -1266,6 +1304,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [selectedPartyCode]);
 
@@ -1283,11 +1322,14 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
 
     setPersonClipsLoadingMore(true);
     setPersonClipsPageError(null);
+    const controller = new AbortController();
+    personClipsPageControllerRef.current = controller;
     try {
       const nextPage = await loadClipsForPolitician(
         personId,
         PROFILE_CLIP_PAGE_SIZE,
-        after
+        after,
+        controller.signal
       );
       if (selectedPersonIdRef.current !== personId) {
         return;
@@ -1300,10 +1342,13 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
           (total === null || merged.length < total)
       );
     } catch {
-      if (selectedPersonIdRef.current === personId) {
+      if (!controller.signal.aborted && selectedPersonIdRef.current === personId) {
         setPersonClipsPageError("Fler klipp kunde inte hämtas. Försök igen.");
       }
     } finally {
+      if (personClipsPageControllerRef.current === controller) {
+        personClipsPageControllerRef.current = null;
+      }
       if (selectedPersonIdRef.current === personId) {
         setPersonClipsLoadingMore(false);
       }
@@ -1324,11 +1369,14 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
 
     setPartyClipsLoadingMore(true);
     setPartyClipsPageError(null);
+    const controller = new AbortController();
+    partyClipsPageControllerRef.current = controller;
     try {
       const nextPage = await loadClipsForParty(
         partyCode,
         PROFILE_CLIP_PAGE_SIZE,
-        after
+        after,
+        controller.signal
       );
       if (selectedPartyCodeRef.current !== partyCode) {
         return;
@@ -1341,10 +1389,13 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
           (total === null || merged.length < total)
       );
     } catch {
-      if (selectedPartyCodeRef.current === partyCode) {
+      if (!controller.signal.aborted && selectedPartyCodeRef.current === partyCode) {
         setPartyClipsPageError("Fler klipp kunde inte hämtas. Försök igen.");
       }
     } finally {
+      if (partyClipsPageControllerRef.current === controller) {
+        partyClipsPageControllerRef.current = null;
+      }
       if (selectedPartyCodeRef.current === partyCode) {
         setPartyClipsLoadingMore(false);
       }
