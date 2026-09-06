@@ -7501,3 +7501,44 @@ clip, preserving the bounded scheduler.
 until a measured long-session profile problem appears. The current scale guard
 is data-request elimination, cancellation, index support and bounded media — do
 not reintroduce unconditional video sources into gallery cards.
+
+## UI21.6 — Google tag command delivery repair — DONE 2026-09-06
+
+**Built:** `web/src/analytics.ts` now queues each analytics command with the
+browser function's `arguments` object, matching Google's documented `gtag`
+wrapper. The previous rest-parameter array reached `dataLayer` in a shape that
+the loaded Google tag did not consume. `web/tests/analytics-consent.test.mjs`
+now asserts the exact non-array command shape before checking consent and video
+events, so the original failure cannot silently return.
+
+**Tests:** all 195 frontend Node tests pass; TypeScript passes; the production
+Vite/PWA build passes and precaches exactly nine app-shell entries. Full
+repository gate green: 516 Python tests, 79 deselected, the known `audioop`
+warning, Ruff clean and strict mypy clean over 83 source files.
+
+**Contracts touched:** none. No dependency, consent rule, event name, event
+payload, measurement id, GA4 property or service-worker behavior changed.
+
+**Decisions made:**
+- Kept Basic Consent Mode unchanged: the Google script still loads only after
+  an explicit analytics grant.
+- Kept measurement `G-STDL8RHDCX`; the production stream and source already
+  matched, so changing Analytics configuration would have hidden the actual
+  client-side defect.
+- Made the regression test validate Google's wire shape rather than merely
+  counting locally queued values.
+
+**Production verification:** release commit `e60b70c` was pushed to `main` and
+InstaPods changed the live bundle to `index-C7DZgXA-.js`. With analysis consent
+already granted, a fresh production load appeared in GA4 Realtime as one active
+user. The report received two `page_view` events plus `clip_impression`,
+`qualified_view`, `scroll`, `first_visit` and `session_start`, proving the tag,
+cookie/session and Pleni video-event paths are active end to end.
+
+**Observations (not fixed, out of scope):** standard GA4 reports can take longer
+to populate than Realtime; this is no longer a collection failure.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** GA4 collection is production-verified. Preserve the
+`arguments` queue shape if the analytics wrapper is refactored.
