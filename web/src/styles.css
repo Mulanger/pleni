@@ -6007,6 +6007,18 @@ a {
     margin-top: 28px;
   }
 
+  .desktop-following-open {
+    align-self: end;
+    min-width: 184px;
+    padding-inline: 18px;
+    white-space: nowrap;
+  }
+
+  .desktop-following-open span {
+    display: block;
+    line-height: 1;
+  }
+
   .desktop-following-signed-out {
     display: grid;
     width: min(calc(100% - 76px), 1120px);

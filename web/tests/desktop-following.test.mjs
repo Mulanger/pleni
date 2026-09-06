@@ -31,6 +31,10 @@ test("signed-in desktop Following uses honest facts and the existing routes", ()
   assert.match(desktopBranch, /label: "Politiker"/);
   assert.doesNotMatch(desktopBranch, /Senast tillagd/);
   assert.match(desktopBranch, /Öppna För dig/);
+  assert.match(desktopBranch, /className="desktop-action-primary desktop-following-open"/);
+  assert.match(desktopBranch, /<span>Öppna För dig<\/span>/);
+  assert.match(styles, /\.desktop-following-open\s*\{[^}]*min-width:\s*184px[^}]*white-space:\s*nowrap/);
+  assert.match(styles, /\.desktop-following-open span\s*\{[^}]*line-height:\s*1/);
   assert.match(desktopBranch, /Dina följningar påverkar inte För dig ännu/);
   assert.match(desktopBranch, /onOpenProfile/);
 });

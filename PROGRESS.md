@@ -7385,3 +7385,50 @@ with enabled Clerk actions and the terms/privacy footer.
 **Next agent should know:** the production cookie prompt was accepted through
 the fresh-origin local visual run and its exact stylesheet is live. Re-test the
 first-visit delay only if the consent bootstrap or storage version changes.
+
+## UI21.4 — Following action alignment and deterministic feed refresh — DONE 2026-09-06
+
+**Built:** `web/src/App.tsx` gives *Öppna För dig* a dedicated desktop action
+class and text wrapper so the label stays centred, unbroken and aligned with the
+Following masthead facts. Feed loads and manual refreshes are now owned by their
+specific mode, stale results cannot render under a newly selected mode, and both
+mode changes and refreshes deterministically return playback to the first clip.
+`web/src/supabase.ts` supports abort signals and an explicit cache policy; a
+manual refresh bypasses the browser cache while ordinary feed loads retain their
+normal caching. `web/src/styles.css`, `web/tests/desktop-following.test.mjs` and
+the new `web/tests/feed-refresh.test.mjs` cover the presentation and refresh
+invariants.
+
+**Tests:** all 192 frontend Node tests pass; TypeScript passes; the production
+Vite/PWA build passes and still precaches exactly nine app-shell entries. Full
+repository gate green: 514 Python tests, 79 deselected, the known `audioop`
+warning, Ruff clean and strict mypy clean over 83 source files.
+
+**Functional verification:** with real public catalogue data, switching from
+*För dig* to *Senaste* selected the chronological first clip `HD10556_32_c01`
+at scroll position 0. A manual *För dig* refresh replaced
+`HD10538_9c713b38-d36f-f111-bf27-6805cafeabf9_c01` with
+`HD10535_43_c01` and also returned to position 0. The race case — starting a
+manual refresh and immediately choosing *Senaste* — still ended on `/senaste/`
+with `HD10556_32_c01`, no loading state, no refresh state and scroll position 0.
+No browser error was recorded.
+
+**Contracts touched:** none. No migration or dependency change.
+
+**Decisions made:**
+- A manual refresh belongs only to the mode in which it was requested. Changing
+  mode cancels its UI ownership so a late completion cannot interfere with the
+  destination feed.
+- An explicit refresh uses `cache: "no-store"`; normal initial and mode loads do
+  not, preserving the existing performance characteristics.
+- The active clip is intentionally reset on a mode change or refresh. Reusing an
+  overlapping clip ID made a successful data reload appear visually unchanged.
+- Feed ranking and recommendation selection are unchanged.
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** verify the signed-in Following action visually on
+production when a Clerk session is available; the isolated checkout used a
+development session and the alignment itself is covered by the desktop test.

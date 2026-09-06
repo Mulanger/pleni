@@ -157,6 +157,7 @@ export async function supabaseRest(
     signal?: AbortSignal;
     method?: "GET" | "POST";
     body?: unknown;
+    cache?: RequestCache;
     /** Extra request headers, e.g. `Prefer: count=exact` for a row total. */
     headers?: Record<string, string>;
   } = {}
@@ -178,6 +179,7 @@ export async function supabaseRest(
       ...options.headers
     },
     body: method === "POST" ? JSON.stringify(options.body ?? {}) : undefined,
+    cache: options.cache,
     signal: options.signal
   });
 }
@@ -378,7 +380,10 @@ function applyProfileClipCursor(params: URLSearchParams, after: ClipItem | null)
  * (FE-1, FE-12). A failed request resolves to an empty `supabase` feed carrying
  * the error rather than rejecting, so the UI renders an honest empty state.
  */
-export async function loadPublishedClips(limit = 60): Promise<ClipFeed> {
+export async function loadPublishedClips(
+  limit = 60,
+  options: { signal?: AbortSignal; cache?: RequestCache } = {}
+): Promise<ClipFeed> {
   if (!supabaseConfigured) {
     return sampleClipsAllowed
       ? { clips: SAMPLE_CLIPS, source: "sample" }
@@ -392,7 +397,7 @@ export async function loadPublishedClips(limit = 60): Promise<ClipFeed> {
       limit: String(limit)
     });
     try {
-      const response = await supabaseRest(`feed_clip_catalogue?${catalogueQuery.toString()}`);
+      const response = await supabaseRest(`feed_clip_catalogue?${catalogueQuery.toString()}`, options);
       if (!response.ok) {
         return { clips: [], source: "supabase", error: `Supabase svarade ${response.status}` };
       }
@@ -420,7 +425,7 @@ export async function loadPublishedClips(limit = 60): Promise<ClipFeed> {
 
   // Published clips are public data readable by `anon`, so this stays an
   // anonymous request whether or not a viewer is signed in.
-  const response = await supabaseRest(`clips?${query.toString()}`);
+  const response = await supabaseRest(`clips?${query.toString()}`, options);
 
   if (!response.ok) {
     return {

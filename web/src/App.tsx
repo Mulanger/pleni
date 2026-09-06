@@ -417,9 +417,13 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
   const [feedNetworkFailed, setFeedNetworkFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [manualRefreshing, setManualRefreshing] = useState(false);
-  const manualRefreshRef = useRef(false);
+  // A refresh belongs to the feed mode that requested it. A single boolean
+  // leaked across a quick För dig -> Senaste switch, preserving the old slate
+  // and eventually clearing the wrong request's loading state.
+  const manualRefreshModeRef = useRef<FeedMode | null>(null);
   const preferenceSyncQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [feedReloadKey, setFeedReloadKey] = useState(0);
+  const [loadedFeedMode, setLoadedFeedMode] = useState<FeedMode | null>(null);
   const pwa = usePwaExperience(feedNetworkFailed);
   const [analyticsConsent, setAnalyticsConsent] = useState(readAnalyticsConsent);
   const [analyticsPromptReady, setAnalyticsPromptReady] = useState(false);
@@ -907,8 +911,8 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
   };
 
   const refreshFeed = () => {
-    if (loading) return;
-    manualRefreshRef.current = true;
+    if (manualRefreshModeRef.current !== null) return;
+    manualRefreshModeRef.current = feedMode;
     setManualRefreshing(true);
     setLoading(true);
     setFeedReloadKey((current) => current + 1);
@@ -984,12 +988,19 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
       feedMode === "fordig" &&
       viewer.signedIn &&
       recommendationProfile.personalization;
+    const preservingManualRefresh = manualRefreshModeRef.current === feedMode;
+    if (manualRefreshModeRef.current !== null && !preservingManualRefresh) {
+      // A mode change cancels the visual refresh owned by the previous mode.
+      // The previous request is aborted by this effect's cleanup below.
+      manualRefreshModeRef.current = null;
+      setManualRefreshing(false);
+    }
     setLoading(true);
     setFeedError(null);
     // Pull/Home refresh keeps the current frame in place until its replacement
     // is ready. Mode and preference changes still clear immediately so content
     // from the previous context is never presented as the new feed.
-    if (!manualRefreshRef.current) {
+    if (!preservingManualRefresh) {
       setClips([]);
     }
     void (async () => {
@@ -1001,14 +1012,20 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
             signal: controller.signal
           });
         }
-        const published = await loadPublishedClips(feedMode === "fordig" ? 240 : 60);
+        const published = await loadPublishedClips(feedMode === "fordig" ? 240 : 60, {
+          signal: controller.signal,
+          cache: preservingManualRefresh ? "no-store" : "default"
+        });
         return feedMode === "fordig"
           ? { ...published, clips: shuffledClips(published.clips) }
           : published;
       } catch (error) {
         if (controller.signal.aborted) throw error;
         if (personalized) {
-          const fallback = await loadPublishedClips(240);
+          const fallback = await loadPublishedClips(240, {
+            signal: controller.signal,
+            cache: preservingManualRefresh ? "no-store" : "default"
+          });
           return {
             ...fallback,
             clips: shuffledClips(fallback.clips),
@@ -1022,6 +1039,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
     })()
       .then((feed) => {
         if (!mounted) return;
+        setLoadedFeedMode(feedMode);
         setClips(feed.clips);
         setClipSource(feed.source);
         setFeedError(feed.error ?? null);
@@ -1029,6 +1047,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
       })
       .catch((error: unknown) => {
         if (!mounted || controller.signal.aborted) return;
+        setLoadedFeedMode(feedMode);
         setClips([]);
         setFeedError(error instanceof Error ? error.message : "Okänt fel");
         setFeedNetworkFailed(true);
@@ -1036,8 +1055,11 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
       .finally(() => {
         if (mounted) {
           setLoading(false);
-          if (manualRefreshRef.current) {
-            manualRefreshRef.current = false;
+          if (
+            preservingManualRefresh &&
+            manualRefreshModeRef.current === feedMode
+          ) {
+            manualRefreshModeRef.current = null;
             setManualRefreshing(false);
           }
         }
@@ -1054,6 +1076,11 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
     viewer.signedIn,
     viewer.userId
   ]);
+
+  // Route changes render before effects run. Tagging the loaded slate prevents
+  // one frame of För dig from mounting under the Senaste tab (and vice versa),
+  // including when Home is opened from another screen.
+  const mainFeedClips = loadedFeedMode === feedMode ? clips : [];
 
   /**
    * A public watch URL is identified by the final clip id, never by its
@@ -1673,7 +1700,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
                 home: (
                   <FeedScreen
                     presentation="desktop"
-                    clips={clips}
+                    clips={mainFeedClips}
                     feedMode={feedMode}
                     setFeedMode={changeFeedMode}
                     playbackSuspended={showOnboarding}
@@ -2045,7 +2072,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
             {tab === "hem" && (
               <FeedScreen
                 analyticsContext={route.view === "clip" ? "seo_clip" : undefined}
-                clips={route.view === "clip" ? entryFeedClips : clips}
+                clips={route.view === "clip" ? entryFeedClips : mainFeedClips}
                 feedMode={feedMode}
                 setFeedMode={changeFeedMode}
                 playbackSuspended={showOnboarding}
@@ -2720,6 +2747,8 @@ function FeedScreen({
   const pullStartY = useRef<number | null>(null);
   const pullDistanceRef = useRef(0);
   const wasRefreshingRef = useRef(false);
+  const previousFeedModeRef = useRef(feedMode);
+  const resetToFirstClipRef = useRef(false);
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const videoRefCallbacks = useRef<
     Record<string, (node: HTMLVideoElement | null) => void>
@@ -2782,9 +2811,24 @@ function FeedScreen({
   const effectiveMuted = isFeedAudioMuted(muted, autoplayMutedClipId, activeId);
 
   useEffect(() => {
+    if (previousFeedModeRef.current === feedMode) {
+      return;
+    }
+    previousFeedModeRef.current = feedMode;
+    resetToFirstClipRef.current = true;
+    mainFeedActiveId.current = null;
+    activeIdRef.current = "";
+    setActiveId("");
+    feedScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [feedMode]);
+
+  useEffect(() => {
     // A collection opened from a grid starts on the clip that was tapped, not
     // at the top; falling back to the first clip if that id is not in the set.
-    const openingClipId = debateContext?.startId ?? mainFeedActiveId.current ?? initialClipId;
+    const resetToFirstClip = resetToFirstClipRef.current;
+    const openingClipId = resetToFirstClip
+      ? null
+      : debateContext?.startId ?? mainFeedActiveId.current ?? initialClipId;
     const wanted = openingClipId && clips.some((clip) => clip.id === openingClipId)
       ? openingClipId
       : clips[0]?.id ?? "";
@@ -2798,6 +2842,10 @@ function FeedScreen({
     autoplayMutedClipIdRef.current = null;
     setAutoplayMutedClipId(null);
     loopCounts.current = {};
+    if (resetToFirstClip && clips.length > 0) {
+      mainFeedActiveId.current = wanted || null;
+      resetToFirstClipRef.current = false;
+    }
   }, [clips, debateContext, initialClipId]);
 
   useEffect(() => {
@@ -2868,6 +2916,8 @@ function FeedScreen({
     if (refreshing && !wasRefreshingRef.current && pullDistance === 0) {
       // A Home-button refresh can begin from any clip. Let the existing slate
       // glide to its first item while the replacement is fetched.
+      resetToFirstClipRef.current = true;
+      mainFeedActiveId.current = null;
       feedScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     }
     if (!refreshing && wasRefreshingRef.current) {
@@ -4888,9 +4938,13 @@ function FollowingScreen({
               {signedIn && <DesktopProfileFacts items={facts} />}
             </div>
             {signedIn && libraryReady && !empty && (
-              <button className="desktop-action-primary" type="button" onClick={onOpenForYou}>
+              <button
+                className="desktop-action-primary desktop-following-open"
+                type="button"
+                onClick={onOpenForYou}
+              >
                 <Play size={16} aria-hidden="true" />
-                Öppna För dig
+                <span>Öppna För dig</span>
               </button>
             )}
           </header>
