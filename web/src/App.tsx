@@ -4845,45 +4845,109 @@ function ProgressRow({
   onSeek: (seconds: number) => void;
 }) {
   const safeDuration = Math.max(duration, 0);
-  const percent = safeDuration > 0 ? Math.min(Math.max(currentTime / safeDuration, 0), 1) : 0;
+  const [scrubTime, setScrubTime] = useState<number | null>(null);
+  const activePointerId = useRef<number | null>(null);
+  const displayTime = scrubTime ?? currentTime;
+  const percent = safeDuration > 0 ? Math.min(Math.max(displayTime / safeDuration, 0), 1) : 0;
+
+  const seekTo = (seconds: number) => {
+    const nextTime = Math.min(Math.max(seconds, 0), safeDuration);
+    onSeek(nextTime);
+    return nextTime;
+  };
 
   const seekFromPointer = (event: React.PointerEvent<HTMLDivElement>) => {
     if (safeDuration <= 0) {
       return;
     }
     const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0) {
+      return;
+    }
     const x = Math.min(Math.max(event.clientX - rect.left, 0), rect.width);
-    onSeek((x / rect.width) * safeDuration);
+    setScrubTime(seekTo((x / rect.width) * safeDuration));
+  };
+
+  const finishScrubbing = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (activePointerId.current !== event.pointerId) {
+      return;
+    }
+    activePointerId.current = null;
+    setScrubTime(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
   };
 
   return (
     <div className="progress-row" onClick={(event) => event.stopPropagation()}>
-      <span>{formatDuration(currentTime)}</span>
+      <span>{formatDuration(displayTime)}</span>
       <div
-        className="progress-track"
+        className={`progress-track${scrubTime !== null ? " is-scrubbing" : ""}`}
         role="slider"
+        tabIndex={0}
         aria-label="Klippets position"
         aria-valuemin={0}
         aria-valuemax={Math.round(safeDuration)}
-        aria-valuenow={Math.round(currentTime)}
+        aria-valuenow={Math.round(displayTime)}
+        aria-valuetext={`${formatDuration(displayTime)} av ${formatDuration(safeDuration)}`}
         onPointerDown={(event) => {
+          if (!event.isPrimary || safeDuration <= 0) {
+            return;
+          }
+          event.preventDefault();
           event.stopPropagation();
+          activePointerId.current = event.pointerId;
           event.currentTarget.setPointerCapture(event.pointerId);
           seekFromPointer(event);
         }}
         onPointerMove={(event) => {
-          if (event.buttons === 1) {
+          if (activePointerId.current === event.pointerId) {
             seekFromPointer(event);
           }
         }}
         onPointerUp={(event) => {
           event.stopPropagation();
-          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-            event.currentTarget.releasePointerCapture(event.pointerId);
+          finishScrubbing(event);
+        }}
+        onPointerCancel={finishScrubbing}
+        onLostPointerCapture={(event) => {
+          if (activePointerId.current === event.pointerId) {
+            activePointerId.current = null;
+            setScrubTime(null);
+          }
+        }}
+        onKeyDown={(event) => {
+          let nextTime: number | null = null;
+          if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+            nextTime = displayTime - 5;
+          } else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+            nextTime = displayTime + 5;
+          } else if (event.key === "Home") {
+            nextTime = 0;
+          } else if (event.key === "End") {
+            nextTime = safeDuration;
+          }
+          if (nextTime !== null) {
+            event.preventDefault();
+            event.stopPropagation();
+            seekTo(nextTime);
           }
         }}
       >
         <i style={{ width: `${percent * 100}%` }} />
+        <b
+          className="progress-thumb"
+          style={{ left: `${percent * 100}%` }}
+          aria-hidden="true"
+        />
+        <output
+          className="progress-scrub-time"
+          style={{ left: `clamp(22px, ${percent * 100}%, calc(100% - 22px))` }}
+          aria-hidden="true"
+        >
+          {formatDuration(displayTime)}
+        </output>
       </div>
       <span>{formatDuration(safeDuration)}</span>
     </div>

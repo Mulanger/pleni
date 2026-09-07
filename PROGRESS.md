@@ -7464,7 +7464,8 @@ clip transcript, intentionally retained because the desktop lead card and
 collection inspector display it. Production profile galleries still mount zero
 video elements; native lazy images decoded only the near-viewport subset.
 
-**Tests:** all 195 frontend Node tests pass; TypeScript passes; the production
+**Tests:** all 198 frontend Node tests pass, including three focused scrubbing
+regressions; TypeScript passes; the production
 Vite/PWA build passes and still precaches exactly nine app-shell entries. Full
 repository gate green: 516 Python tests, 79 deselected, the known `audioop`
 warning, Ruff clean and strict mypy clean over 83 source files.
@@ -7542,3 +7543,26 @@ to populate than Realtime; this is no longer a collection failure.
 
 **Next agent should know:** GA4 collection is production-verified. Preserve the
 `arguments` queue shape if the analytics wrapper is refactored.
+
+## Frontend — touch-friendly timeline scrubbing — READY 2026-09-07
+
+**Built:** `web/src/App.tsx` and `web/src/styles.css` keep the three-pixel
+timeline visually quiet at rest while giving it a 44-pixel mobile hit region.
+An active drag expands the rail, reveals a thumb and shows a live time bubble;
+pointer capture continues the seek outside the visible line and keyboard users
+can seek by five seconds or jump to either end.
+
+**Tests:** all 195 frontend Node tests pass; TypeScript passes; the production
+Vite/PWA build passes and precaches exactly nine app-shell entries. Full
+repository gate green: 516 Python tests, 79 deselected, the known `audioop`
+warning, Ruff clean and strict mypy clean over 83 source files.
+
+**Functional verification:** the owner accepted the local interaction preview.
+A real in-app browser drag moved the active 41-second clip from 0:33 to 0:13.
+
+**Contracts touched:** none. No dependency, media scheduler, feed gesture or
+service-worker behavior changed.
+
+**Next agent should know:** production verification remains after the release
+commit reaches `main`; confirm that InstaPods serves the new bundle and that a
+real drag changes the live slider value.

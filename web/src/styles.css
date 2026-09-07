@@ -718,6 +718,7 @@ a {
   border-radius: 999px;
   cursor: pointer;
   touch-action: none;
+  outline: none;
 }
 
 .progress-track::before {
@@ -739,6 +740,67 @@ a {
   border-radius: inherit;
   background: #25251f;
   transition: width 120ms linear;
+}
+
+.progress-thumb,
+.progress-scrub-time {
+  position: absolute;
+  pointer-events: none;
+}
+
+.progress-thumb {
+  z-index: 2;
+  top: 50%;
+  width: 17px;
+  height: 17px;
+  border: 2px solid rgba(255, 255, 255, 0.96);
+  border-radius: 50%;
+  background: #25251f;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  scale: 0.72;
+  translate: -50% -50%;
+  transition: opacity 110ms ease, scale 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.progress-scrub-time {
+  z-index: 3;
+  bottom: calc(50% + 15px);
+  min-width: 42px;
+  padding: 5px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 7px;
+  background: rgba(7, 8, 10, 0.82);
+  color: #fff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: center;
+  text-shadow: none;
+  opacity: 0;
+  translate: -50% 4px;
+  backdrop-filter: blur(10px);
+  transition: opacity 100ms ease, translate 130ms ease;
+}
+
+.progress-track:focus-visible .progress-thumb,
+.progress-track.is-scrubbing .progress-thumb {
+  opacity: 1;
+  scale: 1;
+}
+
+.progress-track.is-scrubbing .progress-scrub-time {
+  opacity: 1;
+  translate: -50% 0;
+}
+
+.progress-track.is-scrubbing {
+  cursor: ew-resize;
+}
+
+.progress-track.is-scrubbing i {
+  transition: none;
 }
 
 .bottom-nav {
@@ -3305,19 +3367,35 @@ a {
 }
 
 .progress-track {
-  height: 18px;
+  height: 44px;
+  margin-block: -13px;
 }
 
 .progress-track::before {
-  top: 7px;
+  top: 20px;
   height: 3px;
   background: rgba(255, 255, 255, 0.23);
+  transition: top 130ms ease, height 130ms ease, background 130ms ease;
 }
 
 .progress-row i {
-  top: 7px;
+  top: 20px;
   height: 3px;
   background: rgba(255, 255, 255, 0.95);
+  transition: top 130ms ease, height 130ms ease, width 120ms linear;
+}
+
+.progress-track:focus-visible::before,
+.progress-track.is-scrubbing::before,
+.progress-track:focus-visible i,
+.progress-track.is-scrubbing i {
+  top: 19px;
+  height: 6px;
+}
+
+.progress-track:focus-visible {
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.78);
 }
 
 .feed-screen ~ .bottom-nav {
@@ -4141,6 +4219,23 @@ a {
     right: 14px;
     bottom: 9px;
     left: 14px;
+  }
+
+  .feed-screen--desktop .progress-track {
+    height: 34px;
+    margin-block: -8px;
+  }
+
+  .feed-screen--desktop .progress-track::before,
+  .feed-screen--desktop .progress-row i {
+    top: 15px;
+  }
+
+  .feed-screen--desktop .progress-track:focus-visible::before,
+  .feed-screen--desktop .progress-track.is-scrubbing::before,
+  .feed-screen--desktop .progress-track:focus-visible i,
+  .feed-screen--desktop .progress-track.is-scrubbing i {
+    top: 14px;
   }
 
   .feed-screen--desktop .desktop-feed-nav {
