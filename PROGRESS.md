@@ -7544,7 +7544,7 @@ to populate than Realtime; this is no longer a collection failure.
 **Next agent should know:** GA4 collection is production-verified. Preserve the
 `arguments` queue shape if the analytics wrapper is refactored.
 
-## Frontend — touch-friendly timeline scrubbing — READY 2026-09-07
+## Frontend — touch-friendly timeline scrubbing — DONE 2026-09-07
 
 **Built:** `web/src/App.tsx` and `web/src/styles.css` keep the three-pixel
 timeline visually quiet at rest while giving it a 44-pixel mobile hit region.
@@ -7552,7 +7552,7 @@ An active drag expands the rail, reveals a thumb and shows a live time bubble;
 pointer capture continues the seek outside the visible line and keyboard users
 can seek by five seconds or jump to either end.
 
-**Tests:** all 195 frontend Node tests pass; TypeScript passes; the production
+**Tests:** all 198 frontend Node tests pass; TypeScript passes; the production
 Vite/PWA build passes and precaches exactly nine app-shell entries. Full
 repository gate green: 516 Python tests, 79 deselected, the known `audioop`
 warning, Ruff clean and strict mypy clean over 83 source files.
@@ -7563,6 +7563,17 @@ A real in-app browser drag moved the active 41-second clip from 0:33 to 0:13.
 **Contracts touched:** none. No dependency, media scheduler, feed gesture or
 service-worker behavior changed.
 
-**Next agent should know:** production verification remains after the release
-commit reaches `main`; confirm that InstaPods serves the new bundle and that a
-real drag changes the live slider value.
+**Production verification:** release commit `0275de9` was pushed to `main` and
+InstaPods changed the live bundle from `index-C7DZgXA-.js` to
+`index-B8jeWr3e.js`. At a 390-by-844 mobile viewport, the live timeline exposed
+an exact 44-pixel hit region; a real pointer drag changed the active clip from
+0:44 to 0:11. The production control also retained its keyboard focus target
+and spoken value (`0:11 av 0:46`).
+
+**Observations (not fixed, out of scope):** none.
+
+**Blocked / needs a decision:** none.
+
+**Next agent should know:** the enlarged target is intentionally invisible at
+rest. Preserve the three-pixel visual rail, 44-pixel mobile hit region, pointer
+capture and per-row playback state if the player controls are restyled.
