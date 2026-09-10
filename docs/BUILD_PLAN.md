@@ -1,5 +1,24 @@
 # BUILD_PLAN.md
 
+## S1–S6 — Complete catalogue search V2 — IMPLEMENTED 2026-09-10
+
+**Authority:** owner requested the complete six-stage plan; see
+`docs/SEARCH_V2_PLAN.md`. Dependencies are implemented sequentially within this
+request; stage handoffs and release evidence are in `PROGRESS.md`. Functional
+acceptance passes; the documented latency targets and physical device coverage
+remain open, as detailed in `docs/SEARCH_V2_PLAN.md`.
+
+**Scope:** search modules/components/contracts and integration in `web/src`,
+search Edge modules/functions/config, additive migrations from 033, search
+operator scripts and fixtures/tests, search documentation and `PROGRESS.md`.
+**Excluded:** pipeline stages, `src/contracts.py`, old migrations, media/player
+behavior, unrelated local changes and new search/embedding vendors.
+
+**Acceptance:** date-only traversal, correct removable filters, quote protection,
+catalogue suggestions, no 60-row cap, robust Swedish retrieval, full index
+coverage/health, provider-independent keyword mode, actual SQL/browser tests,
+repository-wide checks and measured release/rollback evidence.
+
 Fourteen chunks, each sized for one agent session. Sequential — do not start a chunk whose dependencies aren't marked DONE in `PROGRESS.md`.
 
 ## Phase map

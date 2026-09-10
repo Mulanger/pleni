@@ -67,3 +67,6 @@ verify_jwt = false
 # Public anonymous POST endpoint. CORS, request validation, HMAC abuse budgets
 # and all database authorization are enforced inside the handler.
 verify_jwt = false
+
+[functions.clip-search-v2]
+verify_jwt = false

@@ -1,5 +1,94 @@
 # Progress
 
+## S2 — Search index recovery and health — DONE 2026-09-10
+
+**Built:** migration 033, fresh-priority dispatch 036, bounded recovery operator
+and its regression. Re-enabled the existing worker after estimating USD 0.297
+for remaining embeddings. No model/version change or video processing.
+**Verified:** all 11,646 eligible clips have current keyword and semantic indexes:
+2023 2,496; 2024 2,878; 2025 2,977; 2026 3,295. Pending/failed zero, no health
+alerts. Bounded runner: 8,638 jobs, 2,089,519 tokens, about USD 0.272; smoke and
+ordinary cron work additional. Health sampled every five minutes; fresh queue
+checked every 15 seconds. Alerts are database warnings and health records.
+**Contracts touched:** none. **Open:** normal publication-to-index p95 has not
+been observed; external notification delivery is not configured.
+
+## S3 — Search API, filters and continuation — DONE 2026-09-10
+
+**Built:** separate `clip-search-v2` Edge endpoint; migration 035; strict shared
+V2 contracts; quote-protected interpretation and explicit filter overrides;
+AES-GCM encrypted, query/index/ranking-bound cursors with a 30-minute expiry.
+The legacy endpoint remains deployed. No raw searches/vectors in URLs, storage,
+analytics or logs. Abuse limits always apply; provider outages/budget exhaustion
+degrade to working keyword search.
+**Tests:** actual full-year SQL traversal without missing/duplicate clips;
+HTTP year pages; tampering, expiry, ambiguity and fallback behavior tests.
+**Contracts touched:** additive search contract only; pipeline contracts unchanged.
+**Open:** none for functional acceptance.
+
+## S4 — Swedish retrieval and evidence — DONE 2026-09-10
+
+**Built:** migration 034 catalogue-derived word forms, trigram spelling and
+compound handling, source-title full text and match provenance; 037–038 bound
+semantic candidates and enable filtered iterative pgvector scanning. Exact
+keyword evidence bypasses semantic rejection; old candidate thresholds remain.
+**Tests:** known scooter clip rank 3 singular, 1 plural, 2 typo/split compound;
+descriptive public query rank 2; two nonsense queries empty in hybrid mode.
+Known quoted titles from every year recovered. All combined filters, unpublish
+between pages, immediate publication and idempotent repair assertions pass.
+Filtered HNSW matches exact top-20 distance cutoff 20/20 in each year, 80/80 total.
+**Open:** broader performance work; bounded recall test is not a universal guarantee.
+
+## S5 — Unified responsive search — DONE 2026-09-10
+
+**Built:** isolated SearchExperience/SearchResults, canonical filter state,
+catalogue suggestions, responsive filters, sorting and real next-page loading.
+Results show debate date, historical party, source and genuine excerpt. Debate
+title matches are explicitly labelled. Empty-year search offers an explicit
+all-years action. Existing media/player ownership is preserved.
+**Browser verification:** real service on desktop 1280px and mobile 390×844;
+year search loads 20 then 40 distinct results; known scooter clip opens and
+plays. Back restores 18 rows and scroll 291px; player mounted four videos,
+search zero. No horizontal overflow at either width. Empty 2023 keeps its date
+and topic and offers the all-years action. Physical devices not tested.
+**Contracts touched:** additive search state only; no pipeline/player changes.
+
+## S6 — Search release candidate — VERIFIED 2026-09-10
+
+**Checks:** 517 Python tests passed, 79 deselected; known audioop warning.
+Ruff and strict mypy pass (83 source files). Edge 150 and frontend 204 behavior
+tests pass, both TypeScript checks pass, production build passes. PWA retains
+nine shell entries and existing network/private/media bypasses. Existing large
+JS bundle warning remains (~528 kB minified).
+**Real service:** migrations 033–038 applied and ledger checksummed; V2 Edge
+version 1 active, V1 remains available. Public sample: 24 V2 searches, 9
+suggestions and 3 V1 comparisons, all HTTP 200. Full evidence/method and rollback
+are in `docs/SEARCH_V2_PLAN.md`; machine output in ignored `test_outputs`.
+**Remaining acceptance limits:** measured p95 search 3,953 ms, suggestions 891 ms
+(plus 200-ms UI debounce), above 1,500/300-ms goals. Two initial provider deadline
+fallbacks still returned keyword matches. Maximum search 6,484 ms. Earlier SQL
+timeouts were corrected and are explicitly recorded; cold starts not controlled.
+Normal fresh-publication p95 and physical-device coverage remain unverified.
+**Deployment:** backend ready; verified frontend candidate awaiting Git release.
+**Next agent should know:** owner requested complete delivery promptly with low
+usage. Do not restart this implementation or reprocess media. Performance targets
+remain open; do not claim every original acceptance criterion is met.
+
+## S1 — Search V2 baseline — DONE 2026-09-09
+
+**Built:** `docs/SEARCH_V2_PLAN.md`, S1–S6 scope registration, frozen public
+regression examples in `tests/fixtures/search/v2-regressions.json`.
+**Tests:** clean `b647ad8` baseline: 516 passed, 79 deselected; Ruff and strict
+mypy pass. Existing audioop warning only. Frontend dependencies installed from
+the lockfile in the isolated worktree.
+**Contracts touched:** none.
+**Decisions:** implement the owner's whole approved plan in `codex/search-v2`;
+leave the older dirty pipeline checkout alone. Live audit confirms 11,646
+keyword documents, 2,920 semantic current and 8,726 pending; public year-only
+search is empty and singular/plural disagree on the known scooter clip.
+**Next:** S2 index recovery and monitoring; S3–S5 additive service/UI. No deploy
+has occurred and no missing acceptance is claimed as passed.
+
 This file is the source of truth for chunk status and handoff notes.
 
 ## Chunk Table

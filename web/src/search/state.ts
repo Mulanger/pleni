@@ -5,6 +5,7 @@ import type {
   SearchDateBroadening,
   SearchFacet
 } from "./types";
+import type { SearchV2Request, SearchV2Response } from "./v2-types";
 
 export const TOPIC_SEARCH_RESULT_LIMIT = 60;
 export const TOPIC_SEARCH_REVEAL_SIZE = 20;
@@ -12,6 +13,8 @@ export const TOPIC_SEARCH_REVEAL_SIZE = 20;
 export type TopicSearchPhase = "idle" | "loading" | "success" | "error";
 
 export interface TopicSearchState {
+  v2Request?: SearchV2Request;
+  v2Response?: SearchV2Response;
   phase: TopicSearchPhase;
   submittedInput: string;
   requestQuery: string;

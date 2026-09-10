@@ -91,7 +91,7 @@ interface PreparedSearchRequestEnvelope {
   catalog: unknown;
 }
 
-class SearchHttpError extends Error {
+export class SearchHttpError extends Error {
   readonly status: number;
   readonly code: string;
   readonly retryAfterSeconds: number;
@@ -454,7 +454,7 @@ function enforceRateLimit(decision: SearchRateLimitDecision): void {
   }
 }
 
-async function readBoundedJson(
+export async function readBoundedJson(
   request: Request,
   configuredMax: number | undefined,
 ): Promise<unknown> {
@@ -496,7 +496,7 @@ async function readBoundedJson(
   }
 }
 
-function parseEntityCatalog(value: unknown): SearchEntityCatalog {
+export function parseEntityCatalog(value: unknown): SearchEntityCatalog {
   if (!isRecord(value) || !Array.isArray(value.people) || !Array.isArray(value.events)) {
     throw new Error("invalid_search_catalog");
   }

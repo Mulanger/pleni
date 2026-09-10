@@ -2,6 +2,7 @@ import { normalizeParty, SAMPLE_CLIPS } from "./data";
 import { recommendationsEnabled } from "./account";
 import { newestProfileClipsFirst } from "./profile-clip-order";
 import { createTopicSearchClient } from "./search/api";
+import { createSearchV2Client } from "./search/v2-api";
 import {
   parseClipSearchRequest,
   parseClipSearchResponse,
@@ -99,6 +100,7 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, "") ?? ""
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "";
 
 export const supabaseConfigured = SUPABASE_URL.length > 0 && SUPABASE_KEY.length > 0;
+export const archiveSearch = createSearchV2Client({supabaseUrl:SUPABASE_URL,publishableKey:SUPABASE_KEY});
 
 const topicSearchClient = createTopicSearchClient({
   supabaseUrl: SUPABASE_URL,

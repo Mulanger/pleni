@@ -1,0 +1,10 @@
+{
+  "evidenceKind": "engineering_regressions",
+  "baselineDate": "2026-09-09",
+  "knownClip": "HD10552_cabb9ba6-5d6e-f111-bf27-6805cafeabf9_c02",
+  "knownTitle": "6 500 skadades i olyckor med elsparkcyklar",
+  "positiveQueries": ["elsparkcykel", "elsparkcyklar", "elsparcykel", "el sparkcyklar"],
+  "years": [2023, 2024, 2025, 2026],
+  "negativeQueries": ["bananministeriet på månen", "kvantdatorer på varje förskola"],
+  "note": "Public-catalogue examples, never a production topic list or human relevance grades. Current counts are measured separately."
+}

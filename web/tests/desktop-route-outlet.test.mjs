@@ -163,7 +163,7 @@ test("desktop search reuses the public search state and bounded result player", 
   const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 
   assert.match(app, /search:\s*route\.view === "tab" && route\.tab === "sok"/);
-  assert.match(app, /<SearchScreen\s+presentation="desktop"/);
+  assert.match(app, /<ActiveSearchScreen\s+presentation="desktop"/);
   assert.match(app, /showingSearchFeed && searchFeedCollection !== null/);
   assert.match(app, /<CollectionScreen\s+presentation="desktop"\s+collection=\{searchFeedCollection\}/);
   assert.match(app, /presentation === "desktop" \? \(/);

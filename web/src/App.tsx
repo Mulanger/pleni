@@ -139,6 +139,7 @@ import { usePwaExperience } from "./pwa/usePwaExperience";
 import type { PwaExperience } from "./pwa/usePwaExperience";
 import { TopicSearchApiError } from "./search/api";
 import { topicSearchEnabled } from "./search/feature";
+import { SearchExperience } from "./search/SearchExperience";
 import {
   EMPTY_TOPIC_SEARCH_STATE,
   TOPIC_SEARCH_RESULT_LIMIT,
@@ -509,6 +510,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
   const [newAccountRedirect, setNewAccountRedirect] = useState(hasNewAccountRedirect);
   const viewer = useViewer();
   const topicSearchAvailable = topicSearchEnabled;
+  const ActiveSearchScreen = topicSearchAvailable ? SearchExperience : SearchScreen;
   const consent = {
     ...onboarding.consent,
     personal: recommendationsEnabled
@@ -1500,6 +1502,10 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
       startId,
       historyId
     );
+    if (topicSearchState.v2Response) {
+      const order = { relevance: "Relevans", newest: "Nyast först", oldest: "Äldst först" };
+      nextCollection.subtitle = `${order[topicSearchState.v2Response.sort]} · ${response.results.length} hämtade klipp`;
+    }
     searchFeedCollectionRef.current = nextCollection;
     setSearchFeedCollection(nextCollection);
     setSearchFeedOpen(true);
@@ -1886,7 +1892,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
                         onOpenPerson={openPerson}
                       />
                     ) : (
-                      <SearchScreen
+                      <ActiveSearchScreen
                         presentation="desktop"
                         query={query}
                         setQuery={setQuery}
@@ -2175,7 +2181,7 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
               />
             )}
             {tab === "sok" && (
-              <SearchScreen
+              <ActiveSearchScreen
                 query={query}
                 setQuery={setQuery}
                 partyFilter={partyFilter}
