@@ -53,7 +53,7 @@ search zero. No horizontal overflow at either width. Empty 2023 keeps its date
 and topic and offers the all-years action. Physical devices not tested.
 **Contracts touched:** additive search state only; no pipeline/player changes.
 
-## S6 — Search release candidate — VERIFIED 2026-09-10
+## S6 — Search release — DEPLOYED 2026-09-10
 
 **Checks:** 517 Python tests passed, 79 deselected; known audioop warning.
 Ruff and strict mypy pass (83 source files). Edge 150 and frontend 204 behavior
@@ -69,7 +69,11 @@ are in `docs/SEARCH_V2_PLAN.md`; machine output in ignored `test_outputs`.
 fallbacks still returned keyword matches. Maximum search 6,484 ms. Earlier SQL
 timeouts were corrected and are explicitly recorded; cold starts not controlled.
 Normal fresh-publication p95 and physical-device coverage remain unverified.
-**Deployment:** backend ready; verified frontend candidate awaiting Git release.
+**Deployment:** release `ce83927` pushed to `main`; InstaPods serves
+`/assets/index-B-eqU6yy.js`. Anonymous production browser at `https://pleni.se/sok/`
+shows the new archive search; `2023` returns 20 rows and "Visa fler" retrieves
+40. Mobile production uses the same new search surface. Backend was deployed
+before this frontend; previous PWA clients retain their V1 endpoint.
 **Next agent should know:** owner requested complete delivery promptly with low
 usage. Do not restart this implementation or reprocess media. Performance targets
 remain open; do not claim every original acceptance criterion is met.

@@ -51,8 +51,9 @@ operation. Report unobserved SLO/device coverage honestly. No human grading task
 ## Status
 
 Implementation and functional acceptance complete, 2026-09-10. Backend migrations
-033–038 and the separate `clip-search-v2` endpoint are deployed. Frontend release
-status is recorded in `PROGRESS.md`.
+033–038 and the separate `clip-search-v2` endpoint are deployed. Frontend commit
+`ce83927` is live on pleni.se (bundle `index-B-eqU6yy.js`); anonymous production
+year search and continuation were verified. Full release evidence is in `PROGRESS.md`.
 
 All 11,646 eligible documents have current keyword and semantic indexes, with
 no pending/failed documents or health alerts. The bounded recovery consumed
