@@ -7,6 +7,8 @@ working V2 search retained. Scope: App search composition, SearchExperience,
 search-v2 CSS, frontend verification and search handoff. Reuse existing party
 directory/landing components; place years in a collapsed filter menu. No backend,
 index, contract or player changes.
+Implementation and CI pass; production confirmation is blocked by InstaPods
+502/503 responses. See the S7 handoff in `PROGRESS.md`.
 
 ## S1–S6 — Complete catalogue search V2 — IMPLEMENTED 2026-09-10
 

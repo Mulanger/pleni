@@ -31,7 +31,14 @@ audit; no person records or interpretation rules were fabricated in this design
 change. The restored mobile popularity section remains explicitly labelled example
 data, exactly as before. Physical devices not tested.
 
-**Deployment:** verified candidate; production release confirmation follows.
+**Deployment:** `21bfad3` pushed to `main`; GitHub CI run 34840894680 passes.
+Production verification is blocked: pleni.se returns nginx 502, and the direct
+InstaPods hostname returns 503 after repeated checks. The control panel at
+app.instapods.com is logged out; owner login requested. GitHub has no deployment
+status/log integration for the pod. Do not claim the design is live or blindly
+roll back working client code: the static host is not serving a frontend at all.
+Next step: inspect the pod deployment/build/runtime status after owner login,
+restore host availability, then verify the eight party menus on production.
 
 ## S2 — Search index recovery and health — DONE 2026-09-10
 
