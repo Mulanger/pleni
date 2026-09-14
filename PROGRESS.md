@@ -1,5 +1,38 @@
 # Progress
 
+## S7 — Original search design with V2 retrieval — VERIFIED 2026-09-14
+
+**Built:** reuse the existing DesktopPartyDirectory with verified party marks,
+full names, searchable member menus and original party/person navigation.
+Restore the original search header, mobile party chips and labelled example
+debates. The existing V2 result experience remains; years/date/person/party/debate
+controls now live inside a collapsed Filter menu on both screen sizes. Remove
+the year-tile landing and permanent desktop filter sidebar. Clearing search
+cancels pending work, clears explicit filters and restores the browsing screen.
+
+**Tests:** 517 Python tests passed, 79 deselected, known audioop warning; Ruff
+and strict mypy pass. 150 Edge and 205 frontend tests pass, including actual
+React rendering of the restored landing and unchanged V2 result composition.
+Frontend TypeScript and production build pass; PWA retains nine shell entries.
+Desktop browser: original eight party menus render, SD loads its member list,
+name filtering reduces 75 rows to Adam Marttinen and opens his correct profile.
+Mobile 390x844: original chips/example section restored; Filter starts closed,
+year selector chooses 2023 and retrieves twenty results through V2. Party chips
+use the canonical V2 filter update, preserving other applied filters.
+
+**Contracts touched:** none. No database migration, API, ranking, provider,
+indexing, privacy persistence or player change. Original dirty checkout untouched.
+
+**Observations (not fixed, out of scope):** during the read-only check the current
+person catalogue did not return any row for Jimmie/Åkesson. The existing backend
+interpreted `Jimmie Åkesson 2023` as a topic plus year, returning mentions. This
+differs from the owner's reported earlier result and merits a separate catalogue
+audit; no person records or interpretation rules were fabricated in this design
+change. The restored mobile popularity section remains explicitly labelled example
+data, exactly as before. Physical devices not tested.
+
+**Deployment:** verified candidate; production release confirmation follows.
+
 ## S2 — Search index recovery and health — DONE 2026-09-10
 
 **Built:** migration 033, fresh-priority dispatch 036, bounded recovery operator

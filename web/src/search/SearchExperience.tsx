@@ -1,11 +1,11 @@
 import { SearchResults } from "./SearchResults";
-import { useEffect, useId, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { Search, X, SlidersHorizontal, LoaderCircle, Play } from "lucide-react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction, type ReactNode } from "react";
+import { Search, X, SlidersHorizontal, LoaderCircle, Home, ChevronDown } from "lucide-react";
 import { archiveSearch } from "../supabase";
 import { PARTIES } from "../data";
 import type { PartyCode, PartyProfile } from "../types";
 import type { TopicSearchState } from "./state";
-import { topicResultHeading, visibleFacetLabel } from "./state";
+import { EMPTY_TOPIC_SEARCH_STATE, visibleFacetLabel } from "./state";
 import { SearchV2ApiError } from "./v2-api";
 import { changeSearchFilter, completeV2, searchErrorText } from "./v2-state";
 import type { SearchFilters, SearchSort, SearchSuggestion, SearchV2Request, SearchV2Response, SearchV2Result } from "./v2-types";
@@ -18,13 +18,14 @@ export interface SearchExperienceProps {
   partyProfiles: PartyProfile[]; partyProfilesLoading: boolean;
   topicState: TopicSearchState; setTopicState: Dispatch<SetStateAction<TopicSearchState>>;
   topicSearchAvailable: boolean;
+  browseContent?: ReactNode;
   onOpenPerson: (id: string)=>void; onOpenParty: (party: PartyCode)=>void;
   onOpenTopicFeed: (id: string|null, scrollTop: number)=>void;
 }
 
 /** One mounted search surface; the submitted state stays in App during playback. */
 export function SearchExperience({presentation="mobile",query,setQuery,partyFilter,setPartyFilter,
-  partyProfiles,topicState,setTopicState,onOpenTopicFeed}: SearchExperienceProps) {
+  partyProfiles,topicState,setTopicState,onOpenTopicFeed,browseContent}: SearchExperienceProps) {
   const request=topicState.v2Request ?? {query:"",filters:partyFilter ? {party:partyFilter} : {}};
   const response=topicState.v2Response ?? null;
   const [busy,setBusy]=useState(false);
@@ -42,6 +43,8 @@ export function SearchExperience({presentation="mobile",query,setQuery,partyFilt
   const listId=useId();
   const facets=response?.interpretation.facets ?? [];
   const visibleResponse=topicState.phase==="success" ? response : null;
+  const showResults=topicState.phase!=="idle";
+  const activeParty=facets.find(f=>f.kind==="party")?.party ?? request.filters?.party ?? null;
   const showSuggestions=focused && suggestions.length>0 && query.trim().length>0;
 
   useLayoutEffect(()=>{if (scroll.current) scroll.current.scrollTop=topicState.scrollTop;},[]);
@@ -103,9 +106,14 @@ export function SearchExperience({presentation="mobile",query,setQuery,partyFilt
     } else change(kind,value as SearchFilters[keyof SearchFilters]);
   }
   function play(id: string|null) {onOpenTopicFeed(id,scroll.current?.scrollTop ?? 0);}
+  function clearSearch() {
+    controller.current?.abort();sequence.current++;
+    setBusy(false);setMoreBusy(false);setQuery("");setPartyFilter(null);
+    setTopicState(EMPTY_TOPIC_SEARCH_STATE);input.current?.focus();
+  }
 
   return <section className={`panel-screen search-screen search-v2 ${presentation} ${presentation==="desktop" ? "search-screen--desktop" : ""} ${response ? "has-results" : ""}`}>
-    <header className="search-header"><h1>Sök i klipparkivet</h1><p>Hitta orden, personen eller debatten du minns.</p></header>
+    <header className="search-header">{(!showResults || presentation==="desktop") && <h1>Sök</h1>}
     <form className="search-form" role="search" onSubmit={event=>{event.preventDefault();submitInput();}}>
       <div className="v2-input-wrap">
         <div className="search-box"><Search size={19} aria-hidden="true" />
@@ -122,7 +130,7 @@ export function SearchExperience({presentation="mobile",query,setQuery,partyFilt
               }
               if (showSuggestions && event.key==="Enter" && selected>=0) {event.preventDefault();choose(suggestions[selected],true);}
             }} />
-          {query && <button className="search-clear" type="button" aria-label="Rensa söktexten" onClick={()=>{setQuery("");input.current?.focus();}}><X size={16}/></button>}
+          {(query || showResults) && <button className="search-clear" type="button" aria-label="Rensa sökningen" onClick={clearSearch}><X size={13}/></button>}
           <button className="search-submit" type="submit" disabled={busy}>Sök</button>
         </div>
         {showSuggestions && <ul id={listId} className="v2-suggestions" role="listbox" aria-label="Sökförslag">
@@ -135,12 +143,23 @@ export function SearchExperience({presentation="mobile",query,setQuery,partyFilt
         {focused && suggestionError && <p className="v2-hint">Förslagen kunde inte hämtas. Du kan fortfarande trycka Sök.</p>}
       </div>
     </form>
+    <p className="topic-search-privacy-note">Ämnessökningar tolkas med hjälp av OpenAI. Skriv inte privat information.</p>
+    {(presentation!=="desktop" || showResults) && <div className="chips" aria-label="Filtrera på parti">
+      <button type="button" className={activeParty===null ? "chips-home active" : "chips-home"}
+        aria-label="Visa alla partier" aria-pressed={activeParty===null} onClick={()=>change("party",null)}>
+        {presentation==="desktop" ? <span>Alla partier</span> : <Home size={17} aria-hidden="true"/>}
+      </button>
+      {partyProfiles.filter(p=>p.abbr!=="NONE").map(p=><button type="button" key={p.abbr}
+        className={activeParty===p.abbr ? "active" : ""} aria-pressed={activeParty===p.abbr}
+        onClick={()=>change("party",p.abbr)}><i style={{background:p.color}}/>{p.abbr}</button>)}
+    </div>}
+    </header>
     <div className="panel-scroll v2-scroll" ref={scroll} onScroll={event=>{
       const top=event.currentTarget.scrollTop;setTopicState(current=>({...current,scrollTop:top}));
     }}>
       <div className="v2-layout">
-        <details className="v2-filters" open={presentation==="desktop" || filtersOpen} onToggle={event=>setFiltersOpen(event.currentTarget.open)}>
-          <summary><SlidersHorizontal size={16} aria-hidden="true"/> Filter {facets.filter(f=>f.kind!=="topic").length || ""}</summary>
+        <details className="v2-filters" open={filtersOpen} onToggle={event=>setFiltersOpen(event.currentTarget.open)}>
+          <summary><SlidersHorizontal size={16} aria-hidden="true"/> Filter {facets.filter(f=>f.kind!=="topic").length || ""}<ChevronDown className="v2-filter-chevron" size={14} aria-hidden="true"/></summary>
           <FilterControls response={response} request={request} years={years} partyProfiles={partyProfiles} onChange={change} onChoose={choose}/>
         </details>
         <main className="v2-main">
@@ -148,10 +167,7 @@ export function SearchExperience({presentation="mobile",query,setQuery,partyFilt
             <span className="search-facet" key={facet.kind}>{visibleFacetLabel(facet)}
               <button type="button" aria-label={`Ta bort ${visibleFacetLabel(facet)}`} onClick={()=>change(facet.kind,null)}><X size={12}/></button>
             </span>)}</div></div>}
-          {!response && topicState.phase==="idle" && <div className="v2-intro"><h2>Utforska ett år</h2><p>Se klippen från årets debatter, senast först.</p>
-            <div className="v2-years">{years.map(year=><button key={year.id} onClick={()=>choose(year)}>{year.label}</button>)}</div>
-            <p className="v2-hint">Skriv flera ord för att kombinera ämne, person och år. Sätt citat inom citationstecken.</p>
-          </div>}
+          {!showResults && browseContent}
           {busy && <div className="topic-search-loading" role="status"><LoaderCircle size={18} className="topic-search-spinner"/> Söker i klippen…</div>}
           {topicState.errorKind && <div className="v2-error" role="alert"><p>{searchErrorText(topicState.errorKind)}</p>
             <button type="button" className="topic-show-more" onClick={()=>submit(request)}>Sök igen</button></div>}

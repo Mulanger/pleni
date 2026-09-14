@@ -1,5 +1,13 @@
 # BUILD_PLAN.md
 
+## S7 — Restore the owner's search design — IMPLEMENTED 2026-09-14
+
+Owner requested the original party menus and search landing design with the
+working V2 search retained. Scope: App search composition, SearchExperience,
+search-v2 CSS, frontend verification and search handoff. Reuse existing party
+directory/landing components; place years in a collapsed filter menu. No backend,
+index, contract or player changes.
+
 ## S1–S6 — Complete catalogue search V2 — IMPLEMENTED 2026-09-10
 
 **Authority:** owner requested the complete six-stage plan; see

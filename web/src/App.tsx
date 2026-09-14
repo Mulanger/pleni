@@ -1894,6 +1894,8 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
                     ) : (
                       <ActiveSearchScreen
                         presentation="desktop"
+                        browseContent={<DesktopPartyDirectory profiles={partyProfiles} loading={partyProfilesLoading}
+                          onOpenParty={profile => openParty(profile.abbr)} onOpenPerson={person => openPerson(person.id)}/>}
                         query={query}
                         setQuery={setQuery}
                         partyFilter={partyFilter}
@@ -2182,6 +2184,10 @@ function App({ initialClip = null }: { initialClip?: ClipItem | null }) {
             )}
             {tab === "sok" && (
               <ActiveSearchScreen
+                browseContent={<Group title="Populära debatter">
+                  <div className="placeholder-note">Exempeldata — populäritet mäts inte ännu.</div>
+                  {TRENDING.map(item => <ListRow key={item.n} eyebrow={item.n} title={item.title}
+                    subtitle={item.meta} action={<span className="up">{item.up}</span>}/>)}</Group>}
                 query={query}
                 setQuery={setQuery}
                 partyFilter={partyFilter}

@@ -67,3 +67,26 @@ test("actual React results render page counts, debate context, empty dates and f
     assert.match(emptyHtml,/Betydelsesökningen är tillfälligt otillgänglig/);assert.doesNotMatch(emptyHtml,/Visar relevanta klipp från andra datum/);
   } finally {await server.close();}
 });
+
+test("restored search landing keeps browsing content and hides years inside filters while results keep V2",async()=>{
+  const server=await createServer({root:fileURLToPath(new URL("../",import.meta.url)),configFile:false,logLevel:"silent",server:{middlewareMode:true},appType:"custom"});
+  try {
+    const {SearchExperience}=await server.ssrLoadModule("/src/search/SearchExperience.tsx");
+    const props={presentation:"desktop",query:"",setQuery(){},partyFilter:null,setPartyFilter(){},
+      partyProfiles:[{abbr:"SD",name:"Sverigedemokraterna",color:"#123"}],partyProfilesLoading:false,
+      topicState:EMPTY_TOPIC_SEARCH_STATE,setTopicState(){},topicSearchAvailable:true,
+      onOpenPerson(){},onOpenParty(){},onOpenTopicFeed(){},
+      browseContent:createElement("section",{"aria-label":"Original party directory"},"Browse parties")};
+    const landing=renderToStaticMarkup(createElement(SearchExperience,props));
+    assert.match(landing,/Browse parties/);
+    assert.match(landing,/<details class="v2-filters">/);
+    assert.match(landing,/Debattår/);
+    assert.doesNotMatch(landing,/Utforska ett år|v2-years|Sök i klipparkivet/);
+    const resultHtml=renderToStaticMarkup(createElement(SearchExperience,{...props,query:"2023",
+      topicState:completeV2(EMPTY_TOPIC_SEARCH_STATE,{query:"2023"},response,false)}));
+    assert.doesNotMatch(resultHtml,/Browse parties/);
+    assert.match(resultHtml,/Filtrera på parti/);
+    assert.match(resultHtml,/Visa fler/);
+    assert.match(resultHtml,/Rensa sökningen/);
+  } finally {await server.close();}
+});
