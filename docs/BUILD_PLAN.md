@@ -1,14 +1,14 @@
 # BUILD_PLAN.md
 
-## S7 — Restore the owner's search design — IMPLEMENTED 2026-09-14
+## S7 — Restore the owner's search design — RELEASED 2026-09-15
 
 Owner requested the original party menus and search landing design with the
 working V2 search retained. Scope: App search composition, SearchExperience,
 search-v2 CSS, frontend verification and search handoff. Reuse existing party
 directory/landing components; place years in a collapsed filter menu. No backend,
 index, contract or player changes.
-Implementation and CI pass; production confirmation is blocked by InstaPods
-502/503 responses. See the S7 handoff in `PROGRESS.md`.
+Implementation, CI and production verification pass. The owner resolved the
+hosting billing outage; the restored design is live. See S7 in `PROGRESS.md`.
 
 ## S1–S6 — Complete catalogue search V2 — IMPLEMENTED 2026-09-10
 

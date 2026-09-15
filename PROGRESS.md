@@ -1,6 +1,6 @@
 # Progress
 
-## S7 — Original search design with V2 retrieval — VERIFIED 2026-09-14
+## S7 — Original search design with V2 retrieval — DEPLOYED 2026-09-15
 
 **Built:** reuse the existing DesktopPartyDirectory with verified party marks,
 full names, searchable member menus and original party/person navigation.
@@ -32,13 +32,12 @@ change. The restored mobile popularity section remains explicitly labelled examp
 data, exactly as before. Physical devices not tested.
 
 **Deployment:** `21bfad3` pushed to `main`; GitHub CI run 34840894680 passes.
-Production verification is blocked: pleni.se returns nginx 502, and the direct
-InstaPods hostname returns 503 after repeated checks. The control panel at
-app.instapods.com is logged out; owner login requested. GitHub has no deployment
-status/log integration for the pod. Do not claim the design is live or blindly
-roll back working client code: the static host is not serving a frontend at all.
-Next step: inspect the pod deployment/build/runtime status after owner login,
-restore host availability, then verify the eight party menus on production.
+The owner confirmed that an unpaid InstaPods invoice caused the 502/503 outage.
+After payment, hosting recovered with the old bundle still served. Deployment-only
+commit `b8a1e64` retriggered the already-tested release. Production now serves
+`index-BreNFU1a.js`. Anonymous browser verification on pleni.se confirms all eight
+original party menus, Filter collapsed initially, and selecting 2023 inside that
+menu retrieves twenty 2023 clips with continuation. No deployment blocker remains.
 
 ## S2 — Search index recovery and health — DONE 2026-09-10
 
